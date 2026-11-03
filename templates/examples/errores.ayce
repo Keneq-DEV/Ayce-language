@@ -1,0 +1,38 @@
+## errores.ayce — pruebas de error (deben fallar)
+## Cada caso está comentado para poder descomentarlo y ver el error
+
+## 1. Asignación de tipo incorrecto
+## var edad: int = "25"
+
+## 2. const sin valor inicial
+## const MAX: int
+
+## 3. Reasignar const
+const PI: float = 3.14
+## PI = 3.0
+
+## 4. Modificar tupla
+var t: (int, int) = (1, 2)
+## t[0] = 99
+
+## 5. Índice fuera de rango
+var lista: int[] = [1, 2, 3]
+## var x: int = lista[10]
+
+## 6. Clave inexistente en dict
+var d: <string, int> = <"a": 1>
+## var y: int = d<"inexistente">
+
+## 7. break fuera de bucle
+## break
+
+## 8. División por cero
+## var z: float = 10 / 0
+
+## 9. Comparación encadenada (prohibida en v0.2)
+## var ok: bool = 1 < 2 < 3
+
+## 10. Variable no declarada
+## foo = 5
+
+say("Si ves esto, los errores están todos comentados correctamente")

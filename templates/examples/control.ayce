@@ -1,0 +1,55 @@
+## control.ayce — condicionales y bucles
+
+var edad: int = 17
+
+if edad >= 18 then
+    say("Es mayor de edad")
+else if edad >= 13 then
+    say("Es adolescente")
+else
+    say("Es menor")
+end
+
+## while
+var i: int = 0
+while i < 5 do
+    say(f"i = {i}")
+    i = i + 1
+end
+
+## for sobre lista
+var nombres: string[] = ["ana", "luis", "carlos"]
+for nombre in nombres do
+    say(f"Hola {nombre}")
+end
+
+## for sobre range
+for n in range(1, 4) do
+    say(f"Número: {n}")
+end
+
+## break y continue
+var num: int = 0
+while num < 10 do
+    num = num + 1
+
+    if num == 3 then
+        continue
+    end
+
+    if num == 7 then
+        break
+    end
+
+    say(num)
+end
+
+## Condición con operadores lógicos
+var tiene_boleto: bool = True
+var edad_usuario: int = 20
+
+if (edad_usuario >= 18) && tiene_boleto then
+    say("Acceso permitido")
+else
+    say("Acceso denegado")
+end

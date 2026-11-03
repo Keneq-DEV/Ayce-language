@@ -1,0 +1,7 @@
+## hola.ayce — programa mínimo
+say("Hola mundo")
+say("Esto es ayce v0.2")
+
+var nombre: string = "ayce"
+var version: float = 0.2
+say(f"Lenguaje: {nombre} v{version}")

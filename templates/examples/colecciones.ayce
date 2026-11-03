@@ -1,0 +1,73 @@
+## colecciones.ayce — listas, dict, tuplas, sets
+
+## Listas estrictas
+var numeros: int[] = [10, 20, 30, 40]
+say("Lista original:", numeros)
+
+numeros[0] = 99
+say("Tras modificar [0]:", numeros)
+
+numeros.append(50)
+say("Tras append(50):", numeros)
+
+numeros.delete(1)
+say("Tras delete(1):", numeros)
+
+say("Longitud:", numeros.len())
+say("Contiene 30?", numeros.contains(30))
+say("Contiene 100?", numeros.contains(100))
+
+## Lista flexible
+var mezclada: none[] = [1, "dos", True, 3.14]
+say("Lista flexible:", mezclada)
+
+## Diccionario
+var edades: <string, int> = <
+    "juan": 20,
+    "maria": 25
+>
+say("Diccionario:", edades)
+say("Edad de juan:", edades<"juan">)
+
+edades<"pedro"> = 30
+say("Tras agregar pedro:", edades)
+
+say("Tiene maria?", edades.has("maria"))
+say("Tiene luis?", edades.has("luis"))
+
+edades.remove("maria")
+say("Tras remove(maria):", edades)
+
+say("Claves:", edades.keys())
+say("Valores:", edades.values())
+
+## Tupla
+var persona: (string, int, bool) = ("carlos", 25, True)
+say("Tupla:", persona)
+say("Nombre:", persona[0])
+say("Edad:", persona[1])
+say("Longitud tupla:", persona.len())
+say("Tupla contiene 25?", persona.contains(25))
+
+## Set
+var unicos: int{} = {1, 2, 3, 3, 2, 1}
+say("Set (con duplicados eliminados):", unicos)
+
+unicos.add(4)
+say("Tras add(4):", unicos)
+
+unicos.remove(2)
+say("Tras remove(2):", unicos)
+
+say("Contiene 3?", unicos.contains(3))
+say("Cardinalidad:", unicos.len())
+
+## Strings con métodos
+var saludo: string = "Hola Ayce"
+say(f"Longitud de '{saludo}': {saludo.len()}")
+say("Upper:", saludo.upper())
+say("Lower:", saludo.lower())
+say("Contiene 'ola'?", saludo.contains("ola"))
+
+var partes: string[] = saludo.split(" ")
+say("Split por espacio:", partes)

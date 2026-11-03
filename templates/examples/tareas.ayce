@@ -1,0 +1,110 @@
+## tareas.ayce — funciones (task)
+
+## Tarea sin retorno
+task registrar(string &in origen, string &in mensaje) ;
+{
+    say(f"[{origen}]: {mensaje}")
+}
+
+registrar("sistema", "iniciando")
+registrar("sistema", "procesando")
+
+## Tarea con retorno
+task calcular_area(float base, float altura) = float ;
+{
+    var area: float = (base * altura) / 2
+    return area
+}
+
+var a: float = calcular_area(10.0, 4.0)
+say(f"Área: {a}")
+
+## Lambda
+task cuadrado(int x) = int => x * x
+
+say(f"Cuadrado de 5: {cuadrado(5)}")
+
+## Recursión
+task factorial(int n) = int ;
+{
+    if n <= 1 then
+        return 1
+    end
+    return n * factorial(n - 1)
+}
+
+say(f"5! = {factorial(5)}")
+say(f"10! = {factorial(10)}")
+
+## Retorno de tupla
+task coordenadas() = (float, float) ;
+{
+    return (19.4326, -99.1332)
+}
+
+var coords: (float, float) = coordenadas()
+var lat: float = coords[0]
+var lon: float = coords[1]
+say(f"Latitud: {lat}, Longitud: {lon}")
+
+## Variable global
+var contador: int = 0
+
+task incrementar() ;
+{
+    global contador
+    contador = contador + 1
+}
+
+incrementar()
+incrementar()
+incrementar()
+say(f"Contador: {contador}")
+
+## Sobrecarga con |
+task procesar(int codigo) | (string descripcion) ;
+{
+    say(f"Procesando código numérico: {codigo}")
+    |
+    say(f"Procesando texto: {descripcion}")
+}
+
+procesar(404)
+procesar("ERROR_AUTH")
+
+## Parámetro con valor por defecto
+task conectar(string ip, int puerto = 8080) ;
+{
+    say(f"Conectando a {ip}:{puerto}")
+}
+
+conectar("127.0.0.1", 3000)
+conectar("127.0.0.1")
+
+## Varargs
+task suma_total(int... nums) = int ;
+{
+    var s: int = 0
+    for n in nums do
+        s = s + n
+    end
+    return s
+}
+
+say(f"Suma: {suma_total(1, 2, 3, 4, 5)}")
+say(f"Suma: {suma_total(10, 20)}")
+
+## Callback
+task ejecutar(task operacion) ;
+{
+    say("Iniciando...")
+    operacion()
+    say("Finalizando...")
+}
+
+task saludar() ;
+{
+    say("  ¡Hola desde el callback!")
+}
+
+ejecutar(saludar)

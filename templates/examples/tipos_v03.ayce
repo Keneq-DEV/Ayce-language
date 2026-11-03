@@ -1,0 +1,91 @@
+## tipos_v03.ayce — prueba Template, Shape, Variant de v0.3
+
+Shape Punto {
+    x: int
+    y: int
+}
+
+var p1: Punto = new Punto { x: 10, y: 20 }
+say("Punto p1: x =", p1.x, "y =", p1.y)
+
+Shape Config {
+    puerto: int = 8080
+    host: string = "localhost"
+    debug: bool = False
+}
+
+var cfg: Config = new Config { puerto: 3000 }
+say(f"Config: host={cfg.host} puerto={cfg.puerto} debug={cfg.debug}")
+
+Template Persona {
+    nombre: string
+    edad: int
+
+    task init(string nombre, int edad) ;
+    {
+        self.nombre = nombre
+        self.edad = edad
+    }
+
+    task saludar() ;
+    {
+        say(f"Hola, soy {self.nombre} y tengo {self.edad} años")
+    }
+
+    task cumplir_anios() ;
+    {
+        self.edad = self.edad + 1
+    }
+}
+
+var persona: Persona = Persona("Carlos", 25)
+persona.saludar()
+persona.cumplir_anios()
+persona.saludar()
+persona.edad = 30
+say(f"Ahora {persona.nombre} tiene {persona.edad}")
+
+Variant Color {
+    Rojo
+    Verde
+    Azul
+}
+
+var c1: Color = Color.Rojo
+var c2: Color = Color.Verde
+
+if c1 is Color.Rojo then
+    say("c1 es rojo")
+else
+    say("c1 no es rojo")
+end
+
+if c2 is Color.Rojo then
+    say("c2 es rojo")
+else
+    say("c2 no es rojo")
+end
+
+Variant Resultado {
+    Ok(int)
+    Err(string)
+}
+
+var r1: Resultado = Resultado.Ok(42)
+var r2: Resultado = Resultado.Err("fallo de red")
+
+if r1 is Resultado.Ok then
+    say("r1 es Ok")
+end
+
+if r2 is Resultado.Err then
+    say("r2 es Err")
+end
+
+say("r1:", r1)
+say("r2:", r2)
+
+var cad1: float = 1
+var cad2: string = "mundo"
+var juntar: none = cad1 + "" + cad2
+say("Cadena:", juntar)

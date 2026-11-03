@@ -1,0 +1,38 @@
+## variables.ayce — prueba de tipos primitivos
+
+var entero: int = 42
+var decimal: float = 3.14
+var texto: string = "ayce"
+var activo: bool = True
+var nada: none = none
+var paquete: bytes = b"datos"
+
+say("entero:", entero)
+say("decimal:", decimal)
+say("texto:", texto)
+say("activo:", activo)
+say("nada:", nada)
+say("paquete:", paquete)
+
+## Constantes
+const PI: float = 3.14159
+const PUERTO: int = 8080
+const TITULO: string = "Proyecto ayce"
+const PROD: bool = True
+
+say(f"PI = {PI}")
+say(f"PUERTO = {PUERTO}")
+say(f"TITULO = {TITULO}")
+say(f"PROD = {PROD}")
+
+## Operaciones
+say(10 + 5)
+say(10 / 2)
+say(2 ** 3)
+say(2 ** 3 ** 2)
+say(10 % 3)
+say("hola " + "ayce")
+
+## Cortocircuito
+say(False && (10 / 0 == 0))
+say(True || (10 / 0 == 0))

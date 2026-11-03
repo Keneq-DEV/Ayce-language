@@ -1,0 +1,14 @@
+## main.ayce — plantilla básica de proyecto ayce
+## Copia esta carpeta para empezar un nuevo proyecto.
+
+var nombre: string = "ayce"
+var version: float = 0.2
+
+say(f"Hola desde {nombre} v{version}")
+
+task saludar(string &in quien) ;
+{
+    say(f"Hola {quien}!")
+}
+
+saludar("mundo")

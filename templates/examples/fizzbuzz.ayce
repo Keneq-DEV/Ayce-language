@@ -1,0 +1,85 @@
+## fizzbuzz.ayce — el clásico, en ayce
+
+task fizzbuzz(int n) ;
+{
+    for i in range(1, n + 1) do
+        if (i % 3 == 0) && (i % 5 == 0) then
+            say(f"{i}: FizzBuzz")
+        else if i % 3 == 0 then
+            say(f"{i}: Fizz")
+        else if i % 5 == 0 then
+            say(f"{i}: Buzz")
+        else
+            say(f"{i}: {i}")
+        end
+    end
+}
+
+fizzbuzz(15)
+
+## Fibonacci recursivo
+task fib(int n) = int ;
+{
+    if n < 2 then
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+}
+
+say("")
+say("Fibonacci:")
+for i in range(0, 10) do
+    say(f"fib({i}) = {fib(i)}")
+end
+
+## Manejo de lista de números
+var nums: int[] = [5, 2, 8, 1, 9, 3]
+
+say("")
+say(f"Lista original: {nums}")
+say(f"Longitud: {nums.len()}")
+
+## Calcular suma, promedio y máximo con tasks
+task sumar(int[] &in lista) = int ;
+{
+    var total: int = 0
+    for x in lista do
+        total = total + x
+    end
+    return total
+}
+
+task maximo(int[] &in lista) = int ;
+{
+    var m: int = lista[0]
+    for x in lista do
+        if x > m then
+            m = x
+        end
+    end
+    return m
+}
+
+var suma: int = sumar(nums)
+var max:  int = maximo(nums)
+var prom: float = suma / nums.len()
+
+say(f"Suma: {suma}")
+say(f"Máximo: {max}")
+say(f"Promedio: {prom}")
+
+## Contador con global
+var accesos: int = 0
+
+task registrar_acceso() ;
+{
+    global accesos
+    accesos = accesos + 1
+    say(f"  acceso #{accesos}")
+}
+
+say("")
+say("Registrando 3 accesos:")
+registrar_acceso()
+registrar_acceso()
+registrar_acceso()
