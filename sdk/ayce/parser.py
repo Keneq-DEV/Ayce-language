@@ -90,6 +90,10 @@ class Parser:
             return self._parse_while()
         if t.type == TokenType.FOR:
             return self._parse_for()
+        if t.type == TokenType.TRY:
+            return self._parse_try()
+        if t.type == TokenType.RAISE:
+            return self._parse_raise()
         if t.type == TokenType.BREAK:
             self._advance()
             return BreakStmt(line=t.line, col=t.col)
@@ -297,10 +301,10 @@ class Parser:
         )
 
     def _parse_block_body(self) -> list:
-        """Lee sentencias hasta encontrar '}', 'end', 'else' o EOF."""
+        """Lee sentencias hasta encontrar '}', 'end', 'else', 'rescue' o EOF."""
         self._skip_separators()
         stmts = []
-        while not self._check(TokenType.RBRACE, TokenType.END, TokenType.ELSE, TokenType.EOF):
+        while not self._check(TokenType.RBRACE, TokenType.END, TokenType.ELSE, TokenType.RESCUE, TokenType.EOF):
             stmts.append(self._parse_stmt())
             self._skip_separators()
         return stmts
@@ -357,6 +361,31 @@ class Parser:
         self._expect(TokenType.END, "'end'")
         return ForStmt(var_name=var_name, iterable=iterable, body=body, line=t.line, col=t.col)
 
+    def _parse_try(self) -> TryStmt:
+        """try ... rescue(nombre) ... end"""
+        t = self._expect(TokenType.TRY, "'try'")
+        body = self._parse_block_body()
+        rescue_name = ""
+        rescue_body = []
+        if self._check(TokenType.RESCUE):
+            self._advance()
+            if self._check(TokenType.LPAREN):
+                self._advance()
+                rescue_name = self._expect(TokenType.IDENT, "nombre de variable de error").value
+                self._expect(TokenType.RPAREN, "')'")
+            elif self._check(TokenType.IDENT):
+                rescue_name = self._advance().value
+            rescue_body = self._parse_block_body()
+        self._expect(TokenType.END, "'end'")
+        return TryStmt(body=body, rescue_name=rescue_name, rescue_body=rescue_body,
+                       line=t.line, col=t.col)
+
+    def _parse_raise(self) -> RaiseStmt:
+        """raise Error("mensaje", codigo)"""
+        t = self._expect(TokenType.RAISE, "'raise'")
+        error_expr = self._parse_expr()
+        return RaiseStmt(error_expr=error_expr, line=t.line, col=t.col)
+
     def _parse_return(self) -> ReturnStmt:
         t = self._expect(TokenType.RETURN, "'return'")
         # return puede no tener expresión (para tasks sin retorno)
@@ -391,6 +420,20 @@ class Parser:
             self._advance()
             value = self._parse_expr()
             return AssignStmt(target=expr, value=value, line=t.line, col=t.col)
+        # Asignación compuesta (v0.4): +=, -=, *=, /=, //=, %=
+        compound_ops = {
+            TokenType.PLUS_ASSIGN: "+=",
+            TokenType.MINUS_ASSIGN: "-=",
+            TokenType.STAR_ASSIGN: "*=",
+            TokenType.SLASH_ASSIGN: "/=",
+            TokenType.DSLASH_ASSIGN: "//=",
+            TokenType.PERCENT_ASSIGN: "%=",
+        }
+        if self._peek().type in compound_ops:
+            op_tok = self._advance()
+            value = self._parse_expr()
+            return CompoundAssignStmt(target=expr, op=compound_ops[op_tok.type],
+                                       value=value, line=t.line, col=t.col)
         return ExprStmt(expr=expr, line=t.line, col=t.col)
 
     # ──────────────────────────────────────────────────────────────────
@@ -490,7 +533,16 @@ class Parser:
     #  Expresiones (con precedencia)
     # ──────────────────────────────────────────────────────────────────
     def _parse_expr(self) -> Expr:
-        return self._parse_or()
+        # Ternario v0.4: cond ? a : b  (al nivel más bajo, después de ||)
+        left = self._parse_or()
+        if self._check(TokenType.QUESTION):
+            t = self._advance()
+            if_true = self._parse_expr()
+            self._expect(TokenType.COLON, "':'")
+            if_false = self._parse_expr()
+            return TernaryExpr(cond=left, if_true=if_true, if_false=if_false,
+                               line=t.line, col=t.col)
+        return left
 
     def _parse_or(self) -> Expr:
         left = self._parse_and()
@@ -545,9 +597,10 @@ class Parser:
 
     def _parse_multiplicative(self) -> Expr:
         left = self._parse_power()
-        while self._check(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT):
+        while self._check(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLE_SLASH):
             t = self._advance()
-            op = {TokenType.STAR:"*", TokenType.SLASH:"/", TokenType.PERCENT:"%"}[t.type]
+            op = {TokenType.STAR:"*", TokenType.SLASH:"/", TokenType.PERCENT:"%",
+                  TokenType.DOUBLE_SLASH:"//"}[t.type]
             right = self._parse_power()
             left = BinaryExpr(op=op, left=left, right=right, line=t.line, col=t.col)
         return left
@@ -670,6 +723,22 @@ class Parser:
             self._advance()
             return NoneLit(line=t.line, col=t.col)
 
+        # Conversión de tipos (v0.4): int(x), float(x), string(x), bool(x), bytes(x)
+        # Se distingue de una declaración de tipo porque va seguida de '('
+        if t.type in (TokenType.INT_T, TokenType.FLOAT_T, TokenType.STRING_T,
+                       TokenType.BOOL_T, TokenType.BYTES_T):
+            # Miramos si viene '(' — si sí, es conversión
+            if self._peek(1).type == TokenType.LPAREN:
+                type_name = {TokenType.INT_T: "int", TokenType.FLOAT_T: "float",
+                             TokenType.STRING_T: "string", TokenType.BOOL_T: "bool",
+                             TokenType.BYTES_T: "bytes"}[t.type]
+                self._advance()  # consume el tipo
+                self._advance()  # consume '('
+                arg = self._parse_expr()
+                self._expect(TokenType.RPAREN, "')'")
+                return TypeConvertExpr(target_type=type_name, arg=arg,
+                                        line=t.line, col=t.col)
+
         # range(a, b)
         if t.type == TokenType.RANGE:
             self._advance()
@@ -712,15 +781,27 @@ class Parser:
             self._expect(TokenType.RBRACE, "'}'")
             return NewExpr(type_name=type_name, fields=fields, line=t.line, col=t.col)
 
-        # inlet(prompt) — devuelve string
+        # inlet(prompt, tipo) — lee string por defecto, o tipo específico
         if t.type == TokenType.INLET:
             self._advance()
             self._expect(TokenType.LPAREN, "'('")
             prompt = None
+            target_type = ""
             if not self._check(TokenType.RPAREN):
                 prompt = self._parse_expr()
+                if self._match(TokenType.COMMA):
+                    # El segundo argumento es el tipo: int, float, bool, string
+                    type_tok = self._peek()
+                    type_map = {TokenType.INT_T: "int", TokenType.FLOAT_T: "float",
+                                TokenType.BOOL_T: "bool", TokenType.STRING_T: "string"}
+                    if type_tok.type in type_map:
+                        self._advance()
+                        target_type = type_map[type_tok.type]
+                    else:
+                        raise AyceSyntaxError(self.filename, type_tok.line, type_tok.col,
+                            "Se esperaba un tipo (int, float, bool, string) como segundo argumento de inlet")
             self._expect(TokenType.RPAREN, "')'")
-            return InletExpr(prompt=prompt, line=t.line, col=t.col)
+            return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
         # Identificador
         if t.type == TokenType.IDENT:

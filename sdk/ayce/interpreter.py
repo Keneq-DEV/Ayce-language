@@ -6,7 +6,7 @@ Realiza análisis semántico + evaluación tree-walking.
 from .ast_nodes import *
 from .errors import (
     AyceTypeError, AyceRuntimeError, AyceSyntaxError,
-    BreakSignal, ContinueSignal, ReturnSignal,
+    BreakSignal, ContinueSignal, ReturnSignal, RaiseSignal,
     AyceError,
 )
 from .tokens import Token
@@ -220,6 +220,10 @@ class Interpreter:
                 var = AyceVariant(stmt, self.global_env)
                 self.global_env.declare(stmt.name, var,
                                         UserTypeName(name=stmt.name), is_const=True)
+
+        # Registrar Template Error nativo (si el usuario no lo definió)
+        self._register_native_error()
+
         # Segunda pasada: ejecutar sentencias sueltas (no declaraciones de tipos ni tasks)
         for stmt in program.stmts:
             if isinstance(stmt, (TaskDecl, TemplateDecl, ShapeDecl, VariantDecl)):
@@ -235,6 +239,53 @@ class Interpreter:
             except ReturnSignal:
                 raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
                     "'return' sólo es válido dentro de una tarea")
+            except RaiseSignal as r:
+                # Error no capturado por try/rescue — propagar como error de runtime
+                err_val = r.error_value
+                if isinstance(err_val, AyceInstance) and "mensaje" in err_val.fields:
+                    msg = err_val.fields.get("mensaje", "error desconocido")
+                    raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                        f"Error no capturado: {msg}")
+                raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                    "Error no capturado")
+
+    def _register_native_error(self):
+        """Registra el Template Error nativo si el usuario no lo definió."""
+        if self.global_env.lookup("Error") is not None:
+            return
+        # Crear un Template Error con campos mensaje y codigo
+        from .ast_nodes import FieldDecl
+        # init que recibe mensaje y codigo opcional
+        init_decl = TaskDecl(
+            name="init",
+            signatures=[TaskSignature(params=[
+                Param(type_node=PrimitiveType(name="string"), name="mensaje"),
+                Param(type_node=PrimitiveType(name="int"), name="codigo", default=IntLit(value=0)),
+            ])],
+            return_type=None,
+            bodies=[[
+                AssignStmt(
+                    target=FieldAccessExpr(field="mensaje",
+                                           target=SelfExpr()),
+                    value=IdentExpr(name="mensaje"),
+                ),
+                AssignStmt(
+                    target=FieldAccessExpr(field="codigo",
+                                           target=SelfExpr()),
+                    value=IdentExpr(name="codigo"),
+                ),
+            ]],
+        )
+        error_decl = TemplateDecl(
+            name="Error",
+            fields=[
+                FieldDecl(name="mensaje", type_node=PrimitiveType(name="string")),
+                FieldDecl(name="codigo", type_node=PrimitiveType(name="int"), default=IntLit(value=0)),
+            ],
+            methods=[init_decl],
+        )
+        tpl = AyceTemplate(error_decl, self.global_env)
+        self.global_env.declare("Error", tpl, UserTypeName(name="Error"), is_const=True)
 
     # ──────────────────────────────────────────────────────────────────
     #  Sentencias
@@ -246,6 +297,8 @@ class Interpreter:
             self._exec_const_decl(stmt, env)
         elif isinstance(stmt, AssignStmt):
             self._exec_assign(stmt, env)
+        elif isinstance(stmt, CompoundAssignStmt):
+            self._exec_compound_assign(stmt, env)
         elif isinstance(stmt, SayStmt):
             self._exec_say(stmt, env)
         elif isinstance(stmt, IfStmt):
@@ -254,6 +307,10 @@ class Interpreter:
             self._exec_while(stmt, env)
         elif isinstance(stmt, ForStmt):
             self._exec_for(stmt, env)
+        elif isinstance(stmt, TryStmt):
+            self._exec_try(stmt, env)
+        elif isinstance(stmt, RaiseStmt):
+            self._exec_raise(stmt, env)
         elif isinstance(stmt, BreakStmt):
             raise BreakSignal()
         elif isinstance(stmt, ContinueStmt):
@@ -438,6 +495,130 @@ class Interpreter:
         # Implementación simple: en assign(), ya subimos por la cadena hasta encontrarla.
         # 'global' sólo valida que exista; la asignación posterior funciona naturalmente.
 
+    def _exec_try(self, stmt: TryStmt, env: Env):
+        """try ... rescue(nombre) ... end"""
+        try:
+            block_env = Env(parent=env)
+            for s in stmt.body:
+                self.exec_stmt(s, block_env)
+        except RaiseSignal as r:
+            if not stmt.rescue_name:
+                # rescue sin nombre — descarta el error
+                return
+            # El error capturado es r.error_value (un AyceInstance de Error)
+            rescue_env = Env(parent=env)
+            rescue_env.declare(stmt.rescue_name, r.error_value,
+                              UserTypeName(name="Error"), is_const=False)
+            for s in stmt.rescue_body:
+                self.exec_stmt(s, rescue_env)
+        except (AyceRuntimeError, AyceTypeError) as e:
+            # Errores nativos de ayce se convierten en Error capturable
+            if not stmt.rescue_name:
+                return
+            error_inst = self._make_native_error(e)
+            rescue_env = Env(parent=env)
+            rescue_env.declare(stmt.rescue_name, error_inst,
+                              UserTypeName(name="Error"), is_const=False)
+            for s in stmt.rescue_body:
+                self.exec_stmt(s, rescue_env)
+
+    def _make_native_error(self, e: "AyceError"):
+        """Convierte un AyceError nativo en una instancia de Error capturable."""
+        # Buscar el Template Error en el entorno global
+        existing = self.global_env.lookup("Error")
+        if existing is not None:
+            tpl_val, _, _, _ = existing
+            if isinstance(tpl_val, AyceTemplate):
+                inst = AyceInstance(tpl_val)
+                for f in tpl_val.decl.fields:
+                    inst.fields[f.name] = None
+                inst.fields["mensaje"] = e.msg
+                inst.fields["codigo"] = 1
+                return inst
+        # Fallback: crear un dict simple
+        return {"mensaje": e.msg, "codigo": 1}
+
+    def _exec_raise(self, stmt: RaiseStmt, env: Env):
+        """raise Error("mensaje", codigo)"""
+        error_val = self.eval(stmt.error_expr, env)
+        raise RaiseSignal(error_val)
+
+    def _exec_compound_assign(self, stmt: CompoundAssignStmt, env: Env):
+        """x += 5, x -= 2, etc."""
+        target = stmt.target
+        current = self.eval(target, env)
+        value = self.eval(stmt.value, env)
+
+        op = stmt.op[:-1]  # quitar el '=' final: "+=" → "+"
+        if op == "+":
+            # Concatenación de strings con autoconversión
+            if isinstance(current, str) or isinstance(value, str):
+                if isinstance(current, bytes) and isinstance(value, bytes):
+                    new_val = current + value
+                else:
+                    new_val = self._to_string_concat(current) + self._to_string_concat(value)
+            elif isinstance(current, (int, float)) and isinstance(value, (int, float)):
+                new_val = current + value
+            else:
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"No se puede aplicar {op}= a {self._type_name(current)} y {self._type_name(value)}")
+        elif op == "-":
+            if not (isinstance(current, (int, float)) and isinstance(value, (int, float))):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"-= requiere números")
+            new_val = current - value
+        elif op == "*":
+            if not (isinstance(current, (int, float)) and isinstance(value, (int, float))):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"*= requiere números")
+            new_val = current * value
+        elif op == "/":
+            if not (isinstance(current, (int, float)) and isinstance(value, (int, float))):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"/= requiere números")
+            if value == 0:
+                raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "División por cero")
+            new_val = float(current) / float(value)
+        elif op == "//":
+            if not (isinstance(current, int) and isinstance(value, int)):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"//= requiere enteros")
+            if value == 0:
+                raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "División por cero")
+            new_val = current // value
+        elif op == "%":
+            if not (isinstance(current, int) and isinstance(value, int)):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"%= requiere enteros")
+            if value == 0:
+                raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "Módulo por cero")
+            new_val = current % value
+        else:
+            raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                f"Operador compuesto no soportado: {stmt.op}")
+
+        # Asignar el nuevo valor al target
+        if isinstance(target, IdentExpr):
+            env.assign(target.name, new_val, self.filename, target.line, target.col)
+        elif isinstance(target, IndexExpr):
+            container = self.eval(target.target, env)
+            idx = self.eval(target.index, env)
+            if isinstance(container, AyceList):
+                container.elements[idx] = new_val
+            else:
+                raise AyceRuntimeError(self.filename, target.line, target.col,
+                    "No se puede asignar a índice de ese tipo")
+        elif isinstance(target, FieldAccessExpr):
+            obj = self.eval(target.target, env)
+            if isinstance(obj, AyceInstance):
+                obj.fields[target.field] = new_val
+            else:
+                raise AyceRuntimeError(self.filename, target.line, target.col,
+                    "No se puede asignar a campo de ese tipo")
+        else:
+            raise AyceRuntimeError(self.filename, target.line, target.col,
+                "Objetivo de asignación compuesta inválido")
+
     # ──────────────────────────────────────────────────────────────────
     #  Expresiones
     # ──────────────────────────────────────────────────────────────────
@@ -547,7 +728,41 @@ class Interpreter:
                 if not isinstance(prompt, str):
                     raise AyceTypeError(self.filename, expr.line, expr.col,
                         f"El prompt de inlet debe ser string, se recibió {self._type_name(prompt)}")
-            return input(prompt)
+            # Si no hay tipo, devolver string
+            if not expr.target_type or expr.target_type == "string":
+                return input(prompt)
+            # Si hay tipo, repetir hasta que sea válido
+            while True:
+                raw = input(prompt)
+                if expr.target_type == "int":
+                    try:
+                        return int(raw)
+                    except ValueError:
+                        say(f"'{raw}' no es un int válido. Intentá de nuevo.")
+                elif expr.target_type == "float":
+                    try:
+                        return float(raw)
+                    except ValueError:
+                        say(f"'{raw}' no es un float válido. Intentá de nuevo.")
+                elif expr.target_type == "bool":
+                    if raw.lower() in ("true", "t", "1"):
+                        return True
+                    if raw.lower() in ("false", "f", "0"):
+                        return False
+                    say(f"'{raw}' no es un bool válido. Usá True o False.")
+                else:
+                    return raw
+        if isinstance(expr, TernaryExpr):
+            cond_val = self.eval(expr.cond, env)
+            if not isinstance(cond_val, bool):
+                raise AyceTypeError(self.filename, expr.line, expr.col,
+                    f"La condición del ternario debe ser bool, se recibió {self._type_name(cond_val)}")
+            if cond_val:
+                return self.eval(expr.if_true, env)
+            else:
+                return self.eval(expr.if_false, env)
+        if isinstance(expr, TypeConvertExpr):
+            return self._convert_type(expr, env)
         if isinstance(expr, SelfExpr):
             existing = env.lookup("self")
             if existing is None:
@@ -685,7 +900,7 @@ class Interpreter:
         right = self.eval(expr.right, env)
 
         # Aritmética
-        if expr.op in ("+", "-", "*", "/", "%", "**"):
+        if expr.op in ("+", "-", "*", "/", "%", "**", "//"):
             # Concatenación de strings con autoconversión
             # Si uno de los operandos es string, el otro se convierte a string
             if expr.op == "+" and (isinstance(left, str) or isinstance(right, str)):
@@ -696,6 +911,16 @@ class Interpreter:
             # Suma de bytes
             if expr.op == "+" and isinstance(left, bytes) and isinstance(right, bytes):
                 return left + right
+            # División entera // (v0.4): requiere ints, devuelve int
+            if expr.op == "//":
+                if not (isinstance(left, int) and isinstance(right, int) and
+                        not isinstance(left, bool) and not isinstance(right, bool)):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        f"El operador // requiere enteros, "
+                        f"se recibió {self._type_name(left)} y {self._type_name(right)}")
+                if right == 0:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col, "División por cero")
+                return left // right
             if not (isinstance(left, (int, float)) and isinstance(right, (int, float))):
                 raise AyceTypeError(self.filename, expr.line, expr.col,
                     f"El operador {expr.op} requiere números o strings, "
@@ -864,6 +1089,11 @@ class Interpreter:
             if method == "values":
                 return AyceList(list(target.pairs.values()),
                                 ListType(flexible=True, line=expr.line, col=expr.col))
+            if method == "items":
+                # Devuelve lista de tuplas (clave, valor)
+                items = [AyceTuple([k, v], TupleType(flexible=True, line=expr.line, col=expr.col))
+                         for k, v in target.pairs.items()]
+                return AyceList(items, ListType(flexible=True, line=expr.line, col=expr.col))
             if method == "clear":
                 target.pairs.clear()
                 return None
@@ -931,6 +1161,48 @@ class Interpreter:
                 return AyceList(target.split(args[0]),
                                 ListType(elem=PrimitiveType(name="string"),
                                          line=expr.line, col=expr.col))
+            # Métodos nuevos v0.4
+            if method == "slice":
+                if len(args) != 2 or not isinstance(args[0], int) or not isinstance(args[1], int):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.slice requiere 2 int (inicio, fin)")
+                return target[args[0]:args[1]]
+            if method == "replace":
+                if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], str):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.replace requiere 2 strings (viejo, nuevo)")
+                return target.replace(args[0], args[1])
+            if method == "trim":
+                if len(args) != 0:
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.trim no toma argumentos")
+                return target.strip()
+            if method == "starts_with":
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.starts_with requiere 1 string")
+                return target.startswith(args[0])
+            if method == "ends_with":
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.ends_with requiere 1 string")
+                return target.endswith(args[0])
+            if method == "find":
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.find requiere 1 string")
+                idx = target.find(args[0])
+                return idx  # -1 si no está
+            if method == "reverse":
+                if len(args) != 0:
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.reverse no toma argumentos")
+                return target[::-1]
+            if method == "repeat":
+                if len(args) != 1 or not isinstance(args[0], int):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "string.repeat requiere 1 int")
+                return target * args[0]
             raise AyceRuntimeError(self.filename, expr.line, expr.col,
                 f"string no tiene el método '{method}'")
 
@@ -1231,6 +1503,82 @@ class Interpreter:
         if value is None:
             return "none"
         return self._format_value(value)
+
+    def _convert_type(self, expr, env=None):
+        """Implementa int(x), float(x), string(x), bool(x), bytes(x)."""
+        # env puede venir de eval() o ser None; si es None usamos global_env
+        actual_env = env if env is not None else self.global_env
+        val = self.eval(expr.arg, actual_env)
+        target = expr.target_type
+
+        if target == "int":
+            if isinstance(val, bool):
+                return 1 if val else 0
+            if isinstance(val, int):
+                return val
+            if isinstance(val, float):
+                return int(val)  # trunca
+            if isinstance(val, str):
+                try:
+                    return int(val)
+                except ValueError:
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        f'No se puede convertir "{val}" a int')
+            raise AyceTypeError(self.filename, expr.line, expr.col,
+                f"No se puede convertir {self._type_name(val)} a int")
+
+        if target == "float":
+            if isinstance(val, bool):
+                return 1.0 if val else 0.0
+            if isinstance(val, int):
+                return float(val)
+            if isinstance(val, float):
+                return val
+            if isinstance(val, str):
+                try:
+                    return float(val)
+                except ValueError:
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        f'No se puede convertir "{val}" a float')
+            raise AyceTypeError(self.filename, expr.line, expr.col,
+                f"No se puede convertir {self._type_name(val)} a float")
+
+        if target == "string":
+            return self._to_string_concat(val)
+
+        if target == "bool":
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, int):
+                return val != 0
+            if isinstance(val, float):
+                return val != 0.0
+            if isinstance(val, str):
+                return val != ""
+            if val is None:
+                return False
+            # Colecciones y otros: True si no están vacíos
+            if isinstance(val, AyceList):
+                return len(val.elements) > 0
+            if isinstance(val, AyceDict):
+                return len(val.pairs) > 0
+            if isinstance(val, AyceSet):
+                return len(val.elements) > 0
+            if isinstance(val, AyceTuple):
+                return len(val.elements) > 0
+            return True
+
+        if target == "bytes":
+            if isinstance(val, bytes):
+                return val
+            if isinstance(val, str):
+                return val.encode("utf-8")
+            raise AyceTypeError(self.filename, expr.line, expr.col,
+                f"No se puede convertir {self._type_name(val)} a bytes")
+
+        raise AyceTypeError(self.filename, expr.line, expr.col,
+            f"Tipo de conversión desconocido: {target}")
+
 
 
     def _format_value(self, value) -> str:

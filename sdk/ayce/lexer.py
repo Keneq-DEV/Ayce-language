@@ -81,6 +81,16 @@ class Lexer:
                 self._advance()
                 continue
 
+            # Comentario ### ... ### (multilínea)
+            if c == "#" and self._peek(1) == "#" and self._peek(2) == "#":
+                self._advance(); self._advance(); self._advance()  # consume ###
+                while self.pos < len(self.source):
+                    if self._peek() == "#" and self._peek(1) == "#" and self._peek(2) == "#":
+                        self._advance(); self._advance(); self._advance()  # consume ###
+                        break
+                    self._advance()
+                continue
+
             # Comentario ## hasta fin de línea
             if c == "#" and self._peek(1) == "#":
                 while self.pos < len(self.source) and self._peek() != "\n":
@@ -291,7 +301,11 @@ class Lexer:
         c2 = self._peek(1)
         c3 = self._peek(2)
 
-        # Operadores de 3 caracteres: ninguno en v0.2
+        # Operadores de 3 caracteres (v0.4): //=
+        three = c + c2 + c3
+        if three == "//=":
+            self._advance(); self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.DSLASH_ASSIGN, "//=", line, col)); return
 
         # Operadores de 2 caracteres
         two = c + c2
@@ -319,6 +333,31 @@ class Lexer:
         if two == "=>":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.ARROW, "=>", line, col)); return
+        # División entera // (v0.4) — va antes que / para no confundirse
+        if two == "//":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.DOUBLE_SLASH, "//", line, col)); return
+        # Asignación compuesta (v0.4)
+        if two == "+=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.PLUS_ASSIGN, "+=", line, col)); return
+        if two == "-=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.MINUS_ASSIGN, "-=", line, col)); return
+        if two == "*=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.STAR_ASSIGN, "*=", line, col)); return
+        if two == "/=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.SLASH_ASSIGN, "/=", line, col)); return
+        if two == "%=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.PERCENT_ASSIGN, "%=", line, col)); return
+
+        # Operador ? (ternario v0.4)
+        if c == "?":
+            self._advance()
+            self.tokens.append(Token(TokenType.QUESTION, "?", line, col)); return
 
         # Modificadores &in &out &inout
         if c == "&":

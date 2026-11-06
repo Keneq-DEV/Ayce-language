@@ -47,6 +47,11 @@ class TokenType(Enum):
     NEW        = auto()      # para construir Shape: new Punto { x: 1, y: 2 }
     IS         = auto()      # para comparar variantes: c is Color.Rojo
 
+    # Manejo de errores (v0.4)
+    TRY        = auto()
+    RESCUE     = auto()
+    RAISE      = auto()
+
     # Tipos primitivos (palabras reservadas)
     INT_T      = auto()
     FLOAT_T    = auto()
@@ -59,6 +64,7 @@ class TokenType(Enum):
     MINUS      = auto()   # -
     STAR       = auto()   # *
     SLASH      = auto()   # /
+    DOUBLE_SLASH = auto() # //
     PERCENT    = auto()   # %
     POW        = auto()   # **
     EQ         = auto()   # ==
@@ -71,6 +77,14 @@ class TokenType(Enum):
     OR         = auto()   # ||
     NOT        = auto()   # !
     ASSIGN     = auto()   # =
+    QUESTION   = auto()   # ?
+    # Asignación compuesta (v0.4)
+    PLUS_ASSIGN  = auto() # +=
+    MINUS_ASSIGN = auto() # -=
+    STAR_ASSIGN  = auto() # *=
+    SLASH_ASSIGN = auto() # /=
+    DSLASH_ASSIGN= auto() # //=
+    PERCENT_ASSIGN= auto()# %=
 
     # Puntuación y delimitadores
     LPAREN     = auto()   # (
@@ -123,6 +137,9 @@ KEYWORDS = {
     "self":     TokenType.SELF,
     "new":      TokenType.NEW,
     "is":       TokenType.IS,
+    "try":      TokenType.TRY,
+    "rescue":   TokenType.RESCUE,
+    "raise":    TokenType.RAISE,
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,
     "none":     TokenType.NONE,

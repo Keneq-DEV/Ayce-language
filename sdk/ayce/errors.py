@@ -47,3 +47,9 @@ class ReturnSignal(Exception):
     """Señal interna para implementar `return`."""
     def __init__(self, value):
         self.value = value
+
+
+class RaiseSignal(Exception):
+    """Señal interna para implementar `raise`. Lleva un valor de tipo Error."""
+    def __init__(self, error_value):
+        self.error_value = error_value

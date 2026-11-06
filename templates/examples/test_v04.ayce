@@ -1,0 +1,98 @@
+## test_v04.ayce — prueba todas las features nuevas de v0.4
+
+## === Conversión de tipos ===
+var n: int = int("42")
+var f: float = float("3.14")
+var s: string = string(42)
+var b: bool = bool(0)
+var by: bytes = bytes("hola")
+
+say("Conversión:")
+say("  int(\"42\") =", n)
+say("  float(\"3.14\") =", f)
+say("  string(42) =", s)
+say("  bool(0) =", b)
+say("  bytes(\"hola\") =", by)
+
+## === División entera ===
+say("")
+say("División entera:")
+say("  10 // 3 =", 10 // 3)
+say("  20 // 6 =", 20 // 6)
+
+## === Ternario ===
+var edad: int = 20
+var msg: string = (edad >= 18) ? "mayor" : "menor"
+say("")
+say("Ternario: edad =", edad, "→", msg)
+
+## === Asignación compuesta ===
+var x: int = 10
+x += 5
+say("")
+say("x += 5 →", x)
+x -= 3
+say("x -= 3 →", x)
+x *= 2
+say("x *= 2 →", x)
+x //= 4
+say("x //= 4 →", x)
+
+## === Strings nuevos métodos ===
+var texto: string = "Hola Mundo"
+say("")
+say("Strings:")
+say("  slice(0,4):", texto.slice(0, 4))
+say("  replace:", texto.replace("Mundo", "ayce"))
+say("  trim:", "  hola  ".trim())
+say("  starts_with:", texto.starts_with("Hola"))
+say("  ends_with:", texto.ends_with("Mundo"))
+say("  find:", texto.find("Mundo"))
+say("  reverse:", texto.reverse())
+say("  repeat:", "ab".repeat(3))
+
+## === items() en dict ===
+var edades: <string, int> = <"juan": 20, "maria": 25>
+say("")
+say("items() del dict:")
+for par in edades.items() do
+    say("  ", par[0], "→", par[1])
+end
+
+## === Comentarios multilínea ===
+###
+Esto es un comentario
+multilínea. Todo esto lo ignora el intérprete.
+###
+say("")
+say("Comentario multilínea funcionó (llegué hasta acá)")
+
+## === Manejo de errores ===
+say("")
+say("Manejo de errores:")
+
+task dividir(int a, int b) = float ;
+{
+    if b == 0 then
+        raise Error("No se puede dividir por cero", 100)
+    end
+    return a / b
+}
+
+try
+    var r: float = dividir(10, 0)
+    say("  resultado:", r)
+rescue(err)
+    say("  Error capturado:", err.mensaje, "(código:", err.codigo, ")")
+end
+
+try
+    var r2: float = dividir(10, 2)
+    say("  resultado:", r2)
+rescue(err)
+    say("  No debería llegar acá")
+end
+
+## === inlet con tipo (simulado, no interactivo) ===
+say("")
+say("inlet(prompt, tipo) está implementado — usa input() de Python")

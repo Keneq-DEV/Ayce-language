@@ -143,7 +143,10 @@ class RangeExpr(Expr):
 
 @dataclass
 class InletExpr(Expr):
+    """inlet(prompt, tipo) — lee entrada del teclado.
+    tipo puede ser None (string), 'int', 'float', 'bool'."""
     prompt: Optional[Expr] = None
+    target_type: str = ""   # "", "int", "float", "bool"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -334,6 +337,47 @@ class UserTypeName(TypeNode):
     name: str = ""
     line: int = 0
     col: int = 0
+
+# ──────────────────────────────────────────────────────────────────────
+#  v0.4 — Manejo de errores, conversión, ternario, asignación compuesta
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class TryStmt(Stmt):
+    """try ... rescue(nombre) ... end"""
+    body: list = field(default_factory=list)
+    rescue_name: str = ""
+    rescue_body: list = field(default_factory=list)
+    line: int = 0
+    col: int = 0
+
+@dataclass
+class RaiseStmt(Stmt):
+    """raise Error("mensaje", codigo)"""
+    error_expr: Optional[Expr] = None
+    line: int = 0
+    col: int = 0
+
+@dataclass
+class TernaryExpr(Expr):
+    """(cond) ? a : b"""
+    cond: Optional[Expr] = None
+    if_true: Optional[Expr] = None
+    if_false: Optional[Expr] = None
+
+@dataclass
+class CompoundAssignStmt(Stmt):
+    """x += 5, x -= 2, etc."""
+    target: Optional[Expr] = None
+    op: str = ""    # "+=", "-=", etc.
+    value: Optional[Expr] = None
+    line: int = 0
+    col: int = 0
+
+@dataclass
+class TypeConvertExpr(Expr):
+    """int("42"), float("1.5"), string(42), bool(0), bytes("hola")"""
+    target_type: str = ""  # "int", "float", "string", "bool", "bytes"
+    arg: Optional[Expr] = None
 
 # ──────────────────────────────────────────────────────────────────────
 #  Programa
