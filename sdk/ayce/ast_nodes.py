@@ -267,10 +267,11 @@ class VariantCase:
 
 @dataclass
 class TemplateDecl(Stmt):
-    """Template: clase con campos y métodos (tasks)."""
+    """Template: clase con campos y métodos (tasks). Puede heredar de otro Template."""
     name: str = ""
     fields: list = field(default_factory=list)        # lista de FieldDecl
     methods: list = field(default_factory=list)        # lista de TaskDecl
+    parent_name: str = ""    # nombre del Template padre (v0.4.1) — "" si no hay herencia
     line: int = 0
     col: int = 0
 
@@ -343,9 +344,10 @@ class UserTypeName(TypeNode):
 # ──────────────────────────────────────────────────────────────────────
 @dataclass
 class TryStmt(Stmt):
-    """try ... rescue(nombre) ... end"""
+    """try ... rescue(nombre: Tipo) ... end"""
     body: list = field(default_factory=list)
     rescue_name: str = ""
+    rescue_type: str = ""    # nombre del tipo de error (ej: "Div0", "Error", "")
     rescue_body: list = field(default_factory=list)
     line: int = 0
     col: int = 0

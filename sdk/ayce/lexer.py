@@ -143,6 +143,34 @@ class Lexer:
     # ──────────────────────────────────────────────────────────────────
     #  Literales
     # ──────────────────────────────────────────────────────────────────
+    def _split_fstring_expr(self, full: str):
+        """Separa la expresión del formato en una f-string.
+        {expr:formato} → (expr, formato)
+        {expr}         → (expr, "")
+        El : que separa es el primer : que NO está dentro de () [] <> {} ni en un string.
+        """
+        depth = 0
+        in_string = False
+        i = 0
+        while i < len(full):
+            c = full[i]
+            if in_string:
+                if c == '"':
+                    in_string = False
+                i += 1
+                continue
+            if c == '"':
+                in_string = True
+            elif c in "([{<":
+                depth += 1
+            elif c in ")]}>":
+                if depth > 0:
+                    depth -= 1
+            elif c == ":" and depth == 0:
+                return full[:i].strip(), full[i+1:].strip()
+            i += 1
+        return full.strip(), ""
+
     def _lex_string(self, prefix: str):
         line, col = self.line, self.col
         # Consumir la comilla de apertura
@@ -215,7 +243,11 @@ class Lexer:
                             break
                     expr_chars.append(ec)
                     self._advance()
-                parts.append(("expr", "".join(expr_chars)))
+                # Separar expresión de formato: {expr:formato}
+                # El : que separa es el primer : que NO está dentro de () [] <> {}
+                full = "".join(expr_chars)
+                expr_part, fmt_part = self._split_fstring_expr(full)
+                parts.append(("expr", expr_part, fmt_part))
                 continue
 
             # Carácter normal

@@ -193,13 +193,17 @@ class Parser:
                          line=t.line, col=t.col)
 
     def _parse_template_decl(self) -> TemplateDecl:
-        """Template Nombre {
+        """Template Nombre [: Padre] {
             campo1: tipo
             campo2: tipo
             task metodo() ; { ... }
         }"""
         t = self._expect(TokenType.TEMPLATE, "'Template'")
         name = self._expect(TokenType.IDENT, "nombre de Template").value
+        # Herencia: Template Hijo : Padre (v0.4.1)
+        parent_name = ""
+        if self._match(TokenType.COLON):
+            parent_name = self._expect(TokenType.IDENT, "nombre del Template padre").value
         self._skip_newlines()
         self._expect(TokenType.LBRACE, "'{'")
         self._skip_separators()
@@ -215,7 +219,7 @@ class Parser:
 
         self._expect(TokenType.RBRACE, "'}'")
         return TemplateDecl(name=name, fields=fields, methods=methods,
-                            line=t.line, col=t.col)
+                            parent_name=parent_name, line=t.line, col=t.col)
 
     def _parse_shape_decl(self) -> ShapeDecl:
         """Shape Nombre {
@@ -362,23 +366,40 @@ class Parser:
         return ForStmt(var_name=var_name, iterable=iterable, body=body, line=t.line, col=t.col)
 
     def _parse_try(self) -> TryStmt:
-        """try ... rescue(nombre) ... end"""
+        """try ... rescue(nombre: Tipo) ... end"""
         t = self._expect(TokenType.TRY, "'try'")
         body = self._parse_block_body()
         rescue_name = ""
+        rescue_type = ""
         rescue_body = []
         if self._check(TokenType.RESCUE):
             self._advance()
             if self._check(TokenType.LPAREN):
                 self._advance()
                 rescue_name = self._expect(TokenType.IDENT, "nombre de variable de error").value
+                # Tipo opcional: rescue(err: Tipo)
+                if self._match(TokenType.COLON):
+                    # El tipo puede ser un IDENT o un tipo primitivo (Error, Div0, etc.)
+                    type_tok = self._peek()
+                    if type_tok.type == TokenType.IDENT:
+                        rescue_type = self._advance().value
+                    else:
+                        raise AyceSyntaxError(self.filename, type_tok.line, type_tok.col,
+                            "Se esperaba un nombre de tipo de error después de ':'")
                 self._expect(TokenType.RPAREN, "')'")
             elif self._check(TokenType.IDENT):
                 rescue_name = self._advance().value
+                if self._match(TokenType.COLON):
+                    type_tok = self._peek()
+                    if type_tok.type == TokenType.IDENT:
+                        rescue_type = self._advance().value
+                    else:
+                        raise AyceSyntaxError(self.filename, type_tok.line, type_tok.col,
+                            "Se esperaba un nombre de tipo de error después de ':'")
             rescue_body = self._parse_block_body()
         self._expect(TokenType.END, "'end'")
-        return TryStmt(body=body, rescue_name=rescue_name, rescue_body=rescue_body,
-                       line=t.line, col=t.col)
+        return TryStmt(body=body, rescue_name=rescue_name, rescue_type=rescue_type,
+                       rescue_body=rescue_body, line=t.line, col=t.col)
 
     def _parse_raise(self) -> RaiseStmt:
         """raise Error("mensaje", codigo)"""
@@ -890,18 +911,19 @@ class Parser:
         )
 
     def _build_fstring(self, tok: Token) -> FStringLit:
-        """Construye FStringLit a partir de las partes (text, expr_str) del lexer.
-        Las expresiones se re-lexean y re-parsean aquí."""
+        """Construye FStringLit a partir de las partes del lexer.
+        Cada parte expr ahora es (expr_str, fmt_str)."""
         parts = []
-        for kind, content in tok.value:
-            if kind == "text":
-                parts.append(("text", content))
-            else:
-                # content es código ayce — lo parseamos como expresión
+        for item in tok.value:
+            if item[0] == "text":
+                parts.append(("text", item[1]))
+            elif item[0] == "expr":
+                expr_str = item[1]
+                fmt_str = item[2] if len(item) > 2 else ""
                 from .lexer import Lexer
-                sub_lexer = Lexer(content, filename=self.filename)
+                sub_lexer = Lexer(expr_str, filename=self.filename)
                 sub_tokens = sub_lexer.tokenize()
                 sub_parser = Parser(sub_tokens, filename=self.filename)
                 expr = sub_parser._parse_expr()
-                parts.append(("expr", expr))
+                parts.append(("expr", expr, fmt_str))
         return FStringLit(parts=parts, line=tok.line, col=tok.col)

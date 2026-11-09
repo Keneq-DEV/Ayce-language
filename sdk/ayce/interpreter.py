@@ -68,20 +68,40 @@ class AyceTask:
 
 
 class AyceTemplate:
-    """Template (clase) definido por el usuario."""
-    def __init__(self, decl: TemplateDecl, closure_env):
+    """Template (clase) definido por el usuario. Soporta herencia (v0.4.1)."""
+    def __init__(self, decl: TemplateDecl, closure_env, parent_template=None):
         self.decl = decl
         self.closure_env = closure_env   # entorno donde se declaró (para métodos)
+        self.parent_template = parent_template   # AyceTemplate padre o None
 
     @property
     def name(self):
         return self.decl.name
 
     def find_method(self, name):
+        """Busca método en este Template y luego en el padre (herencia)."""
         for m in self.decl.methods:
             if m.name == name:
                 return m
+        if self.parent_template is not None:
+            return self.parent_template.find_method(name)
         return None
+
+    def all_fields(self):
+        """Devuelve todos los campos: los del padre primero, luego los propios."""
+        fields = []
+        if self.parent_template is not None:
+            fields.extend(self.parent_template.all_fields())
+        fields.extend(self.decl.fields)
+        return fields
+
+    def is_subclass_of(self, other_name):
+        """¿Es this subclase de other_name? (incluye self)."""
+        if self.name == other_name:
+            return True
+        if self.parent_template is not None:
+            return self.parent_template.is_subclass_of(other_name)
+        return False
 
     def __repr__(self):
         return f"<Template {self.decl.name}>"
@@ -209,7 +229,18 @@ class Interpreter:
                 task = AyceTask(stmt, self.global_env)
                 self.global_env.declare(stmt.name, task, TaskType(), is_const=True)
             elif isinstance(stmt, TemplateDecl):
-                tpl = AyceTemplate(stmt, self.global_env)
+                # Resolver padre si hay herencia (v0.4.1)
+                parent_tpl = None
+                if stmt.parent_name:
+                    existing = self.global_env.lookup(stmt.parent_name)
+                    if existing is None:
+                        raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                            f"El Template padre '{stmt.parent_name}' no está declarado")
+                    parent_tpl = existing[0]
+                    if not isinstance(parent_tpl, AyceTemplate):
+                        raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                            f"'{stmt.parent_name}' no es un Template")
+                tpl = AyceTemplate(stmt, self.global_env, parent_template=parent_tpl)
                 self.global_env.declare(stmt.name, tpl,
                                         UserTypeName(name=stmt.name), is_const=True)
             elif isinstance(stmt, ShapeDecl):
@@ -250,42 +281,61 @@ class Interpreter:
                     "Error no capturado")
 
     def _register_native_error(self):
-        """Registra el Template Error nativo si el usuario no lo definió."""
+        """Registra TODOS los errores nativos como Templates con herencia (v0.4.1)."""
+        from .ast_nodes import FieldDecl
+        from .errors import NATIVE_ERRORS, get_error_hierarchy
+
+        # No registrar si el usuario ya definió "Error"
         if self.global_env.lookup("Error") is not None:
             return
-        # Crear un Template Error con campos mensaje y codigo
-        from .ast_nodes import FieldDecl
-        # init que recibe mensaje y codigo opcional
-        init_decl = TaskDecl(
-            name="init",
-            signatures=[TaskSignature(params=[
-                Param(type_node=PrimitiveType(name="string"), name="mensaje"),
-                Param(type_node=PrimitiveType(name="int"), name="codigo", default=IntLit(value=0)),
-            ])],
-            return_type=None,
-            bodies=[[
-                AssignStmt(
-                    target=FieldAccessExpr(field="mensaje",
-                                           target=SelfExpr()),
-                    value=IdentExpr(name="mensaje"),
-                ),
-                AssignStmt(
-                    target=FieldAccessExpr(field="codigo",
-                                           target=SelfExpr()),
-                    value=IdentExpr(name="codigo"),
-                ),
-            ]],
-        )
-        error_decl = TemplateDecl(
-            name="Error",
-            fields=[
-                FieldDecl(name="mensaje", type_node=PrimitiveType(name="string")),
-                FieldDecl(name="codigo", type_node=PrimitiveType(name="int"), default=IntLit(value=0)),
-            ],
-            methods=[init_decl],
-        )
-        tpl = AyceTemplate(error_decl, self.global_env)
-        self.global_env.declare("Error", tpl, UserTypeName(name="Error"), is_const=True)
+
+        # init común para todos los errores
+        def make_init():
+            return TaskDecl(
+                name="init",
+                signatures=[TaskSignature(params=[
+                    Param(type_node=PrimitiveType(name="string"), name="mensaje"),
+                    Param(type_node=PrimitiveType(name="int"), name="codigo", default=IntLit(value=0)),
+                ])],
+                return_type=None,
+                bodies=[[
+                    AssignStmt(
+                        target=FieldAccessExpr(field="mensaje", target=SelfExpr()),
+                        value=IdentExpr(name="mensaje"),
+                    ),
+                    AssignStmt(
+                        target=FieldAccessExpr(field="codigo", target=SelfExpr()),
+                        value=IdentExpr(name="codigo"),
+                    ),
+                ]],
+            )
+
+        # Crear los Templates en orden de jerarquía (padres antes que hijos)
+        templates = {}
+        for name in get_error_hierarchy():
+            info = NATIVE_ERRORS[name]
+            parent_name = info["parent"]
+            parent_tpl = templates.get(parent_name) if parent_name else None
+
+            # Cada error tiene los campos mensaje y codigo
+            # Los hijos heredan los campos del padre, así que no los redeclaran
+            fields = []
+            if parent_tpl is None:
+                # Es la raíz (Error) — define los campos
+                fields = [
+                    FieldDecl(name="mensaje", type_node=PrimitiveType(name="string")),
+                    FieldDecl(name="codigo", type_node=PrimitiveType(name="int"), default=IntLit(value=0)),
+                ]
+
+            decl = TemplateDecl(
+                name=name,
+                fields=fields,
+                methods=[make_init()] if parent_tpl is None else [],
+                parent_name=parent_name or "",
+            )
+            tpl = AyceTemplate(decl, self.global_env, parent_template=parent_tpl)
+            templates[name] = tpl
+            self.global_env.declare(name, tpl, UserTypeName(name=name), is_const=True)
 
     # ──────────────────────────────────────────────────────────────────
     #  Sentencias
@@ -496,47 +546,91 @@ class Interpreter:
         # 'global' sólo valida que exista; la asignación posterior funciona naturalmente.
 
     def _exec_try(self, stmt: TryStmt, env: Env):
-        """try ... rescue(nombre) ... end"""
+        """try ... rescue(nombre: Tipo) ... end — filtra por tipo (v0.4.1)"""
         try:
             block_env = Env(parent=env)
             for s in stmt.body:
                 self.exec_stmt(s, block_env)
         except RaiseSignal as r:
+            error_val = r.error_value
+            # Si rescue tiene tipo, filtrar
+            if stmt.rescue_type:
+                if not self._error_matches_type(error_val, stmt.rescue_type):
+                    raise  # no coincide — relanzar
             if not stmt.rescue_name:
-                # rescue sin nombre — descarta el error
                 return
-            # El error capturado es r.error_value (un AyceInstance de Error)
             rescue_env = Env(parent=env)
-            rescue_env.declare(stmt.rescue_name, r.error_value,
+            rescue_env.declare(stmt.rescue_name, error_val,
                               UserTypeName(name="Error"), is_const=False)
             for s in stmt.rescue_body:
                 self.exec_stmt(s, rescue_env)
         except (AyceRuntimeError, AyceTypeError) as e:
-            # Errores nativos de ayce se convierten en Error capturable
+            # Errores nativos de ayce se convierten en el error específico
+            error_inst = self._make_native_error(e)
+            # Si rescue tiene tipo, filtrar
+            if stmt.rescue_type:
+                if not self._error_matches_type(error_inst, stmt.rescue_type):
+                    raise  # no coincide — relanzar
             if not stmt.rescue_name:
                 return
-            error_inst = self._make_native_error(e)
             rescue_env = Env(parent=env)
             rescue_env.declare(stmt.rescue_name, error_inst,
                               UserTypeName(name="Error"), is_const=False)
             for s in stmt.rescue_body:
                 self.exec_stmt(s, rescue_env)
 
+    def _error_matches_type(self, error_val, type_name: str) -> bool:
+        """¿El error coincide con el tipo especificado en rescue? (con herencia)"""
+        if isinstance(error_val, AyceInstance):
+            return error_val.template.is_subclass_of(type_name)
+        return False
+
     def _make_native_error(self, e: "AyceError"):
-        """Convierte un AyceError nativo en una instancia de Error capturable."""
-        # Buscar el Template Error en el entorno global
-        existing = self.global_env.lookup("Error")
+        """Convierte un AyceError nativo en una instancia del error específico."""
+        from .errors import NATIVE_ERRORS
+
+        # Determinar qué error nativo corresponde
+        error_name = "RunErr"  # por defecto
+        msg = e.msg
+        if isinstance(e, AyceTypeError):
+            error_name = "TypeErr"
+        elif isinstance(e, AyceRuntimeError):
+            # Detectar tipos específicos por el mensaje
+            if "División por cero" in msg or "división por cero" in msg:
+                error_name = "Div0"
+            elif "Índice" in msg and "fuera de rango" in msg:
+                error_name = "IndexErr"
+            elif "Clave" in msg and "no encontrada" in msg:
+                error_name = "KeyErr"
+            elif "no está declarada" in msg or "no declarado" in msg:
+                error_name = "NameErr"
+            elif "no existe" in msg and "campo" in msg:
+                error_name = "AttrErr"
+            elif "Recursión" in msg or "recursión" in msg:
+                error_name = "OverErr"
+            else:
+                error_name = "RunErr"
+
+        # Buscar el Template del error específico
+        existing = self.global_env.lookup(error_name)
+        if existing is None:
+            # Fallback a Error base
+            existing = self.global_env.lookup("Error")
+            error_name = "Error"
+
         if existing is not None:
-            tpl_val, _, _, _ = existing
+            tpl_val = existing[0]
             if isinstance(tpl_val, AyceTemplate):
                 inst = AyceInstance(tpl_val)
-                for f in tpl_val.decl.fields:
+                # Inicializar todos los campos (incluidos los heredados)
+                for f in tpl_val.all_fields():
                     inst.fields[f.name] = None
-                inst.fields["mensaje"] = e.msg
-                inst.fields["codigo"] = 1
+                inst.fields["mensaje"] = msg
+                # Código del error nativo
+                info = NATIVE_ERRORS.get(error_name, {})
+                inst.fields["codigo"] = info.get("code", 1)
                 return inst
-        # Fallback: crear un dict simple
-        return {"mensaje": e.msg, "codigo": 1}
+        return {"mensaje": msg, "codigo": 1}
 
     def _exec_raise(self, stmt: RaiseStmt, env: Env):
         """raise Error("mensaje", codigo)"""
@@ -837,7 +931,7 @@ class Interpreter:
                     f"'{expr.type_name}' no es un Template")
             instance = AyceInstance(tpl_val)
             # Inicializar campos con defaults
-            for f in tpl_val.decl.fields:
+            for f in tpl_val.all_fields():
                 if f.default is not None:
                     instance.fields[f.name] = self.eval(f.default, env)
             # Si hay un método `init`, llamarlo con los args
@@ -860,14 +954,43 @@ class Interpreter:
 
     def _eval_fstring(self, expr: FStringLit, env: Env) -> str:
         out = []
-        for kind, content in expr.parts:
-            if kind == "text":
-                out.append(content)
-            else:
-                # content es un Expr
-                v = self.eval(content, env)
-                out.append(self._format_value(v))
+        for part in expr.parts:
+            if part[0] == "text":
+                out.append(part[1])
+            elif part[0] == "expr":
+                # part = ("expr", Expr, fmt_str)
+                expr_node = part[1]
+                fmt_str = part[2] if len(part) > 2 else ""
+                v = self.eval(expr_node, env)
+                if fmt_str:
+                    out.append(self._apply_format(v, fmt_str))
+                else:
+                    out.append(self._format_value(v))
         return "".join(out)
+
+    def _apply_format(self, value, fmt: str) -> str:
+        """Aplica un formato tipo Python: :.2f, :10d, :>10, :05d, etc."""
+        # Construir el spec de Python y usar format()
+        # fmt ya viene sin el ':' inicial (lo quitó el lexer)
+        try:
+            # Mapear tipos de ayce a Python
+            if isinstance(value, bool):
+                # bool en Python se formatea como int con 'd'
+                if fmt.endswith("d"):
+                    return format(int(value), fmt)
+                return ("True" if value else "False")
+            if isinstance(value, int):
+                return format(value, fmt)
+            if isinstance(value, float):
+                return format(value, fmt)
+            if isinstance(value, str):
+                return format(value, fmt)
+            if value is None:
+                return "none"
+            return format(self._format_value(value), fmt)
+        except (ValueError, TypeError):
+            # Si el formato falla, devolver sin formato
+            return self._format_value(value)
 
     def _eval_binary(self, expr: BinaryExpr, env):
         # Cortocircuito en && y ||
@@ -1234,7 +1357,7 @@ class Interpreter:
             args = [self.eval(a, env) for a in expr.args]
             instance = AyceInstance(target_val)
             # Inicializar TODOS los campos con None primero (serán asignados por init)
-            for f in target_val.decl.fields:
+            for f in target_val.all_fields():
                 if f.default is not None:
                     instance.fields[f.name] = self.eval(f.default, env)
                 else:
@@ -1422,7 +1545,7 @@ class Interpreter:
         if isinstance(type_node, UserTypeName):
             # Tipo definido por el usuario
             type_name = type_node.name
-            if isinstance(value, AyceInstance) and value.template.name == type_name:
+            if isinstance(value, AyceInstance) and value.template.is_subclass_of(type_name):
                 return
             if isinstance(value, AyceShapeValue) and value.shape.name == type_name:
                 return
@@ -1459,7 +1582,7 @@ class Interpreter:
             return isinstance(value, AyceTask)
         if isinstance(type_node, UserTypeName):
             type_name = type_node.name
-            if isinstance(value, AyceInstance) and value.template.name == type_name:
+            if isinstance(value, AyceInstance) and value.template.is_subclass_of(type_name):
                 return True
             if isinstance(value, AyceShapeValue) and value.shape.name == type_name:
                 return True

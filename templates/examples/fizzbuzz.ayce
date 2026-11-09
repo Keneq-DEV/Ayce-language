@@ -33,7 +33,7 @@ for i in range(0, 10) do
 end
 
 ## Manejo de lista de números
-var nums: none[] = [5.0, 2, 8, 1, 9, 3]
+var nums: int[] = [5, 2, 8, 1, 9, 3]
 
 say("")
 say(f"Lista original: {nums}")

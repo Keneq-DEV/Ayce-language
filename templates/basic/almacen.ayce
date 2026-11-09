@@ -1,0 +1,42 @@
+var almacen: <string, (int, float)> = <
+    "coca": (10, 1.6),
+    "papas": (16, 2.5),
+    "mazapan": (5, 0.8)
+>
+
+while True do
+    say("")
+    say("menu del almacen")
+    say("1. añadir producto")
+    say("2. eliminar producto")
+    say("3. mostrar productos")
+    say("4. salir")
+
+    var opciones: int = inlet("selecciona una opcion: ", int)
+
+    if opciones == 1 then
+        var producto: string = inlet("ingresa el nombre del producto: ", string)
+        var cantidad: int = inlet("ingresa la cantidad del producto: ", int)
+        var precio: float = inlet("ingresa el precio del producto: ", float)
+        almacen<producto> = (cantidad, precio)
+        say("producto añadido correctamente")
+    else if opciones == 2 then
+        var producto: string = inlet("ingresa el nombre del producto a eliminar: ", string)
+        if almacen.has(producto) then
+            almacen.remove(producto)
+            say("producto eliminado correctamente")
+        else
+            say("el producto no existe en el almacen")
+        end
+    else if opciones == 3 then
+        say("productos en el almacen:")
+        for par in almacen.items() do
+            say(f"{par[0]}: cantidad {par[1][0]} | precio ${par[1][1]}")
+        end
+    else if opciones == 4 then
+        say("saliendo del programa...")
+        break
+    else
+        say("opcion invalida, por favor selecciona una opcion valida")
+    end
+end
