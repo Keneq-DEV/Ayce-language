@@ -1,0 +1,11 @@
+require ayce_random as ar
+
+## Sorteo de un participante. Cambia la lista para usarlo con tus participantes.
+var participantes: string[] = ["Ana", "Luis", "Sofia", "Carlos", "Marta"]
+
+say("Participantes:", participantes)
+var semilla: int = inlet("Ingresa una semilla numerica para el sorteo: ", int)
+
+ar::seed(semilla)
+var ganador: string = ar::choice(participantes)
+say("Ganador del sorteo:", ganador)

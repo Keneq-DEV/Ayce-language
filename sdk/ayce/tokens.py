@@ -45,12 +45,17 @@ class TokenType(Enum):
     VARIANT    = auto()
     SELF       = auto()      # self dentro de métodos de Template
     NEW        = auto()      # para construir Shape: new Punto { x: 1, y: 2 }
-    IS         = auto()      # para comparar variantes: c is Color.Rojo
+    IS         = auto()      # para comparar variantes: c is Color::Rojo
 
     # Manejo de errores (v0.4)
     TRY        = auto()
     RESCUE     = auto()
     RAISE      = auto()
+
+    # Módulos (v0.5)
+    REQUIRE    = auto()      # require
+    FROM       = auto()      # from
+    AS         = auto()      # as
 
     # Tipos primitivos (palabras reservadas)
     INT_T      = auto()
@@ -98,7 +103,8 @@ class TokenType(Enum):
     COLON      = auto()   # :
     SEMICOLON  = auto()   # ;
     COMMA      = auto()   # ,
-    DOT        = auto()   # .
+    DOUBLE_COLON = auto() # ::  (acceso a miembros — v0.5: reemplaza a .)
+    VARARGS    = auto()   # ... (varargs en parámetros)
     PIPE       = auto()   # |
     ARROW      = auto()   # =>
 
@@ -140,6 +146,9 @@ KEYWORDS = {
     "try":      TokenType.TRY,
     "rescue":   TokenType.RESCUE,
     "raise":    TokenType.RAISE,
+    "require":  TokenType.REQUIRE,
+    "from":     TokenType.FROM,
+    "as":       TokenType.AS,
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,
     "none":     TokenType.NONE,

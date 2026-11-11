@@ -1,0 +1,44 @@
+## Conversiones de unidades comunes sin dependencias externas.
+
+const KM_POR_MILLA: float = 1.609344
+const LIBRAS_POR_KG: float = 2.20462262185
+
+task celsius_to_fahrenheit(float celsius) = float ;
+{
+    return celsius * 9.0 / 5.0 + 32.0
+}
+
+task fahrenheit_to_celsius(float fahrenheit) = float ;
+{
+    return (fahrenheit - 32.0) * 5.0 / 9.0
+}
+
+task km_to_miles(float kilometros) = float ;
+{
+    return kilometros / KM_POR_MILLA
+}
+
+task miles_to_km(float millas) = float ;
+{
+    return millas * KM_POR_MILLA
+}
+
+task kg_to_lb(float kilogramos) = float ;
+{
+    return kilogramos * LIBRAS_POR_KG
+}
+
+task lb_to_kg(float libras) = float ;
+{
+    return libras / LIBRAS_POR_KG
+}
+
+task minutes_to_seconds(int minutos) = int ;
+{
+    return minutos * 60
+}
+
+task hours_to_minutes(int horas) = int ;
+{
+    return horas * 60
+}

@@ -1,4 +1,4 @@
-## tareas.ayce — funciones (task)
+## tareas.ayce — funciones (task) (v0.5: :: y varargs con ...)
 
 ## Tarea sin retorno
 task registrar(string &in origen, string &in mensaje) ;

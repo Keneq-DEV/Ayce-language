@@ -94,6 +94,8 @@ class Parser:
             return self._parse_try()
         if t.type == TokenType.RAISE:
             return self._parse_raise()
+        if t.type == TokenType.REQUIRE:
+            return self._parse_require()
         if t.type == TokenType.BREAK:
             self._advance()
             return BreakStmt(line=t.line, col=t.col)
@@ -288,10 +290,9 @@ class Parser:
             modifier = self._advance().value
 
         varargs = False
-        # Revisar varargs (...)
-        # El lexer no produce un token '...' — son tres DOT seguidos
-        if self._check(TokenType.DOT) and self._peek(1).type == TokenType.DOT and self._peek(2).type == TokenType.DOT:
-            self._advance(); self._advance(); self._advance()
+        # Varargs: token único '...' (v0.5)
+        if self._check(TokenType.VARARGS):
+            self._advance()
             varargs = True
 
         name = self._expect(TokenType.IDENT, "nombre de parámetro").value
@@ -400,6 +401,101 @@ class Parser:
         self._expect(TokenType.END, "'end'")
         return TryStmt(body=body, rescue_name=rescue_name, rescue_type=rescue_type,
                        rescue_body=rescue_body, line=t.line, col=t.col)
+
+    def _parse_require(self) -> RequireStmt:
+        """require M [as A]
+           require X[, Y as Z] from M
+           require \"ruta.ayce\" [as A]
+        """
+        t = self._expect(TokenType.REQUIRE, "'require'")
+
+        # Caso 1: require "ruta/archivo.ayce" [as A]
+        if self._check(TokenType.STRING):
+            path_tok = self._advance()
+            alias = ""
+            if self._match(TokenType.AS):
+                alias = self._expect(TokenType.IDENT, "nombre de alias").value
+            return RequireStmt(
+                mode="string",
+                batch_spec=path_tok.value,
+                alias=alias,
+                is_string_path=True,
+                line=t.line, col=t.col,
+            )
+
+        # Caso 2:       require M [as A]   (módulo entero)
+        # Caso 3:       require X[, Y as Z] from M  (selectivo)
+        # Diferenciación con lookahead:
+        #   - Si tras el primer IDENT viene `from` o `,` → selectivo (primer item sin alias)
+        #   - Si viene `as`, miramos qué hay después del alias:
+        #       - NEWLINE/SEMICOLON/EOF → módulo entero con alias
+        #       - `,` o `from` → selectivo (primer item con alias)
+        #   - Si viene NEWLINE/SEMICOLON/EOF → módulo entero sin alias
+        # En v0.5, los batches built-in tienen nombres que a veces coinciden con
+        # keywords reservadas (string, list, dict, time, etc.). Los aceptamos aquí.
+        type_token_to_name = {
+            TokenType.STRING_T: "string",
+            TokenType.INT_T:    "int",
+            TokenType.FLOAT_T:  "float",
+            TokenType.BOOL_T:   "bool",
+            TokenType.BYTES_T:  "bytes",
+        }
+        if self._peek().type in type_token_to_name:
+            first = type_token_to_name[self._peek().type]
+            self._advance()
+        else:
+            first = self._expect(TokenType.IDENT, "nombre de módulo o de item").value
+
+        if self._check(TokenType.AS):
+            # Mirar dos tokens adelante: después del alias, ¿qué viene?
+            next_after_alias = self._peek(2).type
+            if next_after_alias in (TokenType.NEWLINE, TokenType.SEMICOLON, TokenType.EOF):
+                # Módulo entero con alias
+                self._advance()  # consume 'as'
+                alias = self._expect(TokenType.IDENT, "nombre de alias").value
+                return RequireStmt(
+                    mode="batch",
+                    batch_spec=first,
+                    alias=alias,
+                    line=t.line, col=t.col,
+                )
+            # Sino: selectivo con alias para el primer item
+        elif self._check(TokenType.NEWLINE, TokenType.SEMICOLON, TokenType.EOF):
+            # Módulo entero sin alias
+            return RequireStmt(
+                mode="batch",
+                batch_spec=first,
+                alias="",
+                line=t.line, col=t.col,
+            )
+
+        # Selectivo: require X[, Y as Z] from M
+        items = []
+        first_alias = None
+        if self._match(TokenType.AS):
+            first_alias = self._expect(TokenType.IDENT, "nombre de alias").value
+        items.append((first, first_alias))
+
+        while self._match(TokenType.COMMA):
+            item_name = self._expect(TokenType.IDENT, "nombre de item").value
+            item_alias = None
+            if self._match(TokenType.AS):
+                item_alias = self._expect(TokenType.IDENT, "nombre de alias").value
+            items.append((item_name, item_alias))
+
+        self._expect(TokenType.FROM, "'from' (modo selectivo requiere 'from')")
+        # El nombre del módulo también puede ser una keyword de tipo (string, list, etc.)
+        if self._peek().type in type_token_to_name:
+            module_name = type_token_to_name[self._peek().type]
+            self._advance()
+        else:
+            module_name = self._expect(TokenType.IDENT, "nombre de módulo").value
+        return RequireStmt(
+            mode="selective",
+            batch_spec=module_name,
+            items=items,
+            line=t.line, col=t.col,
+        )
 
     def _parse_raise(self) -> RaiseStmt:
         """raise Error("mensaje", codigo)"""
@@ -543,6 +639,21 @@ class Parser:
         # Tipo definido por el usuario (Template, Shape, Variant) — referencia por nombre
         if t.type == TokenType.IDENT:
             self._advance()
+            # v0.5: tipo cualificado de módulo: Module::Type
+            if self._check(TokenType.DOUBLE_COLON):
+                self._advance()
+                type_name = self._expect(TokenType.IDENT, "nombre de tipo").value
+                return QualifiedTypeName(module_name=t.value, type_name=type_name,
+                                          line=t.line, col=t.col)
+            # Tipos colección basados en tipo de usuario: T[], T{}, T()
+            if self._check(TokenType.LBRACKET):
+                self._advance(); self._expect(TokenType.RBRACKET, "']'")
+                result = ListType(elem=UserTypeName(name=t.value, line=t.line, col=t.col),
+                                  line=t.line, col=t.col)
+                while self._check(TokenType.LBRACKET):
+                    self._advance(); self._expect(TokenType.RBRACKET, "']'")
+                    result = ListType(elem=result, line=t.line, col=t.col)
+                return result
             return UserTypeName(name=t.value, line=t.line, col=t.col)
 
         raise AyceSyntaxError(
@@ -583,11 +694,11 @@ class Parser:
 
     def _parse_comparison(self) -> Expr:
         left = self._parse_additive()
-        # Operador `is` para variantes: expr is Tipo.Caso
+        # Operador `is` para variantes: expr is Tipo::Caso (v0.5: usa ::)
         if self._check(TokenType.IS):
             t = self._advance()
             type_name = self._expect(TokenType.IDENT, "nombre de tipo Variant").value
-            self._expect(TokenType.DOT, "'.'")
+            self._expect(TokenType.DOUBLE_COLON, "'::'")
             case_name = self._expect(TokenType.IDENT, "nombre de caso").value
             return IsExpr(left=left, type_name=type_name, case_name=case_name,
                           line=t.line, col=t.col)
@@ -686,10 +797,26 @@ class Parser:
                     break
                 else:
                     break
-            elif t.type == TokenType.DOT:
+            elif t.type == TokenType.DOUBLE_COLON:
+                # Acceso a miembro con :: (v0.5: reemplaza a .)
+                # Aplica a: módulos, instancias (método/campo), shapes, variants, strings, listas...
                 self._advance()
-                name_tok = self._expect(TokenType.IDENT, "nombre de método o campo").value
-                # Si viene '(' es llamada a método; si no, es acceso a campo
+                # v0.5: el nombre del miembro también puede ser un token de tipo
+                # (para que funcionen cosas como math::int, list::range, etc.)
+                member_type_tokens = {
+                    TokenType.STRING_T: "string",
+                    TokenType.INT_T:    "int",
+                    TokenType.FLOAT_T:  "float",
+                    TokenType.BOOL_T:   "bool",
+                    TokenType.BYTES_T:  "bytes",
+                    TokenType.RANGE:    "range",
+                }
+                if self._peek().type in member_type_tokens:
+                    name_tok = member_type_tokens[self._peek().type]
+                    self._advance()
+                else:
+                    name_tok = self._expect(TokenType.IDENT, "nombre de miembro").value
+                # Si viene '(' es llamada a método; si no, es acceso a campo/caso/miembro
                 if self._check(TokenType.LPAREN):
                     self._advance()
                     args = []
@@ -700,7 +827,7 @@ class Parser:
                     self._expect(TokenType.RPAREN, "')'")
                     expr = MethodCallExpr(target=expr, method=name_tok, args=args, line=t.line, col=t.col)
                 else:
-                    expr = FieldAccessExpr(target=expr, field=name_tok, line=t.line, col=t.col)
+                    expr = ModuleAccessExpr(target=expr, name=name_tok, line=t.line, col=t.col)
             elif t.type == TokenType.LPAREN:
                 # Llamada a tarea
                 self._advance()

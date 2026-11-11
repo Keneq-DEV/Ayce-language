@@ -1,0 +1,47 @@
+## Formulas geometricas construidas con operaciones de Ayce.
+
+require math
+
+task circle_area(float radio) = float ;
+{
+    if radio < 0.0 then
+        raise Error("circle_area requiere radio >= 0", 1)
+    end
+    return math::pi * radio * radio
+}
+
+task circle_circumference(float radio) = float ;
+{
+    if radio < 0.0 then
+        raise Error("circle_circumference requiere radio >= 0", 1)
+    end
+    return 2.0 * math::pi * radio
+}
+
+task rectangle_area(float ancho, float alto) = float ;
+{
+    if ancho < 0.0 || alto < 0.0 then
+        raise Error("rectangle_area requiere lados >= 0", 1)
+    end
+    return ancho * alto
+}
+
+task distance(float x1, float y1, float x2, float y2) = float ;
+{
+    var dx: float = x2 - x1
+    var dy: float = y2 - y1
+    return math::sqrt(dx * dx + dy * dy)
+}
+
+task triangle_area(float lado_a, float lado_b, float lado_c) = float ;
+{
+    if lado_a <= 0.0 || lado_b <= 0.0 || lado_c <= 0.0 then
+        raise Error("triangle_area requiere lados positivos", 1)
+    end
+    if lado_a + lado_b <= lado_c || lado_a + lado_c <= lado_b || lado_b + lado_c <= lado_a then
+        raise Error("triangle_area requiere lados que formen un triangulo", 1)
+    end
+    var semiperimetro: float = (lado_a + lado_b + lado_c) / 2.0
+    return math::sqrt(semiperimetro * (semiperimetro - lado_a) *
+        (semiperimetro - lado_b) * (semiperimetro - lado_c))
+}

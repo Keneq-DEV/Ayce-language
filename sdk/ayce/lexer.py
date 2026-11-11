@@ -147,7 +147,8 @@ class Lexer:
         """Separa la expresión del formato en una f-string.
         {expr:formato} → (expr, formato)
         {expr}         → (expr, "")
-        El : que separa es el primer : que NO está dentro de () [] <> {} ni en un string.
+        El : que separa es el primer : que NO está dentro de () [] <> {} ni en un string,
+        Y que NO es parte de '::' (acceso a miembros en v0.5).
         """
         depth = 0
         in_string = False
@@ -155,6 +156,10 @@ class Lexer:
         while i < len(full):
             c = full[i]
             if in_string:
+                if c == "\\":
+                    # Saltar el carácter escapado
+                    i += 2
+                    continue
                 if c == '"':
                     in_string = False
                 i += 1
@@ -167,6 +172,11 @@ class Lexer:
                 if depth > 0:
                     depth -= 1
             elif c == ":" and depth == 0:
+                # v0.5: ignorar '::' (acceso a miembros)
+                if i + 1 < len(full) and full[i+1] == ":":
+                    # Saltar el '::' completo
+                    i += 2
+                    continue
                 return full[:i].strip(), full[i+1:].strip()
             i += 1
         return full.strip(), ""
@@ -230,10 +240,62 @@ class Lexer:
                 self._advance()  # consume '{'
                 expr_chars = []
                 depth = 1
+                in_str = False  # trackear si estamos dentro de un string anidado
                 while depth > 0:
                     if self.pos >= len(self.source):
                         self._error("Expresión en f-string sin cerrar (falta '}')")
                     ec = self._peek()
+                    if in_str:
+                        # Estamos dentro de un string anidado (entre comillas dobles)
+                        if ec == "\\":
+                            # Posible escape del OUTER f-string (ej: \") o escape interno (\n)
+                            next_c = self._peek(1)
+                            if next_c == '"':
+                                # \" dentro de un string interno = cierre del string
+                                # (porque el \ es escape del OUTER f-string)
+                                in_str = False
+                                expr_chars.append('"')
+                                self._advance(); self._advance()
+                                continue
+                            # Otro escape (\\, \n, \t, etc.) — es escape del string interno
+                            # Guardamos ambos caracteres tal cual
+                            expr_chars.append(ec)
+                            self._advance()
+                            if self.pos < len(self.source):
+                                expr_chars.append(self._peek())
+                                self._advance()
+                            continue
+                        if ec == '"':
+                            # " sin escape = cierre del string interno
+                            in_str = False
+                            expr_chars.append(ec)
+                            self._advance()
+                            continue
+                        expr_chars.append(ec)
+                        self._advance()
+                        continue
+                    # No estamos dentro de un string
+                    if ec == "\\":
+                        # Fuera de string: \ siempre es escape del OUTER f-string
+                        # Solo \" nos interesa (es apertura/cierre de string)
+                        next_c = self._peek(1)
+                        if next_c == '"':
+                            # \" = apertura de string interno
+                            in_str = True
+                            expr_chars.append('"')
+                            self._advance(); self._advance()
+                            continue
+                        # Otros escapes fuera de string: no deberían pasar
+                        # pero los guardamos tal cual
+                        expr_chars.append(ec)
+                        self._advance()
+                        continue
+                    if ec == '"':
+                        # " fuera de string = apertura de string interno
+                        in_str = True
+                        expr_chars.append(ec)
+                        self._advance()
+                        continue
                     if ec == "{":
                         depth += 1
                     elif ec == "}":
@@ -338,9 +400,17 @@ class Lexer:
         if three == "//=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.DSLASH_ASSIGN, "//=", line, col)); return
+        # ... (varargs en parámetros) — v0.5: token único
+        if three == "..." and self._peek(3) != ".":
+            self._advance(); self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.VARARGS, "...", line, col)); return
 
         # Operadores de 2 caracteres
         two = c + c2
+        # :: (acceso a miembros — v0.5: reemplaza a .)
+        if c == ":" and c2 == ":":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.DOUBLE_COLON, "::", line, col)); return
         if two == "**":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.POW, "**", line, col)); return
@@ -413,7 +483,7 @@ class Lexer:
             "[": TokenType.LBRACKET,  "]": TokenType.RBRACKET,
             "{": TokenType.LBRACE,    "}": TokenType.RBRACE,
             ":": TokenType.COLON,     ";": TokenType.SEMICOLON,
-            ",": TokenType.COMMA,     ".": TokenType.DOT,
+            ",": TokenType.COMMA,
             "|": TokenType.PIPE,
         }
         if c in single:
@@ -428,5 +498,12 @@ class Lexer:
                     self.bracket_depth -= 1
             self.tokens.append(Token(tt, c, line, col))
             return
+
+        # . suelto está prohibido en v0.5 — se usa :: para acceso a miembros
+        if c == ".":
+            self._error(
+                "El operador '.' está eliminado en v0.5. Usá '::' para acceso a miembros "
+                "(ej: p::edad, utils::metodo(), Color::Rojo). Para varargs usá '...'."
+            )
 
         self._error(f"Carácter inesperado: {c!r}")

@@ -1,0 +1,51 @@
+## main_batch.ayce — demostración de `require` y batchs (v0.5)
+
+## Modo 1: batch entero con su nombre
+require math_utils
+
+say("=== Modo batch entero ===")
+say(f"PI = {math_utils::PI}")
+say(f"E  = {math_utils::E}")
+say(f"3 al cuadrado = {math_utils::cuadrado(3)}")
+say(f"2 al cubo     = {math_utils::cubo(2)}")
+say(f"Área círculo r=2 = {math_utils::area_circulo(2.0)}")
+say(f"5! = {math_utils::factorial(5)}")
+
+var p: math_utils::Punto = math_utils::Punto(3, 4)
+say(f"Distancia al origen de (3,4) = {p::distancia_al_origen()}")
+
+var op: math_utils::Operacion = math_utils::Operacion::Suma(15)
+say(f"Operación: {op}")
+
+## Modo 2: alias del batch
+require math_utils as m
+
+say("")
+say("=== Modo batch con alias ===")
+say(f"m::PI = {m::PI}")
+say(f"m::cubo(4) = {m::cubo(4)}")
+
+## Modo 3: selectivo
+require cuadrado, factorial, PI from math_utils
+
+say("")
+say("=== Modo selectivo ===")
+say(f"cuadrado(6) = {cuadrado(6)}")
+say(f"factorial(6) = {factorial(6)}")
+say(f"PI = {PI}")
+
+## Modo 4: selectivo con alias
+require cuadrado as q, factorial as fact from math_utils
+
+say("")
+say("=== Modo selectivo con alias ===")
+say(f"q(7) = {q(7)}")
+say(f"fact(7) = {fact(7)}")
+
+## Modo 5: string path
+require "math_utils.ayce" as mu
+
+say("")
+say("=== Modo string path con alias ===")
+say(f"mu::E = {mu::E}")
+say(f"mu::area_circulo(1.0) = {mu::area_circulo(1.0)}")

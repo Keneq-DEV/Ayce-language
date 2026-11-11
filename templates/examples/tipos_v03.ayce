@@ -1,4 +1,4 @@
-## tipos_v03.ayce — prueba Template, Shape, Variant de v0.3
+## tipos_v03.ayce — prueba Template, Shape, Variant de v0.3 (v0.5: :: y build)
 
 Shape Punto {
     x: int
@@ -6,7 +6,7 @@ Shape Punto {
 }
 
 var p1: Punto = new Punto { x: 10, y: 20 }
-say("Punto p1: x =", p1.x, "y =", p1.y)
+say("Punto p1: x =", p1::x, "y =", p1::y)
 
 Shape Config {
     puerto: int = 8080
@@ -15,35 +15,35 @@ Shape Config {
 }
 
 var cfg: Config = new Config { puerto: 3000 }
-say(f"Config: host={cfg.host} puerto={cfg.puerto} debug={cfg.debug}")
+say(f"Config: host={cfg::host} puerto={cfg::puerto} debug={cfg::debug}")
 
 Template Persona {
     nombre: string
     edad: int
 
-    task init(string nombre, int edad) ;
+    task build(string nombre, int edad) ;
     {
-        self.nombre = nombre
-        self.edad = edad
+        self::nombre = nombre
+        self::edad = edad
     }
 
     task saludar() ;
     {
-        say(f"Hola, soy {self.nombre} y tengo {self.edad} años")
+        say(f"Hola, soy {self::nombre} y tengo {self::edad} años")
     }
 
     task cumplir_anios() ;
     {
-        self.edad = self.edad + 1
+        self::edad = self::edad + 1
     }
 }
 
 var persona: Persona = Persona("Carlos", 25)
-persona.saludar()
-persona.cumplir_anios()
-persona.saludar()
-persona.edad = 30
-say(f"Ahora {persona.nombre} tiene {persona.edad}")
+persona::saludar()
+persona::cumplir_anios()
+persona::saludar()
+persona::edad = 30
+say(f"Ahora {persona::nombre} tiene {persona::edad}")
 
 Variant Color {
     Rojo
@@ -51,16 +51,16 @@ Variant Color {
     Azul
 }
 
-var c1: Color = Color.Rojo
-var c2: Color = Color.Verde
+var c1: Color = Color::Rojo
+var c2: Color = Color::Verde
 
-if c1 is Color.Rojo then
+if c1 is Color::Rojo then
     say("c1 es rojo")
 else
     say("c1 no es rojo")
 end
 
-if c2 is Color.Rojo then
+if c2 is Color::Rojo then
     say("c2 es rojo")
 else
     say("c2 no es rojo")
@@ -71,14 +71,14 @@ Variant Resultado {
     Err(string)
 }
 
-var r1: Resultado = Resultado.Ok(42)
-var r2: Resultado = Resultado.Err("fallo de red")
+var r1: Resultado = Resultado::Ok(42)
+var r2: Resultado = Resultado::Err("fallo de red")
 
-if r1 is Resultado.Ok then
+if r1 is Resultado::Ok then
     say("r1 es Ok")
 end
 
-if r2 is Resultado.Err then
+if r2 is Resultado::Err then
     say("r2 es Err")
 end
 

@@ -1,0 +1,81 @@
+## Estadistica para listas de enteros. Las funciones fallan con listas vacias.
+
+require math
+
+task mean(int[] &in valores) = float ;
+{
+    if valores::len() == 0 then
+        raise Error("mean requiere una lista no vacia", 1)
+    end
+    var suma: int = 0
+    for valor in valores do
+        suma = suma + valor
+    end
+    return float(suma) / float(valores::len())
+}
+
+task median(int[] &in valores) = float ;
+{
+    if valores::len() == 0 then
+        raise Error("median requiere una lista no vacia", 1)
+    end
+
+    var ordenados: int[] = []
+    for valor in valores do
+        ordenados::append(valor)
+    end
+
+    for i in range(1, ordenados::len()) do
+        var actual: int = ordenados[i]
+        var j: int = i - 1
+        while j >= 0 && ordenados[j] > actual do
+            ordenados[j + 1] = ordenados[j]
+            j = j - 1
+        end
+        ordenados[j + 1] = actual
+    end
+
+    var medio: int = ordenados::len() // 2
+    if ordenados::len() % 2 == 1 then
+        return float(ordenados[medio])
+    end
+    return (float(ordenados[medio - 1]) + float(ordenados[medio])) / 2.0
+}
+
+task variance(int[] &in valores) = float ;
+{
+    if valores::len() < 2 then
+        raise Error("variance requiere al menos dos valores", 1)
+    end
+    var promedio: float = mean(valores)
+    var suma: float = 0.0
+    for valor in valores do
+        var diferencia: float = float(valor) - promedio
+        suma = suma + diferencia * diferencia
+    end
+    return suma / float(valores::len() - 1)
+}
+
+task pvariance(int[] &in valores) = float ;
+{
+    if valores::len() == 0 then
+        raise Error("pvariance requiere una lista no vacia", 1)
+    end
+    var promedio: float = mean(valores)
+    var suma: float = 0.0
+    for valor in valores do
+        var diferencia: float = float(valor) - promedio
+        suma = suma + diferencia * diferencia
+    end
+    return suma / float(valores::len())
+}
+
+task stdev(int[] &in valores) = float ;
+{
+    return math::sqrt(variance(valores))
+}
+
+task pstdev(int[] &in valores) = float ;
+{
+    return math::sqrt(pvariance(valores))
+}

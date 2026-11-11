@@ -1,0 +1,79 @@
+## test_format.ayce — pruebas de f-string con formato (v0.5)
+
+## === Decimales ===
+var pi: float = 3.14159
+var e: float = 2.71828
+say(f"PI con 2 decimales: {pi:.2f}")
+say(f"PI con 4 decimales: {pi:.4f}")
+say(f"PI con 0 decimales: {pi:.0f}")
+say(f"E  con 3 decimales: {e:.3f}")
+
+## === Enteros con ancho ===
+var n: int = 42
+say(f"Ancho 10: |{n:10d}|")
+say(f"Ancho 5:  |{n:5d}|")
+say(f"Ceros:    |{n:05d}|")
+say(f"Ceros 8:  |{n:08d}|")
+
+## === Alineación ===
+say(f"Derecha: {n:>10}")
+say(f"Izquierda: {n:<10}")
+say(f"Centrado: {n:^10}")
+
+## === Alineación con relleno ===
+say(f"Relleno *: |{n:*>10}|")
+say(f"Relleno -: |{n:-<10}|")
+say(f"Relleno _: |{n:_^10}|")
+
+## === Signo explícito ===
+var pos: int = 42
+var neg: int = -42
+say(f"Signo +: {pos:+d}")
+say(f"Signo +: {neg:+d}")
+say(f"Signo espacio: {pos: d}")
+say(f"Signo espacio: {neg: d}")
+
+## === Porcentaje ===
+var mitad: float = 0.5
+var tercio: float = 0.3333
+say(f"50%: {mitad:.0%}")
+say(f"50%: {mitad:.2%}")
+say(f"33%: {tercio:.2%}")
+
+## === Notación científica ===
+var grande: float = 1234567.89
+say(f"Científica: {grande:e}")
+say(f"Científica 2: {grande:.2e}")
+
+## === Strings con ancho ===
+var s: string = "hola"
+say(f"String derecha: |{s:>10}|")
+say(f"String izquierda: |{s:<10}|")
+say(f"String centrado: |{s:^10}|")
+say(f"String truncado: {s:.3}")
+
+## === Combinando ===
+var precio: float = 1234.5
+var cantidad: int = 3
+say(f"Total: ${precio * float(cantidad):.2f}")
+say(f"Items: {cantidad:03d}")
+say(f"Subtotal: {precio:8.2f}")
+say(f"Descuento: {precio * 0.1:8.2f}")
+
+## === Dentro de un task ===
+task formatear_precio(float valor) = string ;
+{
+    return f"${valor:.2f}"
+}
+
+task reporte(string nombre, float precio, int stock) ;
+{
+    say(f"Producto: {nombre}")
+    say(f"  Precio: {formatear_precio(precio)}")
+    say(f"  Stock:  {stock:5d} unidades")
+    say(f"  Valor:  {formatear_precio(precio * float(stock))}")
+}
+
+reporte("Teclado", 45.5, 12)
+reporte("Mouse", 15.0, 3)
+reporte("Monitor", 299.99, 5)

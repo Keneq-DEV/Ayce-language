@@ -171,8 +171,25 @@ class AyceVariantValue:
 
     def __repr__(self):
         if self.payload is not None:
-            return f"{self.variant.name}.{self.case_name}({self.payload!r})"
-        return f"{self.variant.name}.{self.case_name}"
+            return f"{self.variant.name}::{self.case_name}({self.payload!r})"
+        return f"{self.variant.name}::{self.case_name}"
+
+
+class AyceBatch:
+    """Batch cargado con `require`. Contiene un namespace de exports."""
+    def __init__(self, name: str, filename: str, exports: dict):
+        self.name = name          # nombre del batch (identificador o basename)
+        self.filename = filename  # ruta del archivo .ayce cargado
+        self.exports = exports    # dict nombre → (value, type_node, is_const, initialized)
+
+    def find_export(self, name: str):
+        if name in self.exports:
+            v, _, _, _ = self.exports[name]
+            return v
+        return None
+
+    def __repr__(self):
+        return f"<batch {self.name}>"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -218,12 +235,22 @@ class Env:
 #  Intérprete
 # ──────────────────────────────────────────────────────────────────────
 class Interpreter:
-    def __init__(self, filename: str = "<stdin>"):
+    def __init__(self, filename: str = "<stdin>", import_paths: list = None):
         self.filename = filename
         self.global_env = Env()
+        # Cache de batchs ya cargados: ruta_absoluta → AyceBatch
+        self._batch_cache: dict = {}
+        # Paths donde buscar batchs por identificador
+        self.import_paths = import_paths or ["."]
+        # Stack de archivos en proceso de carga (para detectar ciclos)
+        self._loading_stack: list = []
 
     def run(self, program: Program):
-        # Primera pasada: declarar tasks, templates, shapes y variants en el entorno global
+        # Primera pasada: procesar requires (v0.5) y declarar tasks, templates, shapes y variants
+        for stmt in program.stmts:
+            if isinstance(stmt, RequireStmt):
+                self._exec_require(stmt, self.global_env)
+
         for stmt in program.stmts:
             if isinstance(stmt, TaskDecl):
                 task = AyceTask(stmt, self.global_env)
@@ -257,7 +284,7 @@ class Interpreter:
 
         # Segunda pasada: ejecutar sentencias sueltas (no declaraciones de tipos ni tasks)
         for stmt in program.stmts:
-            if isinstance(stmt, (TaskDecl, TemplateDecl, ShapeDecl, VariantDecl)):
+            if isinstance(stmt, (TaskDecl, TemplateDecl, ShapeDecl, VariantDecl, RequireStmt)):
                 continue
             try:
                 self.exec_stmt(stmt, self.global_env)
@@ -281,7 +308,8 @@ class Interpreter:
                     "Error no capturado")
 
     def _register_native_error(self):
-        """Registra TODOS los errores nativos como Templates con herencia (v0.4.1)."""
+        """Registra TODOS los errores nativos como Templates con herencia (v0.4.1).
+        En v0.5 el constructor se llama `build` (no init)."""
         from .ast_nodes import FieldDecl
         from .errors import NATIVE_ERRORS, get_error_hierarchy
 
@@ -289,10 +317,10 @@ class Interpreter:
         if self.global_env.lookup("Error") is not None:
             return
 
-        # init común para todos los errores
-        def make_init():
+        # build común para todos los errores
+        def make_build():
             return TaskDecl(
-                name="init",
+                name="build",
                 signatures=[TaskSignature(params=[
                     Param(type_node=PrimitiveType(name="string"), name="mensaje"),
                     Param(type_node=PrimitiveType(name="int"), name="codigo", default=IntLit(value=0)),
@@ -300,11 +328,11 @@ class Interpreter:
                 return_type=None,
                 bodies=[[
                     AssignStmt(
-                        target=FieldAccessExpr(field="mensaje", target=SelfExpr()),
+                        target=ModuleAccessExpr(name="mensaje", target=SelfExpr()),
                         value=IdentExpr(name="mensaje"),
                     ),
                     AssignStmt(
-                        target=FieldAccessExpr(field="codigo", target=SelfExpr()),
+                        target=ModuleAccessExpr(name="codigo", target=SelfExpr()),
                         value=IdentExpr(name="codigo"),
                     ),
                 ]],
@@ -330,7 +358,7 @@ class Interpreter:
             decl = TemplateDecl(
                 name=name,
                 fields=fields,
-                methods=[make_init()] if parent_tpl is None else [],
+                methods=[make_build()] if parent_tpl is None else [],
                 parent_name=parent_name or "",
             )
             tpl = AyceTemplate(decl, self.global_env, parent_template=parent_tpl)
@@ -361,6 +389,8 @@ class Interpreter:
             self._exec_try(stmt, env)
         elif isinstance(stmt, RaiseStmt):
             self._exec_raise(stmt, env)
+        elif isinstance(stmt, RequireStmt):
+            self._exec_require(stmt, env)
         elif isinstance(stmt, BreakStmt):
             raise BreakSignal()
         elif isinstance(stmt, ContinueStmt):
@@ -442,17 +472,17 @@ class Interpreter:
                     "El acceso con <> sólo aplica a diccionarios")
             container.pairs[key] = value
 
-        elif isinstance(target, FieldAccessExpr):
-            # Asignación a campo de instancia: p.x = valor
+        elif isinstance(target, ModuleAccessExpr):
+            # Asignación a campo de instancia: p::x = valor (v0.5: usa ::)
             obj = self.eval(target.target, env)
             if isinstance(obj, AyceInstance):
-                if target.field not in obj.fields:
+                if target.name not in obj.fields:
                     raise AyceRuntimeError(self.filename, target.line, target.col,
-                        f"El campo '{target.field}' no existe en {obj.template.name}")
-                obj.fields[target.field] = value
+                        f"El campo '{target.name}' no existe en {obj.template.name}")
+                obj.fields[target.name] = value
             elif isinstance(obj, AyceShapeValue):
                 raise AyceRuntimeError(self.filename, target.line, target.col,
-                    f"Los Shape son inmutables: no se puede asignar a {obj.shape.name}.{target.field}")
+                    f"Los Shape son inmutables: no se puede asignar a {obj.shape.name}::{target.name}")
             else:
                 raise AyceTypeError(self.filename, target.line, target.col,
                     f"No se puede asignar a campo de {self._type_name(obj)}")
@@ -637,6 +667,231 @@ class Interpreter:
         error_val = self.eval(stmt.error_expr, env)
         raise RaiseSignal(error_val)
 
+    # ──────────────────────────────────────────────────────────────────
+    #  Batchs (v0.5)
+    # ──────────────────────────────────────────────────────────────────
+    def _exec_require(self, stmt: RequireStmt, env: Env):
+        """Procesa una sentencia `require`."""
+        # 1. Modo string: require "ruta.ayce" [as A] — siempre carga desde archivo
+        if stmt.mode == "string":
+            batch_path = stmt.batch_spec
+            batch_name = stmt.alias if stmt.alias else self._basename(batch_path)
+            batch = self._load_batch(batch_path, stmt.line, stmt.col)
+            bind_name = stmt.alias if stmt.alias else self._basename(batch_path)
+            env.declare(bind_name, batch, UserTypeName(name=batch.name), is_const=True)
+            return
+
+        # 2. Modo batch entero: require M [as A]
+        #    Primero mirar si M es un batch built-in (math, random, string, etc.)
+        if stmt.mode == "batch":
+            batch_name = stmt.batch_spec
+            builtin = self._get_builtin_batch(batch_name)
+            if builtin is not None:
+                # Es built-in — bind directo, sin cargar archivo
+                bind_name = stmt.alias if stmt.alias else batch_name
+                env.declare(bind_name, builtin, UserTypeName(name=batch_name), is_const=True)
+                return
+            # No es built-in — cargar desde archivo
+            batch_path = self._resolve_batch_path(batch_name)
+            batch = self._load_batch(batch_path, stmt.line, stmt.col)
+            bind_name = stmt.alias if stmt.alias else stmt.batch_spec
+            env.declare(bind_name, batch, UserTypeName(name=batch.name), is_const=True)
+            return
+
+        # 3. Modo selectivo: require X[, Y as Z] from M
+        if stmt.mode == "selective":
+            batch_name = stmt.batch_spec
+            # Mirar si es built-in
+            builtin = self._get_builtin_batch(batch_name)
+            if builtin is not None:
+                for item_name, item_alias in stmt.items:
+                    if item_name not in builtin.exports:
+                        raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                            f"El batch '{builtin.name}' no exporta '{item_name}'")
+                    v, t, is_const, init_flag = builtin.exports[item_name]
+                    bind_name = item_alias if item_alias else item_name
+                    env.declare(bind_name, v, t, is_const=is_const, initialized=init_flag)
+                return
+            # No es built-in — cargar desde archivo
+            batch_path = self._resolve_batch_path(batch_name)
+            batch = self._load_batch(batch_path, stmt.line, stmt.col)
+            for item_name, item_alias in stmt.items:
+                export = batch.find_export(item_name)
+                if export is None:
+                    raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                        f"El batch '{batch.name}' no exporta '{item_name}'")
+                if item_name in batch.exports:
+                    v, t, is_const, init_flag = batch.exports[item_name]
+                else:
+                    v, t, is_const, init_flag = export, None, True, True
+                bind_name = item_alias if item_alias else item_name
+                env.declare(bind_name, v, t, is_const=is_const, initialized=init_flag)
+            return
+
+        raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+            f"Modo de require desconocido: {stmt.mode}")
+
+    def _get_builtin_batch(self, name: str):
+        """Devuelve el AyceNativeBatch con el nombre dado, o None si no existe."""
+        from .batches import get_builtin_batches
+        return get_builtin_batches().get(name)
+
+    def _basename(self, path: str) -> str:
+        """Devuelve el nombre del archivo sin extensión ni directorio."""
+        import os
+        base = os.path.basename(path)
+        if base.endswith(".ayce"):
+            base = base[:-5]
+        return base
+
+    def _resolve_batch_path(self, batch_name: str) -> str:
+        """Resuelve un identificador de batch a una ruta absoluta.
+
+        Orden de búsqueda (estilo Python):
+          1. Directorio del archivo actual
+          2. Directorio de trabajo actual (cwd)
+          3. import_paths explícitos
+          4. Búsqueda recursiva hacia ABAJO desde:
+             - El dir del archivo actual
+             - El cwd
+             - CADA directorio padre hasta la raíz del proyecto
+             (profundidad limitada a 4 para no recorrer todo el disco)
+        """
+        import os
+        target = batch_name + ".ayce"
+        candidates = []
+        searched_dirs = set()
+
+        current_dir = os.path.dirname(os.path.abspath(self.filename))
+        cwd = os.getcwd()
+
+        # Helper para chequear si un archivo existe en un dir
+        def check_dir(d):
+            if d in searched_dirs:
+                return None
+            searched_dirs.add(d)
+            c = os.path.join(d, target)
+            candidates.append(c)
+            if os.path.exists(c):
+                return os.path.abspath(c)
+            return None
+
+        # Helper para walk down desde un dir, hasta profundidad max_depth
+        def walk_down(root_dir, max_depth=4):
+            if not os.path.isdir(root_dir):
+                return None
+            for dirpath, dirnames, filenames in os.walk(root_dir):
+                rel = os.path.relpath(dirpath, root_dir)
+                depth = 0 if rel == "." else rel.count(os.sep) + 1
+                if depth > max_depth:
+                    dirnames[:] = []
+                    continue
+                # Filtrar carpetas que no deberían contener batchs
+                dirnames[:] = [d for d in dirnames
+                               if not d.startswith(".")
+                               and d not in ("__pycache__", "node_modules", ".git",
+                                             ".venv", "venv", "env", "build", "dist",
+                                             ".idea", ".vscode", "site-packages")]
+                result = check_dir(dirpath)
+                if result is not None:
+                    return result
+            return None
+
+        # 1. Directorio del archivo actual
+        result = check_dir(current_dir)
+        if result is not None:
+            return result
+
+        # 2. Directorio de trabajo actual (cwd)
+        result = check_dir(cwd)
+        if result is not None:
+            return result
+
+        # 3. import_paths explícitos
+        for p in self.import_paths:
+            p_abs = os.path.abspath(p)
+            result = check_dir(p_abs)
+            if result is not None:
+                return result
+
+        # 4. Walk down desde current_dir, cwd y CADA padre
+        #    Primero recolectamos todos los padres del dir del archivo
+        roots_to_walk = [current_dir, cwd]
+        parent = current_dir
+        while True:
+            parent = os.path.dirname(parent)
+            if parent == os.path.dirname(parent):  # raíz
+                break
+            roots_to_walk.append(parent)
+
+        for root_dir in roots_to_walk:
+            result = walk_down(root_dir, max_depth=4)
+            if result is not None:
+                return result
+
+        raise AyceRuntimeError(self.filename, 0, 0,
+            f"No se encontró el batch '{batch.name}'. Buscado en:\n  " +
+            "\n  ".join(candidates))
+
+    def _load_batch(self, path: str, line: int, col: int) -> AyceBatch:
+        """Carga un batch desde un archivo .ayce. Usa caché y detecta ciclos."""
+        import os
+        # Resolver rutas relativas al directorio del archivo actual
+        if not os.path.isabs(path):
+            current_dir = os.path.dirname(os.path.abspath(self.filename))
+            abs_path = os.path.normpath(os.path.join(current_dir, path))
+        else:
+            abs_path = path
+        if abs_path in self._batch_cache:
+            return self._batch_cache[abs_path]
+        if abs_path in self._loading_stack:
+            cycle = " -> ".join(self._loading_stack + [abs_path])
+            raise AyceRuntimeError(self.filename, line, col,
+                f"Import cíclico detectado: {cycle}")
+        if not os.path.exists(abs_path):
+            raise AyceRuntimeError(self.filename, line, col,
+                f"El archivo del batch no existe: {path}")
+
+        # Leer el archivo (utf-8-sig para BOM)
+        with open(abs_path, "r", encoding="utf-8-sig") as f:
+            source = f.read()
+
+        # Parsear
+        from .lexer import Lexer
+        from .parser import Parser
+        lexer = Lexer(source, filename=abs_path)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, filename=abs_path)
+        program = parser.parse()
+
+        # Ejecutar el batch en un Interpreter hijo que comparte la caché
+        # y los import_paths, pero tiene su propio global_env
+        child = Interpreter(filename=abs_path, import_paths=self.import_paths)
+        child._batch_cache = self._batch_cache  # compartir caché
+        child._loading_stack = self._loading_stack + [abs_path]
+        child.run(program)
+
+        # El global_env del child contiene los exports del batch
+        exports = dict(child.global_env.vars)
+        # Filtrar el Error nativo y otros errores nativos (no se exportan)
+        exports = {k: v for k, v in exports.items()
+                   if k not in ("Error",) and not self._is_native_error_export(k, v)}
+
+        batch = AyceBatch(
+            name=self._basename(abs_path),
+            filename=abs_path,
+            exports=exports,
+        )
+        self._batch_cache[abs_path] = batch
+        return batch
+
+    def _is_native_error_export(self, name: str, value_tuple) -> bool:
+        """Devuelve True si `name` es uno de los errores nativos (no exportar)."""
+        from .errors import NATIVE_ERRORS
+        if name in NATIVE_ERRORS:
+            return True
+        return False
+
     def _exec_compound_assign(self, stmt: CompoundAssignStmt, env: Env):
         """x += 5, x -= 2, etc."""
         target = stmt.target
@@ -685,7 +940,7 @@ class Interpreter:
                 raise AyceTypeError(self.filename, stmt.line, stmt.col,
                     f"%= requiere enteros")
             if value == 0:
-                raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "Módulo por cero")
+                raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "Batch por cero")
             new_val = current % value
         else:
             raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
@@ -702,10 +957,10 @@ class Interpreter:
             else:
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "No se puede asignar a índice de ese tipo")
-        elif isinstance(target, FieldAccessExpr):
+        elif isinstance(target, ModuleAccessExpr):
             obj = self.eval(target.target, env)
             if isinstance(obj, AyceInstance):
-                obj.fields[target.field] = new_val
+                obj.fields[target.name] = new_val
             else:
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "No se puede asignar a campo de ese tipo")
@@ -864,32 +1119,43 @@ class Interpreter:
                     "'self' sólo es válido dentro de un método de Template")
             val, _, _, _ = existing
             return val
-        if isinstance(expr, FieldAccessExpr):
+        if isinstance(expr, ModuleAccessExpr):
             target = self.eval(expr.target, env)
-            # Acceso a campo de Template instance
+            from .batches import AyceNativeBatch
+            # Acceso a export de batch: utils::MAX
+            #   (batch cargado desde archivo .ayce o batch built-in)
+            if isinstance(target, (AyceBatch, AyceNativeBatch)):
+                export = target.find_export(expr.name)
+                if export is None:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        f"El batch '{target.name}' no exporta '{expr.name}'")
+                return export
+            # Acceso a campo de Template instance: p::edad
             if isinstance(target, AyceInstance):
-                if expr.field not in target.fields:
+                if expr.name not in target.fields:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
-                        f"El campo '{expr.field}' no existe en {target.template.name}")
-                return target.fields[expr.field]
-            # Acceso a campo de Shape value
+                        f"El campo '{expr.name}' no existe en {target.template.name}")
+                return target.fields[expr.name]
+            # Acceso a campo de Shape value: punto::x
             if isinstance(target, AyceShapeValue):
-                if expr.field not in target.fields:
+                if expr.name not in target.fields:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
-                        f"El campo '{expr.field}' no existe en {target.shape.name}")
-                return target.fields[expr.field]
-            # Acceso a caso de Variant (sin payload): Color.Rojo
+                        f"El campo '{expr.name}' no existe en {target.shape.name}")
+                return target.fields[expr.name]
+            # Acceso a caso de Variant (sin payload): Color::Rojo
+            # Caso encadenado desde batch: utils::Estado::Activo
+            #   aquí target es AyceVariant (devuelto por el ModuleAccessExpr anterior)
             if isinstance(target, AyceVariant):
-                case = target.find_case(expr.field)
+                case = target.find_case(expr.name)
                 if case is None:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
-                        f"El caso '{expr.field}' no existe en Variant {target.name}")
+                        f"El caso '{expr.name}' no existe en Variant {target.name}")
                 if case.payload_type is not None:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
-                        f"El caso '{expr.field}' requiere un payload; usá {target.name}.{expr.field}(valor)")
-                return AyceVariantValue(target, expr.field, None)
+                        f"El caso '{expr.name}' requiere un payload; usá {target.name}::{expr.name}(valor)")
+                return AyceVariantValue(target, expr.name, None)
             raise AyceTypeError(self.filename, expr.line, expr.col,
-                f"No se puede acceder a campo '.{expr.field}' de {self._type_name(target)}")
+                f"No se puede acceder a miembro '::{expr.name}' de {self._type_name(target)}")
         if isinstance(expr, NewExpr):
             # Construcción de Shape
             existing = env.lookup(expr.type_name)
@@ -934,11 +1200,11 @@ class Interpreter:
             for f in tpl_val.all_fields():
                 if f.default is not None:
                     instance.fields[f.name] = self.eval(f.default, env)
-            # Si hay un método `init`, llamarlo con los args
-            init_method = tpl_val.find_method("init")
-            if init_method is not None:
+            # Si hay un método `build`, llamarlo con los args (v0.5: build reemplaza a init)
+            build_method = tpl_val.find_method("build")
+            if build_method is not None:
                 args = [self.eval(a, env) for a in expr.args]
-                self._call_template_init(tpl_val, init_method, instance, args, expr.line, expr.col)
+                self._call_template_build(tpl_val, build_method, instance, args, expr.line, expr.col)
             return instance
         if isinstance(expr, IsExpr):
             left = self.eval(expr.left, env)
@@ -1059,7 +1325,7 @@ class Interpreter:
             if expr.op == "%":
                 if right == 0:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
-                        "Módulo por cero")
+                        "Batch por cero")
                 return left % right
             if expr.op == "**":
                 return left ** right
@@ -1095,6 +1361,45 @@ class Interpreter:
         target = self.eval(expr.target, env)
         method = expr.method
         args = [self.eval(a, env) for a in expr.args]
+
+        # ── Batch: llamada a función exportada (utils::saludar(), utils::Punto(x, y)) ──
+        #   (Batch cargado desde archivo .ayce o batch built-in)
+        from .batches import AyceNativeBatch, AyceNativeTask
+        if isinstance(target, (AyceBatch, AyceNativeBatch)):
+            export = target.find_export(method)
+            if export is None:
+                raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                    f"El batch '{target.name}' no exporta '{method}'")
+            # Tarea implementada en ayce (AyceTask)
+            if isinstance(export, AyceTask):
+                return self._call_task(export, args, expr.line, expr.col)
+            # Tarea nativa implementada en Python (AyceNativeTask)
+            from .batches import AyceNativeTask
+            if isinstance(export, AyceNativeTask):
+                try:
+                    return export.func(self, args, expr.line, expr.col)
+                except (AyceRuntimeError, AyceTypeError):
+                    raise
+                except Exception as e:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        f"Error en batch built-in '{target.name}::{method}': {e}")
+            # Si es un Template, construir instancia
+            if isinstance(export, AyceTemplate):
+                instance = AyceInstance(export)
+                for f in export.all_fields():
+                    if f.default is not None:
+                        instance.fields[f.name] = self.eval(f.default, env)
+                    else:
+                        instance.fields[f.name] = None
+                build_method = export.find_method("build")
+                if build_method is not None:
+                    self._call_template_build(export, build_method, instance, args,
+                                               expr.line, expr.col)
+                return instance
+            # Si es un Variant con payload: Modulo::VariantName::Caso(valor)
+            # No aplicable aquí — eso sería otra cadena de postfix
+            raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                f"'{method}' en el batch '{target.name}' no es una tarea ni un Template")
 
         # ── Instancia de Template: llamada a método ──
         if isinstance(target, AyceInstance):
@@ -1356,15 +1661,15 @@ class Interpreter:
         if isinstance(target_val, AyceTemplate):
             args = [self.eval(a, env) for a in expr.args]
             instance = AyceInstance(target_val)
-            # Inicializar TODOS los campos con None primero (serán asignados por init)
+            # Inicializar TODOS los campos con None primero (serán asignados por build)
             for f in target_val.all_fields():
                 if f.default is not None:
                     instance.fields[f.name] = self.eval(f.default, env)
                 else:
                     instance.fields[f.name] = None
-            init_method = target_val.find_method("init")
-            if init_method is not None:
-                self._call_template_init(target_val, init_method, instance, args,
+            build_method = target_val.find_method("build")
+            if build_method is not None:
+                self._call_template_build(target_val, build_method, instance, args,
                                           expr.line, expr.col)
             return instance
         # Si es un Variant con payload (caso Ok(valor)) — pero eso se maneja en postfix,
@@ -1384,16 +1689,16 @@ class Interpreter:
         raise AyceRuntimeError(self.filename, expr.line, expr.col,
             f"'{name}' no es una tarea ni un Template")
 
-    def _call_template_init(self, template: AyceTemplate, init_decl: TaskDecl,
+    def _call_template_build(self, template: AyceTemplate, build_decl: TaskDecl,
                              instance: AyceInstance, args: list, line: int, col: int):
-        """Llama al método `init` de un Template sobre una instancia recién creada."""
+        """Llama al método `build` de un Template sobre una instancia recién creada."""
         # Crear entorno: closure de la template + self + parámetros
         call_env = Env(parent=template.closure_env)
         call_env.declare("self", instance,
                          UserTypeName(name=template.name), is_const=True)
-        # init tiene una sola firma (no se permite sobrecarga de init por ahora)
-        sig = init_decl.signatures[0]
-        body = init_decl.bodies[0]
+        # build tiene una sola firma (no se permite sobrecarga de build por ahora)
+        sig = build_decl.signatures[0]
+        body = build_decl.bodies[0]
         # Aplicar defaults y bind de parámetros (similar a _call_task)
         params = sig.params
         filled = list(args)
@@ -1403,7 +1708,7 @@ class Interpreter:
                 filled.append(self.eval(p.default, self.global_env))
             else:
                 raise AyceRuntimeError(self.filename, line, col,
-                    f"Falta argumento para parámetro '{p.name}' en init de {template.name}")
+                    f"Falta argumento para parámetro '{p.name}' en build de {template.name}")
         for i, p in enumerate(params):
             call_env.declare(p.name, filled[i], p.type_node,
                             is_const=(p.modifier == "const"))
@@ -1411,7 +1716,7 @@ class Interpreter:
             for s in body:
                 self.exec_stmt(s, call_env)
         except ReturnSignal:
-            pass  # init puede tener return sin valor para salir temprano
+            pass  # build puede tener return sin valor para salir temprano
 
 
     def _call_task(self, task: AyceTask, args: list, line: int, col: int):
@@ -1554,8 +1859,52 @@ class Interpreter:
             # Si el valor es el tipo mismo (Template/Shape/Variant como valor)
             if isinstance(value, (AyceTemplate, AyceShape, AyceVariant)) and value.name == type_name:
                 return
+            # v0.5: alias de tipo importado (require X as Y from M)
+            # Si `type_name` es un alias (apunta a un AyceTemplate/AyceShape/AyceVariant en el env),
+            # comparamos por referencia del tipo subyacente.
+            if env is not None:
+                existing = env.lookup(type_name)
+                if existing is not None:
+                    alias_target = existing[0]
+                    if isinstance(value, AyceInstance) and isinstance(alias_target, AyceTemplate) \
+                            and value.template is alias_target:
+                        return
+                    if isinstance(value, AyceShapeValue) and isinstance(alias_target, AyceShape) \
+                            and value.shape is alias_target:
+                        return
+                    if isinstance(value, AyceVariantValue) and isinstance(alias_target, AyceVariant) \
+                            and value.variant is alias_target:
+                        return
             raise AyceTypeError(self.filename, line, col,
                 f"Se esperaba {type_name}, se recibió {self._type_name(value)}")
+        if isinstance(type_node, QualifiedTypeName):
+            # v0.5: tipo cualificado de batch (Module::Type)
+            # Buscamos el batch en el env y comprobamos que el valor coincida
+            existing = env.lookup(type_node.module_name) if env is not None else None
+            if existing is None:
+                raise AyceTypeError(self.filename, line, col,
+                    f"Batch '{type_node.module_name}' no declarado")
+            batch = existing[0]
+            if not isinstance(batch, AyceBatch):
+                raise AyceTypeError(self.filename, line, col,
+                    f"'{type_node.module_name}' no es un batch")
+            export = batch.find_export(type_node.type_name)
+            if export is None:
+                raise AyceTypeError(self.filename, line, col,
+                    f"El batch '{type_node.module_name}' no exporta '{type_node.type_name}'")
+            # Verificar que el valor coincida con el tipo exportado
+            if isinstance(value, AyceInstance) and isinstance(export, AyceTemplate) \
+                    and value.template.is_subclass_of(type_node.type_name):
+                return
+            if isinstance(value, AyceShapeValue) and isinstance(export, AyceShape) \
+                    and value.shape.name == type_node.type_name:
+                return
+            if isinstance(value, AyceVariantValue) and isinstance(export, AyceVariant) \
+                    and value.variant.name == type_node.type_name:
+                return
+            raise AyceTypeError(self.filename, line, col,
+                f"Se esperaba {type_node.module_name}::{type_node.type_name}, "
+                f"se recibió {self._type_name(value)}")
 
     def _value_matches_type(self, value, type_node) -> bool:
         """Versión silenciosa de _check_value_matches_type para resolución de sobrecarga."""
@@ -1734,8 +2083,8 @@ class Interpreter:
             return f"{value.shape.name} {{ {items} }}"
         if isinstance(value, AyceVariantValue):
             if value.payload is not None:
-                return f"{value.variant.name}.{value.case_name}({self._repr_value(value.payload)})"
-            return f"{value.variant.name}.{value.case_name}"
+                return f"{value.variant.name}::{value.case_name}({self._repr_value(value.payload)})"
+            return f"{value.variant.name}::{value.case_name}"
         if isinstance(value, (AyceTemplate, AyceShape, AyceVariant)):
             return repr(value)
         return str(value)

@@ -1,0 +1,60 @@
+## math_utils.ayce — módulo de utilidades matemáticas
+
+const PI: float = 3.14159
+const E:  float = 2.71828
+
+task cuadrado(int x) = int ;
+{
+    return x * x
+}
+
+task cubo(int x) = int ;
+{
+    return x * x * x
+}
+
+task area_circulo(float radio) = float ;
+{
+    return PI * radio * radio
+}
+
+task factorial(int n) = int ;
+{
+    if n <= 1 then
+        return 1
+    end
+    return n * factorial(n - 1)
+}
+
+Template Punto {
+    x: int
+    y: int
+
+    task build(int x, int y) ;
+    {
+        self::x = x
+        self::y = y
+    }
+
+    task distancia_al_origen() = float ;
+    {
+        var sx: int = self::x * self::x
+        var sy: int = self::y * self::y
+        ## Aproximación burda de sqrt por series
+        var s: int = sx + sy
+        var r: float = float(s)
+        var guess: float = r / 2.0
+        var i: int = 0
+        while i < 10 do
+            guess = (guess + r / guess) / 2.0
+            i += 1
+        end
+        return guess
+    }
+}
+
+Variant Operacion {
+    Suma(int)
+    Resta(int)
+    Multiplicacion(int)
+}

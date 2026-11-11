@@ -339,6 +339,14 @@ class UserTypeName(TypeNode):
     line: int = 0
     col: int = 0
 
+@dataclass
+class QualifiedTypeName(TypeNode):
+    """Tipo cualificado de módulo: ModuleName::TypeName (v0.5)"""
+    module_name: str = ""
+    type_name: str = ""
+    line: int = 0
+    col: int = 0
+
 # ──────────────────────────────────────────────────────────────────────
 #  v0.4 — Manejo de errores, conversión, ternario, asignación compuesta
 # ──────────────────────────────────────────────────────────────────────
@@ -380,6 +388,40 @@ class TypeConvertExpr(Expr):
     """int("42"), float("1.5"), string(42), bool(0), bytes("hola")"""
     target_type: str = ""  # "int", "float", "string", "bool", "bytes"
     arg: Optional[Expr] = None
+
+# ──────────────────────────────────────────────────────────────────────
+#  v0.5 — Módulos (require) y acceso a miembros con ::
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class RequireStmt(Stmt):
+    """require M [as A]
+       require X[, Y as Z] from M
+       require "ruta.ayce" [as A]
+
+    modos:
+      - "module":     require M [as A]  — trae módulo entero
+      - "selective":  require X[, Y as Z] from M  — trae nombres específicos
+      - "string":     require "ruta" [as A]  — módulo desde ruta literal
+    """
+    mode: str = "module"            # "module" | "selective" | "string"
+    batch_spec: object = None      # str (identificador o ruta literal)
+    items: list = field(default_factory=list)
+        # Para "selective": lista de (name, alias_or_None) a importar
+    alias: str = ""                  # Para "module"/"string": alias del módulo
+    is_string_path: bool = False    # True si batch_spec viene de string literal
+    line: int = 0
+    col: int = 0
+
+
+@dataclass
+class ModuleAccessExpr(Expr):
+    """Acceso a miembro de módulo: M::nombre
+    Reemplaza a FieldAccessExpr cuando el target es un módulo o un Variant.
+    En v0.5 también se usa para variantes (Color::Rojo) y métodos/campos de instancia."""
+    target: Optional[Expr] = None
+    name: str = ""
+    line: int = 0
+    col: int = 0
 
 # ──────────────────────────────────────────────────────────────────────
 #  Programa

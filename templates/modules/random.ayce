@@ -1,0 +1,52 @@
+## Generador pseudoaleatorio reproducible con require random.
+## No usar para criptografia, contrasenas o sorteos de alto riesgo.
+
+const MODULO: int = 2147483647
+const MULTIPLICADOR: int = 48271
+var estado: int = 1
+
+task seed(int valor) ;
+{
+    global estado
+    estado = (valor % (MODULO - 1)) + 1
+}
+
+task random() = float ;
+{
+    global estado
+    estado = (estado * MULTIPLICADOR) % MODULO
+    return float(estado) / float(MODULO)
+}
+
+task uniform(float minimo, float maximo) = float ;
+{
+    if minimo > maximo then
+        raise Error("uniform requiere minimo <= maximo", 1)
+    end
+    return minimo + (maximo - minimo) * random()
+}
+
+task randint(int minimo, int maximo) = int ;
+{
+    if minimo > maximo then
+        raise Error("randint requiere minimo <= maximo", 1)
+    end
+    return minimo + int(random() * float(maximo - minimo + 1))
+}
+
+## stop no esta incluido.
+task randrange(int inicio, int stop) = int ;
+{
+    if inicio >= stop then
+        raise Error("randrange requiere inicio < stop", 1)
+    end
+    return inicio + int(random() * float(stop - inicio))
+}
+
+task choice(none[] valores) ;
+{
+    if valores::len() == 0 then
+        raise Error("choice requiere una lista no vacia", 1)
+    end
+    return valores[randint(0, valores::len() - 1)]
+}

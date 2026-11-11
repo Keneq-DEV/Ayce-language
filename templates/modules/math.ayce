@@ -1,0 +1,135 @@
+## Funciones numericas comunes, disponibles con require math.
+
+const pi: float = 3.141592653589793
+const e: float = 2.718281828459045
+
+task sqrt(float valor) = float ;
+{
+    if valor < 0.0 then
+        raise Error("sqrt requiere un valor >= 0", 1)
+    end
+    if valor == 0.0 then
+        return 0.0
+    end
+
+    var escalado: float = valor
+    var factor: float = 1.0
+    while escalado < 0.25 do
+        escalado = escalado * 4.0
+        factor = factor / 2.0
+    end
+    while escalado > 4.0 do
+        escalado = escalado / 4.0
+        factor = factor * 2.0
+    end
+    var estimacion: float = (escalado + 1.0) / 2.0
+    for i in range(0, 20) do
+        estimacion = (estimacion + escalado / estimacion) / 2.0
+    end
+    return estimacion * factor
+}
+
+task factorial(int n) = int ;
+{
+    if n < 0 then
+        raise Error("factorial requiere un entero >= 0", 1)
+    end
+    var resultado: int = 1
+    for i in range(2, n + 1) do
+        resultado = resultado * i
+    end
+    return resultado
+}
+
+task gcd(int primero, int segundo) = int ;
+{
+    var a: int = primero
+    var b: int = segundo
+    if a < 0 then
+        a = -a
+    end
+    if b < 0 then
+        b = -b
+    end
+    while b != 0 do
+        var resto: int = a % b
+        a = b
+        b = resto
+    end
+    return a
+}
+
+task floor(float valor) = int ;
+{
+    var entero: int = int(valor)
+    if float(entero) > valor then
+        return entero - 1
+    end
+    return entero
+}
+
+task ceil(float valor) = int ;
+{
+    var entero: int = int(valor)
+    if float(entero) < valor then
+        return entero + 1
+    end
+    return entero
+}
+
+task radians(float grados) = float ;
+{
+    return grados * pi / 180.0
+}
+
+task degrees(float radianes) = float ;
+{
+    return radianes * 180.0 / pi
+}
+
+task sin(float radianes) = float ;
+{
+    radianes = radianes % (2.0 * pi)
+    if radianes > pi then
+        radianes = radianes - 2.0 * pi
+    end
+    if radianes < -pi then
+        radianes = radianes + 2.0 * pi
+    end
+
+    var suma: float = radianes
+    var termino: float = radianes
+    for i in range(1, 13) do
+        termino = -termino * radianes * radianes / float((2 * i) * (2 * i + 1))
+        suma = suma + termino
+    end
+    return suma
+}
+
+task cos(float radianes) = float ;
+{
+    radianes = radianes % (2.0 * pi)
+    if radianes > pi then
+        radianes = radianes - 2.0 * pi
+    end
+    if radianes < -pi then
+        radianes = radianes + 2.0 * pi
+    end
+
+    var suma: float = 1.0
+    var termino: float = 1.0
+    for i in range(1, 13) do
+        termino = -termino * radianes * radianes / float((2 * i - 1) * (2 * i))
+        suma = suma + termino
+    end
+    return suma
+}
+
+task is_close(float primero, float segundo, float tolerancia = 0.000001) = bool ;
+{
+    var diferencia: float = primero - segundo
+    if diferencia < 0.0 then
+        diferencia = -diferencia
+    end
+    return diferencia <= tolerancia
+}

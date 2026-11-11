@@ -37,7 +37,7 @@ var nums: int[] = [5, 2, 8, 1, 9, 3]
 
 say("")
 say(f"Lista original: {nums}")
-say(f"Longitud: {nums.len()}")
+say(f"Longitud: {nums::len()}")
 
 ## Calcular suma, promedio y máximo con tasks
 task sumar(int[] &in lista) = int ;
@@ -62,7 +62,7 @@ task maximo(int[] &in lista) = int ;
 
 var suma: int = sumar(nums)
 var max:  int = maximo(nums)
-var prom: float = suma / nums.len()
+var prom: float = suma / nums::len()
 
 say(f"Suma: {suma}")
 say(f"Máximo: {max}")
