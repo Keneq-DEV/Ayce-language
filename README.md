@@ -1,12 +1,11 @@
 # ayce — Guía de instalación 
-## Archivos que recibiste
 
 ## Paso 1 — Instalar el intérprete
 
 1. Descomprimí `ayce_project_v.x.x.zip`
 2. Entrá a la carpeta `sdk/`
 3. Abrí PowerShell ahí
-4. **PRIMERO** desinstalá la versión vieja:
+4. **PRIMERO** desinstalá la versión vieja si la tienes:
 
 ```powershell
 python -m pip uninstall -y ayce
