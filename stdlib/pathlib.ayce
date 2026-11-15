@@ -1,0 +1,197 @@
+## pathlib.ayce — rutas orientadas a objetos (ayce puro sobre batches nativos)
+##
+## Template Path: envuelve los batches nativos `path` (os.path), `io`,
+## `os` y `glob` con una API de objetos, estilo pathlib de Python.
+require path
+require io
+require os
+require glob
+##
+## Tareas libres:
+##   Path(ruta)          se usa el constructor del Template
+##   join_paths(a, b)    une dos rutas (devuelve string)
+##
+## Métodos de Path:
+##   to_string()         la ruta como string
+##   name()              nombre del archivo con extensión
+##   stem()              nombre sin extensión
+##   suffix()            extensión (con el punto, "" si no tiene)
+##   parent()            Path del directorio padre
+##   join(other)         nueva Path con `other` agregado
+##   exists()            ¿existe?
+##   is_file() / is_dir()
+##   size()              tamaño en bytes
+##   absolute()          Path absoluta
+##   parts()             lista de componentes de la ruta
+##   read_text()         contenido como string
+##   write_text(cont)    escribe y devuelve True
+##   append_text(cont)   agrega al final
+##   read_lines()        lista de líneas
+##   delete()            borra el archivo
+##   list_dir()          lista de hijos (si es directorio)
+##   glob(pat)           busca con patrón sobre esta ruta
+
+Template Path {
+    ruta: string
+
+    task build(string ruta_inicial) ;
+    {
+        self::ruta = ruta_inicial
+    }
+
+    task to_string() = string ;
+    {
+        return self::ruta
+    }
+
+    ## nombre del archivo (con extensión)
+    task name() = string ;
+    {
+        return path::basename(self::ruta)
+    }
+
+    ## nombre sin la última extensión
+    task stem() = string ;
+    {
+        var base: string = path::basename(self::ruta)
+        var parts2: none[] = path::splitext(base)
+        return parts2[0]
+    }
+
+    ## extensión (".txt", "" si no tiene)
+    task suffix() = string ;
+    {
+        var base: string = path::basename(self::ruta)
+        var parts3: none[] = path::splitext(base)
+        return parts3[1]
+    }
+
+    ## directorio padre como Path nueva
+    task parent() = Path ;
+    {
+        var dir: string = path::dirname(self::ruta)
+        if dir == "" then
+            dir = "."
+        end
+        return Path(dir)
+    }
+
+    ## une esta ruta con otra (relativa)
+    task join(string other) = Path ;
+    {
+        return Path(path::join(self::ruta, other))
+    }
+
+    task exists() = bool ;
+    {
+        return path::exists(self::ruta)
+    }
+
+    task is_file() = bool ;
+    {
+        return path::isfile(self::ruta)
+    }
+
+    task is_dir() = bool ;
+    {
+        return path::isdir(self::ruta)
+    }
+
+    task size() = int ;
+    {
+        return path::size(self::ruta)
+    }
+
+    task absolute() = Path ;
+    {
+        return Path(path::abspath(self::ruta))
+    }
+
+    ## componentes de la ruta (separados por /)
+    task parts() = string[] ;
+    {
+        var normalizada: string = path::normpath(self::ruta)
+        var out: string[] = []
+        var actual: string = ""
+        var n: int = normalizada::len()
+        var i: int = 0
+        while i < n do
+            var c: string = normalizada::slice(i, i + 1)
+            if c == "/" then
+                if actual != "" then
+                    out::append(actual)
+                    actual = ""
+                end
+                if i == 0 then
+                    out::append("/")
+                end
+            else
+                actual += c
+            end
+            i += 1
+        end
+        if actual != "" then
+            out::append(actual)
+        end
+        return out
+    }
+
+    task read_text() = string ;
+    {
+        return io::read_file(self::ruta)
+    }
+
+    task write_text(string contenido) = bool ;
+    {
+        io::write_file(self::ruta, contenido)
+        return True
+    }
+
+    task append_text(string contenido) = bool ;
+    {
+        io::append_file(self::ruta, contenido)
+        return True
+    }
+
+    task read_lines() = string[] ;
+    {
+        return io::read_lines(self::ruta)
+    }
+
+    task delete() = bool ;
+    {
+        os::remove(self::ruta)
+        return True
+    }
+
+    task list_dir() = string[] ;
+    {
+        return os::list_dir(self::ruta)
+    }
+
+    ## busca con patrón glob dentro de la ruta
+    task glob(string patron) = string[] ;
+    {
+        return glob::glob(path::join(self::ruta, patron))
+    }
+}
+
+## ── tareas libres ──
+
+## Une dos rutas como strings
+task join_paths(string a, string b) = string ;
+{
+    return path::join(a, b)
+}
+
+## Ruta del directorio actual
+task cwd() = Path ;
+{
+    return Path(os::cwd())
+}
+
+## Ruta del home del usuario
+task home() = Path ;
+{
+    return Path(os::env("HOME"))
+}

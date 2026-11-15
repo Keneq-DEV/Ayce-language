@@ -1,0 +1,40 @@
+## test_calendar.ayce — pruebas de calendar (ayce puro)
+require calendar as C
+
+say("isleap(2024): " + string(C::isleap(2024)) + " (True)")
+say("isleap(2023): " + string(C::isleap(2023)) + " (False)")
+say("isleap(2000): " + string(C::isleap(2000)) + " (True)")
+say("isleap(1900): " + string(C::isleap(1900)) + " (False)")
+say("leapdays(2020, 2030): " + string(C::leapdays(2020, 2030)) + " (3)")
+say("days_in_year(2024): " + string(C::days_in_year(2024)) + " (366)")
+say("month_days(2024, 2): " + string(C::month_days(2024, 2)) + " (29)")
+say("month_days(2023, 2): " + string(C::month_days(2023, 2)) + " (28)")
+say("month_days(2026, 7): " + string(C::month_days(2026, 7)) + " (31)")
+
+## 2026-11-14 es sábado (weekday 5)
+say("weekday(2026, 11, 14): " + string(C::weekday(2026, 11, 14)) + " (5)")
+say("weekday(2026, 11, 16): " + string(C::weekday(2026, 11, 16)) + " (0) Lunes")
+say("weekday(2000, 1, 1): " + string(C::weekday(2000, 1, 1)) + " (5) Sábado")
+say("month_name(11): " + C::month_name(11) + " (November)")
+say("day_name(5): " + C::day_name(5) + " (Saturday)")
+say("day_of_year(2026, 11, 14): " + string(C::day_of_year(2026, 11, 14)) + " (318)")
+
+say("")
+say("month_text(2026, 11):")
+say(C::month_text(2026, 11))
+
+## month_calendar: primera y última semana de noviembre 2026
+var semanas: none[] = C::month_calendar(2026, 11)
+say("semanas: " + string(semanas::len()))
+say("semana 1: " + string(semanas[0]))
+say("semana final: " + string(semanas[semanas::len() - 1]))
+
+## error de mes inválido
+try
+    C::month_days(2026, 13)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_calendar")

@@ -1,0 +1,34 @@
+## test_itertools.ayce — pruebas de itertools (ayce puro)
+require itertools as I
+
+say("chain: " + string(I::chain([1, 2], [3, 4])) + " ([1, 2, 3, 4])")
+say("chain3: " + string(I::chain3([1], [2], [3])) + " ([1, 2, 3])")
+say("combinations: " + string(I::combinations([1, 2, 3], 2)) + " ([[1, 2], [1, 3], [2, 3]])")
+say("permutations: " + string(I::permutations([1, 2], 2)) + " ([[1, 2], [2, 1]])")
+var perms: none[] = I::permutations([1, 2, 3], 3)
+say("permutations k=3: " + string(perms::len()) + " (6)")
+say("product: " + string(I::product([1, 2], [3, 4])) + " ([[1, 3], [1, 4], [2, 3], [2, 4]])")
+say("cycle: " + string(I::cycle([1, 2], 3)) + " ([1, 2, 1, 2, 1, 2])")
+say("repeat: " + string(I::repeat(7, 3)) + " ([7, 7, 7])")
+
+task es_par(int x) = bool => x % 2 == 0
+task es_menor_5(int x) = bool => x < 5
+task suma(int a, int b) = int => a + b
+task maxi(int a, int b) = int ;
+{
+    if a > b then
+        return a
+    end
+    return b
+}
+
+say("take_while: " + string(I::take_while(es_menor_5, [1, 3, 6, 1])) + " ([1, 3])")
+say("drop_while: " + string(I::drop_while(es_menor_5, [1, 3, 6, 1])) + " ([6, 1])")
+say("islice: " + string(I::islice([0, 1, 2, 3, 4, 5], 1, 4)) + " ([1, 2, 3])")
+say("zip_longest: " + string(I::zip_longest([1, 2], [10], -1)) + " ([[1, 10], [2, -1]])")
+say("accumulate: " + string(I::accumulate([1, 2, 3, 4])) + " ([1, 3, 6, 10])")
+say("accumulate_by max: " + string(I::accumulate_by([3, 1, 4, 1, 5], maxi)) + " ([3, 3, 4, 4, 5])")
+say("pairwise: " + string(I::pairwise([1, 2, 3, 4])) + " ([[1, 2], [2, 3], [3, 4]])")
+say("group_by paridad: " + string(I::group_by([1, 2, 3, 4], es_par)))
+say("flatten: " + string(I::flatten([[1, 2], [3]])) + " ([1, 2, 3])")
+say("FIN test_itertools")

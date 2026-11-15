@@ -1,0 +1,31 @@
+## unicodedata.ayce — base de datos Unicode EN AYCE (v0.6.0).
+## Las tablas de caracteres Unicode son enormes (unísono de todo el
+## estándar): como unicodedata.py de CPython apoya en el módulo C con
+## las tablas compiladas, las consultas van al batch privado
+## `_unicodedata`.
+
+require _unicodedata as ud
+
+## nombre oficial de un carácter ("LATIN SMALL LETTER A", ...)
+task name(string s) = string ;
+{
+    return ud::name(s)
+}
+
+## busca un carácter por su nombre
+task lookup(string s) ;
+{
+    return ud::lookup(s)
+}
+
+## categoría general del carácter ("Lu", "Ll", "Nd", ...)
+task category(string s) = string ;
+{
+    return ud::category(s)
+}
+
+## valor numérico decimal del carácter ("5" → 5; -1 si no aplica)
+task decimal(string s) ;
+{
+    return ud::decimal(s)
+}

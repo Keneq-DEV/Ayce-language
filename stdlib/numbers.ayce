@@ -1,0 +1,198 @@
+## numbers.ayce — librería de teoría de números (stdlib ayce puro)
+##
+## Tareas:
+##   abs_int(int x)           = int       valor absoluto
+##   sign(int x)              = int       -1, 0, 1
+##   gcd(int a, int b)        = int       máximo común divisor (Euclides)
+##   lcm(int a, int b)        = int       mínimo común múltiplo
+##   is_prime(int n)          = bool      ¿n es primo?
+##   primes_upto(int n)       = int[]     lista de primos <= n (criba)
+##   fibonacci(int n)         = int       n-ésimo número de Fibonacci (F(0)=0, F(1)=1)
+##   factorial_iter(int n)    = int       factorial iterativo
+##   sum_range(int lo, int hi) = int      suma de lo..hi inclusive
+##   digit_sum(int n)         = int       suma de dígitos (en base 10)
+##   int_sqrt(int n)          = int       raíz entera (Newton)
+
+## — Valor absoluto —
+task abs_int(int x) = int ;
+{
+    if x < 0 then
+        return -x
+    end
+    return x
+}
+
+## — Signo: -1, 0, 1 —
+task sign(int x) = int ;
+{
+    if x > 0 then
+        return 1
+    end
+    if x < 0 then
+        return -1
+    end
+    return 0
+}
+
+## — Máximo común divisor (Euclides iterativo) —
+task gcd(int a, int b) = int ;
+{
+    var x: int = abs_int(a)
+    var y: int = abs_int(b)
+    while y != 0 do
+        var t: int = x % y
+        x = y
+        y = t
+    end
+    return x
+}
+
+## — Mínimo común múltiplo. lcm(0, n) = 0 —
+task lcm(int a, int b) = int ;
+{
+    if a == 0 || b == 0 then
+        return 0
+    end
+    var g: int = gcd(a, b)
+    return abs_int(a) // g * abs_int(b)
+}
+
+## — ¿Es primo? Trial division hasta sqrt(n). —
+task is_prime(int n) = bool ;
+{
+    if n < 2 then
+        return False
+    end
+    if n == 2 then
+        return True
+    end
+    if n % 2 == 0 then
+        return False
+    end
+    var d: int = 3
+    while d * d <= n do
+        if n % d == 0 then
+            return False
+        end
+        d = d + 2
+    end
+    return True
+}
+
+## — Criba de Eratóstenes. Devuelve int[] con los primos <= n. —
+task primes_upto(int n) = int[] ;
+{
+    if n < 2 then
+        return []
+    end
+    ## arreglo de bools: criba[i] = True significa "i es primo"
+    var criba: bool[] = []
+    var i: int = 0
+    while i <= n do
+        criba::append(True)
+        i = i + 1
+    end
+    criba[0] = False
+    criba[1] = False
+
+    var p: int = 2
+    while p * p <= n do
+        if criba[p] then
+            var k: int = p * p
+            while k <= n do
+                criba[k] = False
+                k = k + p
+            end
+        end
+        p = p + 1
+    end
+
+    var out: int[] = []
+    var j: int = 2
+    while j <= n do
+        if criba[j] then
+            out::append(j)
+        end
+        j = j + 1
+    end
+    return out
+}
+
+## — n-ésimo Fibonacci. F(0)=0, F(1)=1, iterativo para no re-explotar la pila. —
+task fibonacci(int n) = int ;
+{
+    if n < 0 then
+        return 0
+    end
+    if n == 0 then
+        return 0
+    end
+    if n == 1 then
+        return 1
+    end
+    var prev: int = 0
+    var curr: int = 1
+    var k: int = 2
+    while k <= n do
+        var nxt: int = prev + curr
+        prev = curr
+        curr = nxt
+        k = k + 1
+    end
+    return curr
+}
+
+## — Factorial iterativo. factorial_iter(0) = 1. —
+task factorial_iter(int n) = int ;
+{
+    if n < 0 then
+        return 0
+    end
+    var r: int = 1
+    var k: int = 2
+    while k <= n do
+        r = r * k
+        k = k + 1
+    end
+    return r
+}
+
+## — Suma de lo..hi inclusive. —
+task sum_range(int lo, int hi) = int ;
+{
+    if hi < lo then
+        return 0
+    end
+    ## (lo + hi) * (hi - lo + 1) // 2 — usar fórmula para O(1)
+    return (lo + hi) * (hi - lo + 1) // 2
+}
+
+## — Suma de dígitos en base 10. —
+task digit_sum(int n) = int ;
+{
+    var x: int = abs_int(n)
+    var s: int = 0
+    while x != 0 do
+        s = s + (x % 10)
+        x = x // 10
+    end
+    return s
+}
+
+## — Raíz entera con Newton. int_sqrt(15) = 3, int_sqrt(16) = 4. —
+task int_sqrt(int n) = int ;
+{
+    if n < 0 then
+        return 0
+    end
+    if n == 0 then
+        return 0
+    end
+    var x: int = n
+    var y: int = (x + 1) // 2
+    while y < x do
+        x = y
+        y = (x + n // x) // 2
+    end
+    return x
+}

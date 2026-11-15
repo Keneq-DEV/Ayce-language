@@ -1,0 +1,48 @@
+## http.ayce — peticiones HTTP EN AYCE (v0.6.0).
+## La conexión TCP/TLS y el envío del mensaje vienen del batch
+## privado `_http` (el http.client de CPython); la lógica del módulo
+## (métodos GET/POST con sus cabeceras por defecto y el chequeo de
+## estado 2xx) vive aquí.
+
+require _http as h
+
+## request(metodo, url, [headers], [cuerpo]) → dict de respuesta
+task request(string metodo, string url) | (string metodo, string url, none<> headers) | (string metodo, string url, none<> headers, string cuerpo) = none<> ;
+{
+    return _pedir(metodo, url, <>, "")
+    |
+    return _pedir(metodo, url, headers, "")
+    |
+    return _pedir(metodo, url, headers, cuerpo)
+}
+
+task _pedir(string metodo, string url, none<> headers, string cuerpo) = none<> ;
+{
+    return h::request(metodo, url, headers, cuerpo)
+}
+
+## GET sin cuerpo
+task get(string url) | (string url, none<> headers) = none<> ;
+{
+    return h::get(url)
+    |
+    return h::get(url, headers)
+}
+
+## POST con cuerpo form-urlencoded por defecto (como http.client)
+task post(string url, string cuerpo) | (string url, string cuerpo, none<> headers) = none<> ;
+{
+    return h::post(url, cuerpo)
+    |
+    return h::post(url, cuerpo, headers)
+}
+
+## ¿respuesta de la familia 2xx? (lógica de urllib.request en CPython)
+task status_ok(none<> respuesta) = bool ;
+{
+    if !respuesta::has("status") then
+        return False
+    end
+    var estado: int = respuesta<"status">
+    return estado >= 200 && estado < 300
+}

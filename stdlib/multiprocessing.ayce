@@ -1,0 +1,37 @@
+## multiprocessing.ayce — información de procesos EN AYCE (v0.6.0).
+## Los procesos reales los administra el sistema operativo: como
+## multiprocessing.py de CPython, que consulta al módulo C, aquí las
+## llamadas van al batch privado `_multiprocessing`. El intérprete de
+## referencia corre en un proceso, así que no tiene hijos.
+
+require _multiprocessing as mp
+
+## núcleos de CPU disponibles
+task cpu_count() = int ;
+{
+    return mp::cpu_count()
+}
+
+## PID del proceso actual
+task current_pid() = int ;
+{
+    return mp::current_pid()
+}
+
+## PID del proceso padre
+task parent_pid() = int ;
+{
+    return mp::parent_pid()
+}
+
+## procesos hijos vivos (ninguno en el intérprete de referencia)
+task active_children() = none[] ;
+{
+    return mp::active_children()
+}
+
+## resumen del proceso actual: dict {pid, parent, cpu_count, children}
+task info() = none<> ;
+{
+    return mp::info()
+}

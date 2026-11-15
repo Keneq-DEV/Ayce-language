@@ -1,0 +1,68 @@
+## signal.ayce — señales del sistema EN AYCE (v0.6.0).
+## Los números de señal son los del estándar POSIX (los mismos que
+## signal.py de CPython publica como constantes); el envío real de
+## señales es una syscall y va al batch privado `_signal`. El nombre
+## de cada señal se resuelve con una tabla propia.
+
+require _signal as sig
+
+const SIGINT: int = 2
+const SIGTERM: int = 15
+const SIGHUP: int = 1
+const SIGKILL: int = 9
+const SIGUSR1: int = 10
+const SIGUSR2: int = 12
+const SIGALRM: int = 14
+const SIGCHLD: int = 17
+const SIGPIPE: int = 13
+
+## PID del proceso actual
+task pid() = int ;
+{
+    return sig::pid()
+}
+
+## PID del proceso padre
+task parent_pid() = int ;
+{
+    return sig::parent_pid()
+}
+
+## envía una señal a un proceso
+task send(int pid, int senal) ;
+{
+    sig::send(pid, senal)
+}
+
+## nombre legible de la señal (tabla propia, como Signals de CPython)
+task name(int senal) = string ;
+{
+    if senal == 1 then
+        return "SIGHUP"
+    end
+    if senal == 2 then
+        return "SIGINT"
+    end
+    if senal == 9 then
+        return "SIGKILL"
+    end
+    if senal == 10 then
+        return "SIGUSR1"
+    end
+    if senal == 12 then
+        return "SIGUSR2"
+    end
+    if senal == 13 then
+        return "SIGPIPE"
+    end
+    if senal == 14 then
+        return "SIGALRM"
+    end
+    if senal == 15 then
+        return "SIGTERM"
+    end
+    if senal == 17 then
+        return "SIGCHLD"
+    end
+    return "SIG" + string(senal)
+}

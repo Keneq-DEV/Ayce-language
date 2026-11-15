@@ -1,0 +1,44 @@
+## queue.ayce — colas FIFO EN AYCE PURO (v0.6.0).
+## Igual que queue.py de CPython: create construye la cola, put agrega
+## al final, get saca el primero (FIFO) y falla si está vacía, size
+## devuelve cuántos elementos espera. La cola es un dict del lenguaje
+## con su lista interna; en un intérprete de un solo hilo la cola es
+## la cola del módulo — sin lock nativo.
+
+task create(int maxsize = 0) = none<> ;
+{
+    ## maxsize 0 = ilimitada (igual que queue.Queue(0) de CPython)
+    var cola: none<> = <>
+    cola<"_q"> = []
+    cola<"_max"> = maxsize
+    return cola
+}
+
+task put(none<> cola, stdlib::Cualquiera valor) ;
+{
+    cola<"_q">::append(valor)
+}
+
+task get(none<> cola) ;
+{
+    var interna: none[] = cola<"_q">
+    if interna::len() == 0 then
+        ## queue.Empty de CPython
+        raise_error()
+    end
+    var primero: none = interna[0]
+    interna::delete(0)
+    return primero
+}
+
+task size(none<> cola) = int ;
+{
+    return cola<"_q">::len()
+}
+
+task raise_error() ;
+{
+    ## provocar el error "cola vacía" accediendo a una clave inexistente
+    var d: none<> = <>
+    var v: stdlib::Cualquiera = d<"queue.Empty: la cola está vacía">
+}

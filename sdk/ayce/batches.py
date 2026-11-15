@@ -427,6 +427,109 @@ def _build_math_batch():
         return _math.isqrt(args[0])
     exports["isqrt"] = _task(AyceNativeTask("isqrt", _isqrt))
 
+    ## ── Ampliación v0.6.0 ──
+
+    def _perm(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], int) or not isinstance(args[1], int):
+            raise _err(line, col, "perm requiere 2 int (n, k)")
+        if args[0] < 0 or args[1] < 0:
+            raise _err(line, col, "perm no acepta negativos")
+        return _math.perm(args[0], args[1])
+    exports["perm"] = _task(AyceNativeTask("perm", _perm))
+
+    def _comb(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], int) or not isinstance(args[1], int):
+            raise _err(line, col, "comb requiere 2 int (n, k)")
+        if args[0] < 0 or args[1] < 0:
+            raise _err(line, col, "comb no acepta negativos")
+        return _math.comb(args[0], args[1])
+    exports["comb"] = _task(AyceNativeTask("comb", _comb))
+
+    def _isclose(interp, args, line, col):
+        if len(args) < 2 or len(args) > 4:
+            raise _err(line, col, "isclose requiere 2 a 4 argumentos (a, b, [rel_tol], [abs_tol])")
+        for a in args:
+            if not isinstance(a, (int, float)):
+                raise _err(line, col, "isclose requiere números")
+        rel = args[2] if len(args) >= 3 else 1e-09
+        ab = args[3] if len(args) == 4 else 0.0
+        return _math.isclose(args[0], args[1], rel_tol=rel, abs_tol=ab)
+    exports["isclose"] = _task(AyceNativeTask("isclose", _isclose))
+
+    def _copysign(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], (int, float)) or not isinstance(args[1], (int, float)):
+            raise _err(line, col, "copysign requiere 2 números")
+        return _math.copysign(args[0], args[1])
+    exports["copysign"] = _task(AyceNativeTask("copysign", _copysign))
+
+    def _fmod(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], (int, float)) or not isinstance(args[1], (int, float)):
+            raise _err(line, col, "fmod requiere 2 números")
+        if args[1] == 0:
+            raise _err(line, col, "fmod: división por cero")
+        return _math.fmod(args[0], args[1])
+    exports["fmod"] = _task(AyceNativeTask("fmod", _fmod))
+
+    def _remainder(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], (int, float)) or not isinstance(args[1], (int, float)):
+            raise _err(line, col, "remainder requiere 2 números")
+        if args[1] == 0:
+            raise _err(line, col, "remainder: división por cero")
+        return _math.remainder(args[0], args[1])
+    exports["remainder"] = _task(AyceNativeTask("remainder", _remainder))
+
+    def _expm1(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "expm1 requiere 1 número")
+        return _math.expm1(args[0])
+    exports["expm1"] = _task(AyceNativeTask("expm1", _expm1))
+
+    def _log1p(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "log1p requiere 1 número")
+        if args[0] <= -1:
+            raise _err(line, col, "log1p requiere x > -1")
+        return _math.log1p(args[0])
+    exports["log1p"] = _task(AyceNativeTask("log1p", _log1p))
+
+    def _dist(interp, args, line, col):
+        from .interpreter import AyceList
+        if len(args) != 2 or not isinstance(args[0], AyceList) or not isinstance(args[1], AyceList):
+            raise _err(line, col, "dist requiere 2 listas de números")
+        pa = list(args[0].elements)
+        pb = list(args[1].elements)
+        if len(pa) != len(pb):
+            raise _err(line, col, "dist requiere listas de igual longitud")
+        for x in pa + pb:
+            if not isinstance(x, (int, float)):
+                raise _err(line, col, "dist requiere listas de números")
+        return _math.dist(pa, pb)
+    exports["dist"] = _task(AyceNativeTask("dist", _dist))
+
+    def _gamma(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "gamma requiere 1 número")
+        return _math.gamma(args[0])
+    exports["gamma"] = _task(AyceNativeTask("gamma", _gamma))
+
+    def _lgamma(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "lgamma requiere 1 número")
+        return _math.lgamma(args[0])
+    exports["lgamma"] = _task(AyceNativeTask("lgamma", _lgamma))
+
+    def _erf(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "erf requiere 1 número")
+        return _math.erf(args[0])
+    exports["erf"] = _task(AyceNativeTask("erf", _erf))
+
+    def _erfc(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], (int, float)):
+            raise _err(line, col, "erfc requiere 1 número")
+        return _math.erfc(args[0])
+    exports["erfc"] = _task(AyceNativeTask("erfc", _erfc))
+
     return AyceNativeBatch("math", exports)
 
 
@@ -508,6 +611,51 @@ def _build_random_batch():
         return None
     exports["seed"] = _task(AyceNativeTask("seed", _seed))
 
+    ## ── Ampliación v0.6.0 ──
+
+    def _gauss(interp, args, line, col):
+        if len(args) > 2 or (len(args) >= 1 and not isinstance(args[0], (int, float))) \
+                or (len(args) == 2 and not isinstance(args[1], (int, float))):
+            raise _err(line, col, "random::gauss requiere (mu, sigma) numéricos")
+        mu = args[0] if len(args) >= 1 else 0.0
+        sigma = args[1] if len(args) == 2 else 1.0
+        return _random.gauss(mu, sigma)
+    exports["gauss"] = _task(AyceNativeTask("gauss", _gauss))
+
+    def _uniform(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], (int, float)) or not isinstance(args[1], (int, float)):
+            raise _err(line, col, "random::uniform requiere 2 números (a, b)")
+        return _random.uniform(args[0], args[1])
+    exports["uniform"] = _task(AyceNativeTask("uniform", _uniform))
+
+    def _random_bytes(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], int):
+            raise _err(line, col, "random_bytes requiere 1 int (n)")
+        if args[0] < 0 or args[0] > 1_048_576:
+            raise _err(line, col, "random_bytes: n fuera de rango (0..1048576)")
+        return _random.randbytes(args[0])
+    exports["random_bytes"] = _task(AyceNativeTask("random_bytes", _random_bytes))
+
+    def _randrange(interp, args, line, col):
+        if len(args) < 1 or len(args) > 3:
+            raise _err(line, col, "randrange requiere (stop) o (start, stop) o (start, stop, step)")
+        for a in args:
+            if not isinstance(a, int):
+                raise _err(line, col, "randrange requiere enteros")
+        return _random.randrange(*args)
+    exports["randrange"] = _task(AyceNativeTask("randrange", _randrange))
+
+    def _choices(interp, args, line, col):
+        from .interpreter import AyceList
+        if len(args) < 1 or len(args) > 2 or not isinstance(args[0], AyceList):
+            raise _err(line, col, "choices requiere (lista, [k])")
+        k = args[1] if len(args) == 2 else 1
+        if not isinstance(k, int) or k < 0:
+            raise _err(line, col, "choices: k debe ser int >= 0")
+        return AyceList(_random.choices(list(args[0].elements), k=k),
+                        args[0].type_node)
+    exports["choices"] = _task(AyceNativeTask("choices", _choices))
+
     return AyceNativeBatch("random", exports)
 
 
@@ -522,6 +670,31 @@ def _build_string_batch():
             raise _err(line, col, "string::length requiere 1 string")
         return len(args[0])
     exports["length"] = _task(AyceNativeTask("length", _length))
+
+    # v0.6.0: ord/chr — builtins de carácter al nivel del lenguaje.
+    # Sin ellos no se pueden implementar en ayce algoritmos como SHA-256,
+    # MT19937 o el parser de JSON (necesitan códigos de carácter).
+    def _ord(interp, args, line, col):
+        if len(args) == 1 and isinstance(args[0], str) and len(args[0]) == 1:
+            return ord(args[0])
+        if (len(args) == 2 and isinstance(args[0], str)
+                and isinstance(args[1], int)):
+            i = args[1]
+            if i < 0 or i >= len(args[0]):
+                raise _err(line, col, f"string::ord: índice {i} fuera de rango "
+                           f"(longitud {len(args[0])})")
+            return ord(args[0][i])
+        raise _err(line, col, "string::ord requiere (caracter) o (string, indice)")
+    exports["ord"] = _task(AyceNativeTask("ord", _ord))
+
+    def _chr(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], int) or isinstance(args[0], bool):
+            raise _err(line, col, "string::chr requiere 1 int (código Unicode)")
+        try:
+            return chr(args[0])
+        except (ValueError, OverflowError) as e:
+            raise _err(line, col, f"string::chr: {e}")
+    exports["chr"] = _task(AyceNativeTask("chr", _chr))
 
     def _upper(interp, args, line, col):
         if len(args) != 1 or not isinstance(args[0], str):
@@ -646,6 +819,167 @@ def _build_string_batch():
         except ValueError:
             raise _err(line, col, f"string::to_float: '{args[0]}' no es un float válido")
     exports["to_float"] = _task(AyceNativeTask("to_float", _to_float))
+
+    ## ── Ampliación v0.6.0: constantes de caracteres ──
+    exports["ascii_lowercase"] = _const("abcdefghijklmnopqrstuvwxyz")
+    exports["ascii_uppercase"] = _const("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    exports["ascii_letters"] = _const("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    exports["digits"] = _const("0123456789")
+    exports["octdigits"] = _const("01234567")
+    exports["hexdigits"] = _const("0123456789abcdefABCDEF")
+    exports["punctuation"] = _const("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+    exports["whitespace"] = _const(" \t\n\r\x0b\x0c")
+    exports["printable"] = _const("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c")
+
+    ## ── Ampliación v0.6.0: más operaciones ──
+
+    def _capitalize(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "string::capitalize requiere 1 string")
+        return args[0].capitalize()
+    exports["capitalize"] = _task(AyceNativeTask("capitalize", _capitalize))
+
+    def _title(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "string::title requiere 1 string")
+        return args[0].title()
+    exports["title"] = _task(AyceNativeTask("title", _title))
+
+    def _count_str(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], str):
+            raise _err(line, col, "string::count requiere (string, string sub)")
+        if args[1] == "":
+            raise _err(line, col, "string::count: sub vacío")
+        return args[0].count(args[1])
+    exports["count"] = _task(AyceNativeTask("count", _count_str))
+
+    def _center_str(interp, args, line, col):
+        if len(args) < 2 or len(args) > 3 or not isinstance(args[0], str) or not isinstance(args[1], int):
+            raise _err(line, col, "string::center requiere (string, int ancho, [string relleno])")
+        fill = args[2] if len(args) == 3 else " "
+        if not isinstance(fill, str) or len(fill) != 1:
+            raise _err(line, col, "string::center: relleno debe ser 1 carácter")
+        return args[0].center(args[1], fill)
+    exports["center"] = _task(AyceNativeTask("center", _center_str))
+
+    def _swapcase(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "string::swapcase requiere 1 string")
+        return args[0].swapcase()
+    exports["swapcase"] = _task(AyceNativeTask("swapcase", _swapcase))
+
+    def _zfill(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], int):
+            raise _err(line, col, "string::zfill requiere (string, int ancho)")
+        return args[0].zfill(args[1])
+    exports["zfill"] = _task(AyceNativeTask("zfill", _zfill))
+
+    def _ljust(interp, args, line, col):
+        if len(args) < 2 or len(args) > 3 or not isinstance(args[0], str) or not isinstance(args[1], int):
+            raise _err(line, col, "string::ljust requiere (string, int ancho, [string relleno])")
+        fill = args[2] if len(args) == 3 else " "
+        return args[0].ljust(args[1], fill)
+    exports["ljust"] = _task(AyceNativeTask("ljust", _ljust))
+
+    def _rjust(interp, args, line, col):
+        if len(args) < 2 or len(args) > 3 or not isinstance(args[0], str) or not isinstance(args[1], int):
+            raise _err(line, col, "string::rjust requiere (string, int ancho, [string relleno])")
+        fill = args[2] if len(args) == 3 else " "
+        return args[0].rjust(args[1], fill)
+    exports["rjust"] = _task(AyceNativeTask("rjust", _rjust))
+
+    ## ── Ampliación v0.6.0: string.Template ──
+    ## Template(patrón) devuelve un objeto-dict {"pattern": ...}.
+    ## substitute(tpl, vars) reemplaza $nombre y ${nombre}; lanza error si falta.
+    ## safe_substitute(tpl, vars) deja intactas las que faltan.
+
+    def _Template(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "string::template requiere 1 string patrón")
+        from .interpreter import AyceDict, DictType
+        return AyceDict([("pattern", args[0]), ("kind", "string.Template")],
+                        DictType(flexible=True))
+    exports["template"] = _task(AyceNativeTask("template", _Template))
+
+    def _substitute_from(tpl, vars_d, strict):
+        from .interpreter import AyceDict
+        pattern = None
+        if isinstance(tpl, AyceDict):
+            pattern = tpl.pairs.get("pattern")
+        elif isinstance(tpl, dict):
+            pattern = tpl.get("pattern")
+        if not isinstance(pattern, str):
+            raise ValueError("substitute requiere un objeto de string::template")
+        mapping = {}
+        if isinstance(vars_d, AyceDict):
+            mapping = {str(k): v for k, v in vars_d.pairs.items()}
+        elif isinstance(vars_d, dict):
+            mapping = {str(k): v for k, v in vars_d.items()}
+
+        import re as _re_mod
+        out = []
+        i = 0
+        n = len(pattern)
+        while i < n:
+            c = pattern[i]
+            if c == "$":
+                if i + 1 < n and pattern[i + 1] == "$":
+                    out.append("$")
+                    i += 2
+                    continue
+                # ${nombre}
+                if i + 1 < n and pattern[i + 1] == "{":
+                    j = pattern.find("}", i + 2)
+                    if j == -1:
+                        raise ValueError("Template: falta '}' en $" + pattern[i + 1:i + 20])
+                    name = pattern[i + 2:j]
+                    if name in mapping:
+                        out.append(str(mapping[name]))
+                    elif strict:
+                        raise KeyError(name)
+                    else:
+                        out.append(pattern[i:j + 1])
+                    i = j + 1
+                    continue
+                # $nombre
+                j = i + 1
+                while j < n and (pattern[j].isalnum() or pattern[j] == "_"):
+                    j += 1
+                name = pattern[i + 1:j]
+                if name:
+                    if name in mapping:
+                        out.append(str(mapping[name]))
+                    elif strict:
+                        raise KeyError(name)
+                    else:
+                        out.append(pattern[i:j])
+                else:
+                    out.append("$")
+                i = j if name else i + 1
+                continue
+            out.append(c)
+            i += 1
+        return "".join(out)
+
+    def _substitute(interp, args, line, col):
+        if len(args) != 2:
+            raise _err(line, col, "string::substitute requiere (Template, dict)")
+        try:
+            return _substitute_from(args[0], args[1], strict=True)
+        except KeyError as e:
+            raise _err(line, col, f"string::substitute: clave faltante: {e.args[0]}")
+        except ValueError as e:
+            raise _err(line, col, str(e))
+    exports["substitute"] = _task(AyceNativeTask("substitute", _substitute))
+
+    def _safe_substitute(interp, args, line, col):
+        if len(args) != 2:
+            raise _err(line, col, "string::safe_substitute requiere (Template, dict)")
+        try:
+            return _substitute_from(args[0], args[1], strict=False)
+        except ValueError as e:
+            raise _err(line, col, str(e))
+    exports["safe_substitute"] = _task(AyceNativeTask("safe_substitute", _safe_substitute))
 
     return AyceNativeBatch("string", exports)
 
@@ -960,6 +1294,106 @@ def _build_io_batch():
                 print(f"'{raw}' no es un float válido. Intentá de nuevo.")
     exports["read_float"] = _task(AyceNativeTask("read_float", _read_float))
 
+    ## ── Ampliación v0.6.0 ──
+
+    def _read_lines(interp, args, line, col):
+        from .interpreter import AyceList, ListType, PrimitiveType
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "io::read_lines requiere 1 string (ruta)")
+        try:
+            with open(args[0], "r", encoding="utf-8-sig") as f:
+                lines = [ln.rstrip("\n").rstrip("\r") for ln in f]
+        except FileNotFoundError:
+            raise _err(line, col, f"io::read_lines: archivo no encontrado: {args[0]}")
+        except IOError as e:
+            raise _err(line, col, f"io::read_lines: error de lectura: {e}")
+        return AyceList(lines, ListType(elem=PrimitiveType(name="string"), flexible=True))
+    exports["read_lines"] = _task(AyceNativeTask("read_lines", _read_lines))
+
+    def _read_bytes(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "io::read_bytes requiere 1 string (ruta)")
+        try:
+            with open(args[0], "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            raise _err(line, col, f"io::read_bytes: archivo no encontrado: {args[0]}")
+        except IOError as e:
+            raise _err(line, col, f"io::read_bytes: error de lectura: {e}")
+    exports["read_bytes"] = _task(AyceNativeTask("read_bytes", _read_bytes))
+
+    def _write_bytes(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], str):
+            raise _err(line, col, "io::write_bytes requiere (ruta, bytes|string)")
+        data = args[1]
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        elif not isinstance(data, bytes):
+            raise _err(line, col, "io::write_bytes: el contenido debe ser bytes o string")
+        try:
+            with open(args[0], "wb") as f:
+                f.write(data)
+        except IOError as e:
+            raise _err(line, col, f"io::write_bytes: error de escritura: {e}")
+        return None
+    exports["write_bytes"] = _task(AyceNativeTask("write_bytes", _write_bytes))
+
+    def _write_lines(interp, args, line, col):
+        from .interpreter import AyceList
+        if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], AyceList):
+            raise _err(line, col, "io::write_lines requiere (ruta, lista de strings)")
+        lines = []
+        for x in args[1].elements:
+            if not isinstance(x, str):
+                raise _err(line, col, "io::write_lines: la lista debe contener strings")
+            lines.append(x)
+        try:
+            with open(args[0], "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + ("\n" if lines else ""))
+        except IOError as e:
+            raise _err(line, col, f"io::write_lines: error de escritura: {e}")
+        return None
+    exports["write_lines"] = _task(AyceNativeTask("write_lines", _write_lines))
+
+    def _file_size(interp, args, line, col):
+        import os
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "io::file_size requiere 1 string (ruta)")
+        if not os.path.isfile(args[0]):
+            raise _err(line, col, f"io::file_size: no es un archivo: {args[0]}")
+        return os.path.getsize(args[0])
+    exports["file_size"] = _task(AyceNativeTask("file_size", _file_size))
+
+    def _delete_file(interp, args, line, col):
+        import os
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "io::delete_file requiere 1 string (ruta)")
+        if not os.path.exists(args[0]):
+            raise _err(line, col, f"io::delete_file: archivo no encontrado: {args[0]}")
+        os.remove(args[0])
+        return None
+    exports["delete_file"] = _task(AyceNativeTask("delete_file", _delete_file))
+
+    def _rename_file(interp, args, line, col):
+        import os
+        if len(args) != 2 or not (isinstance(args[0], str) and isinstance(args[1], str)):
+            raise _err(line, col, "io::rename_file requiere (viejo, nuevo)")
+        if not os.path.exists(args[0]):
+            raise _err(line, col, f"io::rename_file: archivo no encontrado: {args[0]}")
+        os.rename(args[0], args[1])
+        return None
+    exports["rename_file"] = _task(AyceNativeTask("rename_file", _rename_file))
+
+    def _copy_file(interp, args, line, col):
+        import shutil
+        if len(args) != 2 or not (isinstance(args[0], str) and isinstance(args[1], str)):
+            raise _err(line, col, "io::copy_file requiere (origen, destino)")
+        if not os.path.isfile(args[0]):
+            raise _err(line, col, f"io::copy_file: archivo no encontrado: {args[0]}")
+        shutil.copyfile(args[0], args[1])
+        return None
+    exports["copy_file"] = _task(AyceNativeTask("copy_file", _copy_file))
+
     return AyceNativeBatch("io", exports)
 
 
@@ -994,6 +1428,74 @@ def _build_time_batch():
         import datetime
         return datetime.datetime.now().isoformat()
     exports["timestamp"] = _task(AyceNativeTask("timestamp", _timestamp))
+
+    ## ── Ampliación v0.6.0 ──
+
+    def _strftime(interp, args, line, col):
+        import datetime as _dt
+        if len(args) < 1 or len(args) > 2 or not isinstance(args[0], str):
+            raise _err(line, col, "time::strftime requiere (formato, [timestamp])")
+        if len(args) == 2:
+            if not isinstance(args[1], (int, float)):
+                raise _err(line, col, "time::strftime: timestamp debe ser numérico")
+            d = _dt.datetime.fromtimestamp(args[1])
+        else:
+            d = _dt.datetime.now()
+        return d.strftime(args[0])
+    exports["strftime"] = _task(AyceNativeTask("strftime", _strftime))
+
+    def _strptime(interp, args, line, col):
+        import datetime as _dt
+        if len(args) != 2 or not (isinstance(args[0], str) and isinstance(args[1], str)):
+            raise _err(line, col, "time::strptime requiere (string texto, string formato)")
+        try:
+            d = _dt.datetime.strptime(args[0], args[1])
+        except ValueError as e:
+            raise _err(line, col, f"time::strptime: {e}")
+        from .interpreter import AyceDict, DictType
+        return AyceDict([
+            ("year", d.year), ("month", d.month), ("day", d.day),
+            ("hour", d.hour), ("minute", d.minute), ("second", d.second),
+            ("weekday", d.weekday()), ("timestamp", d.timestamp()),
+            ("iso", d.isoformat()),
+        ], DictType(flexible=True))
+    exports["strptime"] = _task(AyceNativeTask("strptime", _strptime))
+
+    def _localtime(interp, args, line, col):
+        import datetime as _dt
+        if len(args) > 1:
+            raise _err(line, col, "time::localtime requiere como máximo 1 timestamp")
+        if len(args) == 1:
+            if not isinstance(args[0], (int, float)):
+                raise _err(line, col, "time::localtime: timestamp debe ser numérico")
+            d = _dt.datetime.fromtimestamp(args[0])
+        else:
+            d = _dt.datetime.now()
+        from .interpreter import AyceDict, DictType
+        return AyceDict([
+            ("year", d.year), ("month", d.month), ("day", d.day),
+            ("hour", d.hour), ("minute", d.minute), ("second", d.second),
+            ("weekday", d.weekday()), ("iso", d.isoformat()),
+        ], DictType(flexible=True))
+    exports["localtime"] = _task(AyceNativeTask("localtime", _localtime))
+
+    def _gmtime(interp, args, line, col):
+        import datetime as _dt
+        if len(args) > 1:
+            raise _err(line, col, "time::gmtime requiere como máximo 1 timestamp")
+        if len(args) == 1:
+            if not isinstance(args[0], (int, float)):
+                raise _err(line, col, "time::gmtime: timestamp debe ser numérico")
+            d = _dt.datetime.utcfromtimestamp(args[0])
+        else:
+            d = _dt.datetime.utcnow()
+        from .interpreter import AyceDict, DictType
+        return AyceDict([
+            ("year", d.year), ("month", d.month), ("day", d.day),
+            ("hour", d.hour), ("minute", d.minute), ("second", d.second),
+            ("weekday", d.weekday()), ("iso", d.isoformat()),
+        ], DictType(flexible=True))
+    exports["gmtime"] = _task(AyceNativeTask("gmtime", _gmtime))
 
     return AyceNativeBatch("time", exports)
 
@@ -1053,6 +1555,99 @@ def _build_os_batch():
         return _os.name
     exports["name"] = _task(AyceNativeTask("name", _name))
 
+    ## ── Ampliación v0.6.0 ──
+
+    def _rename(interp, args, line, col):
+        if len(args) != 2 or not (isinstance(args[0], str) and isinstance(args[1], str)):
+            raise _err(line, col, "os::rename requiere (viejo, nuevo)")
+        if not _os.path.exists(args[0]):
+            raise _err(line, col, f"os::rename: no existe: {args[0]}")
+        try:
+            _os.rename(args[0], args[1])
+        except OSError as e:
+            raise _err(line, col, f"os::rename: {e}")
+        return None
+    exports["rename"] = _task(AyceNativeTask("rename", _rename))
+
+    def _remove(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "os::remove requiere 1 string (ruta)")
+        if not _os.path.exists(args[0]):
+            raise _err(line, col, f"os::remove: no existe: {args[0]}")
+        try:
+            _os.remove(args[0])
+        except OSError as e:
+            raise _err(line, col, f"os::remove: {e}")
+        return None
+    exports["remove"] = _task(AyceNativeTask("remove", _remove))
+
+    def _chmod(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], int):
+            raise _err(line, col, "os::chmod requiere (ruta, modo int)")
+        if not _os.path.exists(args[0]):
+            raise _err(line, col, f"os::chmod: no existe: {args[0]}")
+        try:
+            _os.chmod(args[0], args[1])
+        except OSError as e:
+            raise _err(line, col, f"os::chmod: {e}")
+        return None
+    exports["chmod"] = _task(AyceNativeTask("chmod", _chmod))
+
+    def _rmdir(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "os::rmdir requiere 1 string (ruta)")
+        if not _os.path.isdir(args[0]):
+            raise _err(line, col, f"os::rmdir: no es un directorio: {args[0]}")
+        try:
+            _os.rmdir(args[0])
+        except OSError as e:
+            raise _err(line, col, f"os::rmdir: {e} (¿no está vacío?)")
+        return None
+    exports["rmdir"] = _task(AyceNativeTask("rmdir", _rmdir))
+
+    def _sep(interp, args, line, col):
+        if args:
+            raise _err(line, col, "os::sep no toma argumentos")
+        return _os.sep
+    exports["sep"] = _task(AyceNativeTask("sep", _sep))
+
+    def _getenv(interp, args, line, col):
+        if len(args) < 1 or len(args) > 2 or not isinstance(args[0], str):
+            raise _err(line, col, "os::getenv requiere (nombre, [default])")
+        default = args[1] if len(args) == 2 else ""
+        if not isinstance(default, str):
+            raise _err(line, col, "os::getenv: default debe ser string")
+        return _os.environ.get(args[0], default)
+    exports["getenv"] = _task(AyceNativeTask("getenv", _getenv))
+
+    def _getpid(interp, args, line, col):
+        if args:
+            raise _err(line, col, "os::getpid no toma argumentos")
+        return _os.getpid()
+    exports["getpid"] = _task(AyceNativeTask("getpid", _getpid))
+
+    # v0.6.0: urandom — la única frontera de entropía del SO, igual que
+    # CPython: random.py importa `from os import urandom as _urandom`.
+    def _urandom(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], int) or isinstance(args[0], bool):
+            raise _err(line, col, "os::urandom requiere 1 int (cantidad de bytes)")
+        if args[0] < 0:
+            raise _err(line, col, "os::urandom: n no puede ser negativo")
+        return _os.urandom(args[0])
+    exports["urandom"] = _task(AyceNativeTask("urandom", _urandom))
+
+    def _isfile(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "os::isfile requiere 1 string (ruta)")
+        return _os.path.isfile(args[0])
+    exports["isfile"] = _task(AyceNativeTask("isfile", _isfile))
+
+    def _isdir(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "os::isdir requiere 1 string (ruta)")
+        return _os.path.isdir(args[0])
+    exports["isdir"] = _task(AyceNativeTask("isdir", _isdir))
+
     return AyceNativeBatch("os", exports)
 
 
@@ -1098,6 +1693,56 @@ def _build_sys_batch():
         return _sys.platform
     exports["platform"] = _task(AyceNativeTask("platform", _platform))
 
+    ## ── Ampliación v0.6.0: streams de salida ──
+
+    def _stdout(interp, args, line, col):
+        if len(args) < 1:
+            raise _err(line, col, "sys::stdout requiere al menos 1 argumento")
+        parts = []
+        for a in args:
+            if isinstance(a, str):
+                parts.append(a)
+            else:
+                parts.append(interp._format_value(_to_ayce(a)))
+        _sys.stdout.write(" ".join(parts))
+        _sys.stdout.flush()
+        return None
+    exports["stdout"] = _task(AyceNativeTask("stdout", _stdout))
+
+    def _stderr(interp, args, line, col):
+        if len(args) < 1:
+            raise _err(line, col, "sys::stderr requiere al menos 1 argumento")
+        parts = []
+        for a in args:
+            if isinstance(a, str):
+                parts.append(a)
+            else:
+                parts.append(interp._format_value(_to_ayce(a)))
+        _sys.stderr.write(" ".join(parts) + "\n")
+        _sys.stderr.flush()
+        return None
+    exports["stderr"] = _task(AyceNativeTask("stderr", _stderr))
+
+    def _stderr_raw(interp, args, line, col):
+        if len(args) < 1:
+            raise _err(line, col, "sys::stderr_raw requiere al menos 1 argumento")
+        parts = []
+        for a in args:
+            if isinstance(a, str):
+                parts.append(a)
+            else:
+                parts.append(interp._format_value(_to_ayce(a)))
+        _sys.stderr.write(" ".join(parts))
+        _sys.stderr.flush()
+        return None
+    exports["stderr_raw"] = _task(AyceNativeTask("stderr_raw", _stderr_raw))
+
+    def _stdin_line(interp, args, line, col):
+        if args:
+            raise _err(line, col, "sys::stdin_line no toma argumentos")
+        return _sys.stdin.readline().rstrip("\n")
+    exports["stdin_line"] = _task(AyceNativeTask("stdin_line", _stdin_line))
+
     return AyceNativeBatch("sys", exports)
 
 
@@ -1114,7 +1759,8 @@ def _build_json_batch():
             result = _json.loads(args[0])
             return _to_ayce(result)
         except _json.JSONDecodeError as e:
-            raise _err(line, col, f"json::parse: JSON inválido: {e}")
+            raise _err(line, col,
+                f"JSONDecodeError: {e.msg} (línea {e.lineno}, columna {e.colno})")
     exports["parse"] = _task(AyceNativeTask("parse", _parse))
 
     def _stringify(interp, args, line, col):
@@ -1137,6 +1783,54 @@ def _build_json_batch():
             raise _err(line, col, f"json::stringify_compact: {e}")
     exports["stringify_compact"] = _task(AyceNativeTask("stringify_compact", _stringify_compact))
 
+    ## ── Ampliación v0.6.0: archivos y validación ──
+    ## Nota: los errores de JSON se lanzan con mensaje "JSONDecodeError: ..."
+    ## y código 13, para poder filtrarlos con rescue (err) comprobando
+    ## err::mensaje::starts_with("JSONDecodeError").
+
+    def _parse_file(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "json::parse_file requiere 1 string (ruta)")
+        try:
+            with open(args[0], "r", encoding="utf-8-sig") as f:
+                text = f.read()
+        except FileNotFoundError:
+            raise _err(line, col, f"json::parse_file: archivo no encontrado: {args[0]}")
+        except IOError as e:
+            raise _err(line, col, f"json::parse_file: error de lectura: {e}")
+        try:
+            return _to_ayce(_json.loads(text))
+        except _json.JSONDecodeError as e:
+            raise _err(line, col,
+                f"JSONDecodeError: {e.msg} (línea {e.lineno}, columna {e.colno})")
+    exports["parse_file"] = _task(AyceNativeTask("parse_file", _parse_file))
+
+    def _write_file(interp, args, line, col):
+        if len(args) != 2 or not isinstance(args[0], str):
+            raise _err(line, col, "json::write_file requiere (ruta, valor)")
+        try:
+            py_value = _from_ayce(args[1])
+            text = _json.dumps(py_value, ensure_ascii=False, indent=2)
+        except (TypeError, ValueError) as e:
+            raise _err(line, col, f"json::write_file: {e}")
+        try:
+            with open(args[0], "w", encoding="utf-8") as f:
+                f.write(text)
+        except IOError as e:
+            raise _err(line, col, f"json::write_file: error de escritura: {e}")
+        return None
+    exports["write_file"] = _task(AyceNativeTask("write_file", _write_file))
+
+    def _valid(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], str):
+            raise _err(line, col, "json::valid requiere 1 string")
+        try:
+            _json.loads(args[0])
+            return True
+        except _json.JSONDecodeError:
+            return False
+    exports["valid"] = _task(AyceNativeTask("valid", _valid))
+
     return AyceNativeBatch("json", exports)
 
 
@@ -1144,17 +1838,149 @@ def _build_json_batch():
 #  Registro de todos los batches built-in
 # ──────────────────────────────────────────────────────────────────────
 
+# v0.6.0: batch bytes — constructores a nivel del lenguaje.
+# `bytes_from_ints` es el equivalente de Python bytes([1, 2, 3]): sin esto
+# no se puede construir bytes arbitrarios desde ayce (hashes, base64).
+def _build_bytes_batch():
+    from .interpreter import AyceList
+    exports = {}
+
+    def _from_ints(interp, args, line, col):
+        if len(args) != 1 or not isinstance(args[0], AyceList):
+            raise _err(line, col, "bytes::from_ints requiere 1 lista de int")
+        out = bytearray()
+        for i, v in enumerate(args[0].elements):
+            if not isinstance(v, int) or isinstance(v, bool) or not (0 <= v <= 255):
+                raise _err(line, col, f"bytes::from_ints: elemento {i} debe ser "
+                           f"int en 0..255, se recibió {v!r}")
+            out.append(v)
+        return bytes(out)
+    exports["from_ints"] = _task(AyceNativeTask("from_ints", _from_ints))
+
+    def _to_ints(interp, args, line, col):
+        from .ast_nodes import ListType, PrimitiveType
+        from .interpreter import AyceList as AL
+        if len(args) != 1 or not isinstance(args[0], bytes):
+            raise _err(line, col, "bytes::to_ints requiere 1 bytes")
+        return AL(list(args[0]),
+                  ListType(elem=PrimitiveType(name="int")))
+    exports["to_ints"] = _task(AyceNativeTask("to_ints", _to_ints))
+
+    return AyceNativeBatch("bytes", exports)
+
+
+# v0.6.0: builtins GLOBALES del lenguaje — la superficie de contacto con
+# la máquina, al nivel de `ord`/`chr`/`len` en CPython (sin `require`:
+# están siempre presentes, como los builtins de Python).
+# Con esto los módulos algorítmicos de la stdlib (random, hashlib, base64,
+# json, hmac...) quedan en ayce puro: sólo llaman a estos builtins, igual
+# que random.py en CPython es Python puro con una única llamada `_urandom`.
+def _build_global_builtins():
+    exports = {}
+
+    def _ord(interp, args, line, col):
+        if len(args) == 1 and isinstance(args[0], str) and len(args[0]) == 1:
+            return ord(args[0])
+        if (len(args) == 2 and isinstance(args[0], str) and len(args[0]) > 0
+                and isinstance(args[1], int) and not isinstance(args[1], bool)):
+            i = args[1]
+            if i < 0 or i >= len(args[0]):
+                raise _err(line, col, f"ord: índice {i} fuera de rango (longitud {len(args[0])})")
+            return ord(args[0][i])
+        raise _err(line, col, "ord requiere (char) o (string, índice)")
+    exports["ord"] = AyceNativeTask("ord", _ord)
+
+    def _chr(interp, args, line, col):
+        if len(args) == 1 and isinstance(args[0], int) and not isinstance(args[0], bool):
+            n = args[0]
+            if n < 0 or n > 0x10FFFF:
+                raise _err(line, col, "chr: código fuera de rango (0..0x10FFFF)")
+            return chr(n)
+        raise _err(line, col, "chr requiere 1 int")
+    exports["chr"] = AyceNativeTask("chr", _chr)
+
+    def _urandom(interp, args, line, col):
+        if len(args) == 1 and isinstance(args[0], int) and not isinstance(args[0], bool):
+            if args[0] < 0:
+                raise _err(line, col, "urandom: n no puede ser negativo")
+            return _os.urandom(args[0])
+        raise _err(line, col, "urandom requiere 1 int (cantidad de bytes)")
+    exports["urandom"] = AyceNativeTask("urandom", _urandom)
+
+    def _from_ints(interp, args, line, col):
+        from .interpreter import AyceList
+        if len(args) != 1 or not isinstance(args[0], AyceList):
+            raise _err(line, col, "bytes_from_ints requiere 1 lista de int")
+        out = bytearray()
+        for i, v in enumerate(args[0].elements):
+            if not isinstance(v, int) or isinstance(v, bool) or not (0 <= v <= 255):
+                raise _err(line, col, f"bytes_from_ints: elemento {i} debe ser "
+                           f"int en 0..255, se recibió {v!r}")
+            out.append(v)
+        return bytes(out)
+    exports["bytes_from_ints"] = AyceNativeTask("bytes_from_ints", _from_ints)
+
+    def _to_ints(interp, args, line, col):
+        from .ast_nodes import ListType, PrimitiveType
+        from .interpreter import AyceList as AL
+        if len(args) != 1 or not isinstance(args[0], bytes):
+            raise _err(line, col, "bytes_to_ints requiere 1 bytes")
+        return AL(list(args[0]), ListType(elem=PrimitiveType(name="int")))
+    exports["bytes_to_ints"] = AyceNativeTask("bytes_to_ints", _to_ints)
+
+    return exports
+
+
+def get_global_builtins():
+    return _build_global_builtins()
+
+
 def get_builtin_batches():
     """Devuelve un dict nombre → AyceNativeBatch con todos los batches built-in."""
-    return {
+    batches = {
         "math":   _build_math_batch(),
         "random": _build_random_batch(),
         "string": _build_string_batch(),
         "list":   _build_list_batch(),
         "dict":   _build_dict_batch(),
+        "bytes":  _build_bytes_batch(),
         "io":     _build_io_batch(),
         "time":   _build_time_batch(),
         "os":     _build_os_batch(),
         "sys":    _build_sys_batch(),
         "json":   _build_json_batch(),
     }
+    # v0.6.0: batches stdlib extra (copy, re, datetime, hashlib, etc.)
+    try:
+        from .batches_extra import get_extra_batches
+        batches.update(get_extra_batches())
+    except ImportError as e:
+        # Si por algún motivo batches_extra no está, no rompe lo existente.
+        import sys as _s
+        print(f"[ayce] advertencia: no se pudo cargar batches_extra: {e}", file=_s.stderr)
+
+    # v0.6.0: capa de primitivas nativas — un único batch `primitives` que
+    # expone TODAS las tareas y constantes nativas con el prefijo del batch
+    # (primitives::math_sqrt, primitives::random_gauss, primitives::json_parse, ...).
+    # Es el equivalente al C de CPython: las librerías stdlib escritas en ayce
+    # (stdlib/*.ayce) se apoyan en estas primitivas, igual que random.py se
+    # apoya en el módulo C _random. Lo que el usuario ve con `require random`
+    # es stdlib/random.ayce, un archivo legible escrito en ayce.
+    prim_exports = {}
+    for bname, b in batches.items():
+        for ename, entry in b.exports.items():
+            prim_exports[f"{bname}_{ename}"] = entry
+    batches["primitives"] = AyceNativeBatch("primitives", prim_exports)
+
+    # v0.6.0: alias privados `_nombre` para cada batch nativo. Son el
+    # equivalente exacto de los módulos C de CPython (`posix`, `_socket`,
+    # `_sqlite3`, `zlib`, ...): los módulos stdlib/*.ayce que tocan la
+    # máquina hacen `require _os as posix`, igual que os.py de CPython
+    # hace `from posix import *`. La lógica real del módulo vive en ayce;
+    # el batch privado sólo aporta las syscalls que el lenguaje no puede
+    # hacer por sí solo. Los nombres con `_` quedan reservados para la
+    # stdlib (un require `_os` nunca colisiona con stdlib/os.ayce).
+    for bname, b in list(batches.items()):
+        if not bname.startswith("_"):
+            batches[f"_{bname}"] = b
+    return batches

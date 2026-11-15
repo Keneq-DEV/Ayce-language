@@ -1,0 +1,52 @@
+## test_numbers.ayce — pruebas de numbers.ayce
+require numbers as N
+
+say("=== numbers.ayce ===")
+
+## gcd
+say("gcd(12, 18) =", N::gcd(12, 18))        ## 6
+say("gcd(0, 7)  =", N::gcd(0, 7))           ## 7
+say("gcd(-12, 8) =", N::gcd(-12, 8))        ## 4
+
+## lcm
+say("lcm(4, 6)  =", N::lcm(4, 6))           ## 12
+say("lcm(0, 5)  =", N::lcm(0, 5))           ## 0
+
+## is_prime
+say("is_prime(2)  =", N::is_prime(2))        ## True
+say("is_prime(1)  =", N::is_prime(1))        ## False
+say("is_prime(17) =", N::is_prime(17))       ## True
+say("is_prime(15) =", N::is_prime(15))       ## False
+
+## primes_upto
+say("primes_upto(20) =", N::primes_upto(20)) ## [2,3,5,7,11,13,17,19]
+say("primes_upto(1)  =", N::primes_upto(1))  ## []
+
+## fibonacci
+say("fibonacci(0)  =", N::fibonacci(0))     ## 0
+say("fibonacci(1)  =", N::fibonacci(1))     ## 1
+say("fibonacci(10) =", N::fibonacci(10))    ## 55
+say("fibonacci(20) =", N::fibonacci(20))    ## 6765
+
+## factorial_iter
+say("factorial_iter(0) =", N::factorial_iter(0))   ## 1
+say("factorial_iter(5) =", N::factorial_iter(5))   ## 120
+say("factorial_iter(10) =", N::factorial_iter(10)) ## 3628800
+
+## sum_range
+say("sum_range(1, 10) =", N::sum_range(1, 10))    ## 55
+say("sum_range(5, 5)  =", N::sum_range(5, 5))     ## 5
+
+## digit_sum
+say("digit_sum(1234) =", N::digit_sum(1234))      ## 10
+say("digit_sum(-99)  =", N::digit_sum(-99))       ## 18
+
+## int_sqrt
+say("int_sqrt(15) =", N::int_sqrt(15))            ## 3
+say("int_sqrt(16) =", N::int_sqrt(16))            ## 4
+say("int_sqrt(1000000) =", N::int_sqrt(1000000))  ## 1000
+
+## sign
+say("sign(-5) =", N::sign(-5))                    ## -1
+say("sign(0)  =", N::sign(0))                     ## 0
+say("sign(7)  =", N::sign(7))                     ## 1

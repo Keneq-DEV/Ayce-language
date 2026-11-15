@@ -1,0 +1,284 @@
+## types.ayce — verificación de tipos EN AYCE PURO (v0.6.0).
+## Sin primitivas: cada predicado es una task con sobrecargas por tipo.
+## El despacho de sobrecargas del lenguaje es estricto (bool no es int),
+## así que el orden de las firmas hace el trabajo — el equivalente de
+## isinstance() con tipos exactos en CPython. is_none compara con el
+## literal none, igual que `x is None` de CPython.
+
+## ── is_int: True sólo para int exacto (un bool NO es int) ──
+task is_int(bool x) = bool ;
+{
+    return False
+}
+task is_int(float x) = bool ;
+{
+    return False
+}
+task is_int(string x) = bool ;
+{
+    return False
+}
+task is_int(list x) = bool ;
+{
+    return False
+}
+task is_int(dict x) = bool ;
+{
+    return False
+}
+task is_int(tuple x) = bool ;
+{
+    return False
+}
+task is_int(set x) = bool ;
+{
+    return False
+}
+task is_int(int x) = bool ;
+{
+    return True
+}
+
+## ── is_float ──
+task is_float(int x) = bool ;
+{
+    return False
+}
+task is_float(bool x) = bool ;
+{
+    return False
+}
+task is_float(string x) = bool ;
+{
+    return False
+}
+task is_float(list x) = bool ;
+{
+    return False
+}
+task is_float(dict x) = bool ;
+{
+    return False
+}
+task is_float(tuple x) = bool ;
+{
+    return False
+}
+task is_float(set x) = bool ;
+{
+    return False
+}
+task is_float(float x) = bool ;
+{
+    return True
+}
+
+## ── is_str ──
+task is_str(int x) = bool ;
+{
+    return False
+}
+task is_str(bool x) = bool ;
+{
+    return False
+}
+task is_str(float x) = bool ;
+{
+    return False
+}
+task is_str(list x) = bool ;
+{
+    return False
+}
+task is_str(dict x) = bool ;
+{
+    return False
+}
+task is_str(tuple x) = bool ;
+{
+    return False
+}
+task is_str(set x) = bool ;
+{
+    return False
+}
+task is_str(string x) = bool ;
+{
+    return True
+}
+
+## ── is_bool (int NO es bool) ──
+task is_bool(int x) = bool ;
+{
+    return False
+}
+task is_bool(float x) = bool ;
+{
+    return False
+}
+task is_bool(string x) = bool ;
+{
+    return False
+}
+task is_bool(list x) = bool ;
+{
+    return False
+}
+task is_bool(dict x) = bool ;
+{
+    return False
+}
+task is_bool(tuple x) = bool ;
+{
+    return False
+}
+task is_bool(set x) = bool ;
+{
+    return False
+}
+task is_bool(bool x) = bool ;
+{
+    return True
+}
+
+## ── is_list ──
+task is_list(int x) = bool ;
+{
+    return False
+}
+task is_list(bool x) = bool ;
+{
+    return False
+}
+task is_list(float x) = bool ;
+{
+    return False
+}
+task is_list(string x) = bool ;
+{
+    return False
+}
+task is_list(dict x) = bool ;
+{
+    return False
+}
+task is_list(tuple x) = bool ;
+{
+    return False
+}
+task is_list(set x) = bool ;
+{
+    return False
+}
+task is_list(list x) = bool ;
+{
+    return True
+}
+
+## ── is_dict ──
+task is_dict(int x) = bool ;
+{
+    return False
+}
+task is_dict(bool x) = bool ;
+{
+    return False
+}
+task is_dict(float x) = bool ;
+{
+    return False
+}
+task is_dict(string x) = bool ;
+{
+    return False
+}
+task is_dict(list x) = bool ;
+{
+    return False
+}
+task is_dict(tuple x) = bool ;
+{
+    return False
+}
+task is_dict(set x) = bool ;
+{
+    return False
+}
+task is_dict(dict x) = bool ;
+{
+    return True
+}
+
+## ── is_set ──
+task is_set(int x) = bool ;
+{
+    return False
+}
+task is_set(bool x) = bool ;
+{
+    return False
+}
+task is_set(float x) = bool ;
+{
+    return False
+}
+task is_set(string x) = bool ;
+{
+    return False
+}
+task is_set(list x) = bool ;
+{
+    return False
+}
+task is_set(dict x) = bool ;
+{
+    return False
+}
+task is_set(tuple x) = bool ;
+{
+    return False
+}
+task is_set(set x) = bool ;
+{
+    return True
+}
+
+## ── is_tuple ──
+task is_tuple(int x) = bool ;
+{
+    return False
+}
+task is_tuple(bool x) = bool ;
+{
+    return False
+}
+task is_tuple(float x) = bool ;
+{
+    return False
+}
+task is_tuple(string x) = bool ;
+{
+    return False
+}
+task is_tuple(list x) = bool ;
+{
+    return False
+}
+task is_tuple(dict x) = bool ;
+{
+    return False
+}
+task is_tuple(set x) = bool ;
+{
+    return False
+}
+task is_tuple(tuple x) = bool ;
+{
+    return True
+}
+
+## ── is_none — como `x is None` de CPython ──
+task is_none(stdlib::Cualquiera arg) = bool ;
+{
+    return arg == none
+}

@@ -1,0 +1,45 @@
+## t_decimal.ayce — decimal.ayce puro contra str(Decimal) de CPython
+require decimal as D
+
+say("parse 1.10:", D::decimal("1.10"))            ## 1.10
+say("parse 0012.30:", D::decimal("0012.30"))      ## 12.30
+say("parse 100:", D::decimal(100))                ## 100
+say("parse 0.5:", D::decimal("0.5"))              ## 0.5
+say("parse -7:", D::decimal(-7))                  ## -7
+say("parse float:", D::decimal(0.5))              ## 0.5
+say("add 1.5+2.25:", D::add("1.5", "2.25"))       ## 3.75
+say("add 1.10+0.01:", D::add("1.10", "0.01"))     ## 1.11
+say("add 0.1+0.2:", D::add("0.1", "0.2"))         ## 0.3
+say("add 1.50+1.50:", D::add("1.50", "1.50"))     ## 3.00
+say("sub 3.75-1.5:", D::sub("3.75", "1.5"))       ## 2.25
+say("sub 1-2:", D::sub("1", "2"))                 ## -1
+say("mul 1.5*2:", D::mul("1.5", "2"))             ## 3.0
+say("mul 2.50*1.5:", D::mul("2.50", "1.5"))       ## 3.750
+say("mul 10*10:", D::mul("10", "10"))             ## 100
+say("mul 0.1*0.2:", D::mul("0.1", "0.2"))         ## 0.02
+say("div 1/4:", D::div("1", "4"))                 ## 0.25
+say("div 6.0/2:", D::div("6.0", "2"))             ## 3.0
+say("div 10/4:", D::div("10", "4"))               ## 2.5
+say("div 10/2:", D::div("10", "2"))               ## 5
+say("div -7/2:", D::div("-7", "2"))               ## -3.5
+say("div 1/3:", D::div("1", "3"))                 ## 0.3333333333333333333333333333
+say("div 100/3:", D::div("100", "3"))             ## 33.33333333333333333333333333
+say("div 2/3:", D::div("2", "3"))                 ## 0.6666666666666666666666666667
+say("cmp 1.0<1.01:", D::compare("1.0", "1.01"))   ## -1
+say("cmp iguales:", D::compare("1", "1.0"))       ## 0
+say("cmp mayor:", D::compare("2.5", "2"))         ## 1
+say("round 2.675:", D::round_dp("2.675", 2))      ## 2.68
+say("round 2.5:", D::round_dp("2.5"))             ## 3
+say("round 2:", D::round_dp("2", 2))              ## 2.00
+say("round 1.005:", D::round_dp("1.005", 2))      ## 1.01
+say("abs:", D::abs_dec("-5.20"))                  ## 5.20
+say("neg:", D::neg("5.20"))                       ## -5.20
+say("neg cero:", D::neg("0"))                     ## 0
+say("is_zero:", D::is_zero("0.0"))                ## True
+say("is_zero 1:", D::is_zero("0.1"))              ## False
+say("to_float:", D::to_float("0.1"))              ## 0.1
+say("pow 1.5^3:", D::pow_int("1.5", 3))           ## 3.375
+say("pow 2^10:", D::pow_int("2", 10))             ## 1024
+say("pow 1.2^0:", D::pow_int("1.2", 0))           ## 1
+say("pow 0.1^2:", D::pow_int("0.1", 2))           ## 0.01
+say("OK decimal")

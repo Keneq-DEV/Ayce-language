@@ -1,0 +1,102 @@
+## smoke_stdlib.ayce — verifica que toda la stdlib .ayce carga y responde
+## (es un test: pertenece a examples/, no a stdlib/)
+require math
+require random
+require re
+require json
+require path
+require io
+require os
+require sys
+require time
+require copy
+require array
+require string
+require unicodedata
+require decimal
+require datetime
+require shutil
+require glob
+require tempfile
+require stat
+require csv
+require pickle
+require sqlite3
+require zipfile
+require tarfile
+require gzip
+require zlib
+require bz2
+require lzma
+require hashlib
+require base64
+require binascii
+require secrets
+require hmac
+require urllib
+require http
+require socket
+require ssl
+require email
+require struct
+require subprocess
+require signal
+require threading
+require queue
+require multiprocessing
+require logging
+require locale
+require gettext
+require codecs
+require pprint
+require inspect
+require traceback
+require warnings
+require types
+require uuid
+require platform
+
+## llamadas representativas
+say(math::sqrt(9.0) == 3.0)
+say(random::rand_int(1, 10))
+say(json::stringify([1, 2, 3]))
+say(re::find_all("a", "banana"))
+say(string::upper("hola"))
+io::print("io ok")
+say(os::cwd() != "")
+say(copy::deep(<"a": [1, 2]>)<"a">[1] == 2)
+say(hashlib::sha256("abc"))
+say(base64::encode("hola"))
+say(secrets::token_hex(4))
+say(uuid::uuid4())
+say(platform::system())
+say(pprint::format([1, [2, 3]]))
+say(types::is_int(3))
+say(decimal::add("1.5", "2.25"))
+say(datetime::today())
+say(time::timestamp() != "")
+say(path::basename("/a/b/c.txt"))
+say(inspect::type_of(3))
+say(unicodedata::name("ñ"))
+var _b: string = codecs::encode("á", "utf-8")
+say(codecs::decode(_b, "utf-8") == "á")
+say(locale::getpreferredencoding() != "")
+logging::info("hola")
+warnings::warn("ojo")
+say(traceback::format_exc() != "")
+say(zlib::decompress(zlib::compress("hola")) == "hola")
+say(gzip::decompress(gzip::compress("hola")) == "hola")
+say(bz2::decompress(bz2::compress("hola")) == "hola")
+say(lzma::decompress(lzma::compress("hola")) == "hola")
+say(binascii::crc32("abc"))
+say(urllib::quote("a b"))
+say(email::format_addr("Yo", "yo@x.com"))
+say(glob::glob("/tmp/*.noexiste"))
+
+## camino alternativo: require selectivo y tarea retenida en variable
+require sqrt from math
+say(sqrt(16.0) == 4.0)
+var f: task = math::sqrt
+say(f(25.0) == 5.0)
+
+say("SMOKE OK")

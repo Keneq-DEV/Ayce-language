@@ -1,0 +1,325 @@
+## time.ayce — tiempo EN AYCE (v0.6.0).
+## El reloj del sistema, el sueño y la zona horaria vienen del batch
+## privado `_time` (el `_time` de CPython); el FORMATEO y el PARSEO de
+## marcas de tiempo están escritos aquí en ayce — directivas %Y %m %d
+## %H %M %S %j %A %a %B %b %p %I %y %%, con nombres en inglés (locale
+## C, igual que el módulo time de CPython).
+
+require _time as tm
+
+## reloj monótonico de alta resolución (para medir tiempos)
+task clock() = float ;
+{
+    return tm::clock()
+}
+
+## tiempo unix actual en segundos (float)
+task now() = float ;
+{
+    return tm::now()
+}
+
+## pausa el programa N segundos
+task sleep(int segundos) | (float segundos) ;
+{
+    return tm::sleep(float(segundos))
+    |
+    return tm::sleep(segundos)
+}
+
+## marca de tiempo actual como cadena ISO
+task timestamp() = string ;
+{
+    return tm::timestamp()
+}
+
+## formatea la hora actual (o el timestamp dado) con directivas
+task strftime(string formato) | (string formato, int t) | (string formato, float t) = string ;
+{
+    return _formatear(tm::localtime(), formato)
+    |
+    return _formatear(tm::localtime(float(t)), formato)
+    |
+    return _formatear(tm::localtime(t), formato)
+}
+
+## componentes de la marca dada (hora local; sin argumento = ahora)
+task localtime() | (int ts) | (float ts) = none<> ;
+{
+    return tm::localtime()
+    |
+    return tm::localtime(float(ts))
+    |
+    return tm::localtime(ts)
+}
+
+## componentes en UTC (sin argumento = ahora)
+task gmtime() | (int ts) | (float ts) = none<> ;
+{
+    return tm::gmtime()
+    |
+    return tm::gmtime(float(ts))
+    |
+    return tm::gmtime(ts)
+}
+
+## ── formateo propio (directivas del locale C) ──
+task _formatear(none<> loc, string fmt) = string ;
+{
+    var y: int = loc<"year">
+    var mo: int = loc<"month">
+    var d: int = loc<"day">
+    var h: int = loc<"hour">
+    var mi: int = loc<"minute">
+    var sec: int = loc<"second">
+    var out: string = ""
+    var i: int = 0
+    var n: int = fmt::len()
+    while i < n do
+        var ch: string = fmt[i]
+        if ch == "%" && i + 1 < n then
+            var sig: string = fmt[i + 1]
+            if sig == "Y" then
+                out += _pad4(y)
+            else if sig == "m" then
+                out += _pad2(mo)
+            else if sig == "d" then
+                out += _pad2(d)
+            else if sig == "H" then
+                out += _pad2(h)
+            else if sig == "M" then
+                out += _pad2(mi)
+            else if sig == "S" then
+                out += _pad2(sec)
+            else if sig == "A" then
+                out += _dias[(_dia_semana(y, mo, d) + 6) % 7]
+            else if sig == "a" then
+                out += _dias[(_dia_semana(y, mo, d) + 6) % 7]::slice(0, 3)
+            else if sig == "B" then
+                out += _meses[mo - 1]
+            else if sig == "b" then
+                out += _meses[mo - 1]::slice(0, 3)
+            else if sig == "j" then
+                var doy: int = _dia_del_anio(y, mo, d)
+                var s3: string = string(doy)
+                if s3::len() < 3 then
+                    s3 = _zeros(3 - s3::len()) + s3
+                end
+                out += s3
+            else if sig == "p" then
+                if h < 12 then
+                    out += "AM"
+                else
+                    out += "PM"
+                end
+            else if sig == "I" then
+                var h12: int = h % 12
+                if h12 == 0 then
+                    h12 = 12
+                end
+                out += _pad2(h12)
+            else if sig == "y" then
+                out += _pad2(y % 100)
+            else if sig == "%" then
+                out += "%"
+            else
+                out += "%" + sig
+            end
+            i += 2
+        else
+            out += ch
+            i += 1
+        end
+    end
+    return out
+}
+
+## nombres en inglés (locale C, como time.strftime de CPython)
+const _meses: string[] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+const _dias: string[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+task _pad2(int n) = string ;
+{
+    if n < 10 then
+        return "0" + string(n)
+    end
+    return string(n)
+}
+
+task _pad4(int n) = string ;
+{
+    var s: string = string(n)
+    while s::len() < 4 do
+        s = "0" + s
+    end
+    return s
+}
+
+task _zeros(int n) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < n do
+        out += "0"
+        i += 1
+    end
+    return out
+}
+
+## días de época (Hinnant) — para %A/%a y %j
+task _civil_a_dias(int y, int m, int d) = int ;
+{
+    var yy: int = y
+    if m <= 2 then
+        yy = yy - 1
+    end
+    var era: int = 0
+    if yy >= 0 then
+        era = yy // 400
+    else
+        era = (yy - 399) // 400
+    end
+    var yoe: int = yy - era * 400
+    var mp: int = m + 9
+    if mp >= 12 then
+        mp = mp - 12
+    end
+    var doy: int = (153 * mp + 2) // 5 + d - 1
+    var doe: int = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+## 0 = domingo (índice del const _dias), como en C
+task _dia_semana(int y, int mo, int d) = int ;
+{
+    var z: int = _civil_a_dias(y, mo, d)
+    ## 1970-01-01 fue jueves (índice 3 con domingo=0)
+    return (z + 4) % 7
+}
+
+task _dia_del_anio(int y, int mo, int d) = int ;
+{
+    var z: int = _civil_a_dias(y, mo, d)
+    var z1: int = _civil_a_dias(y, 1, 1)
+    return z - z1 + 1
+}
+
+## ── strptime propio para las mismas directivas ──
+task strptime(string s, string formato) = none<> ;
+{
+    var c: none[] = _parsear(s, formato)
+    var out: none<> = <>
+    out<"year"> = c[0]
+    out<"month"> = c[1]
+    out<"day"> = c[2]
+    out<"hour"> = c[3]
+    out<"minute"> = c[4]
+    out<"second"> = c[5]
+    var fecha: string = _pad4(c[0]) + "-" + _pad2(c[1]) + "-" + _pad2(c[2])
+    if c[3] == 0 && c[4] == 0 && c[5] == 0 then
+        out<"iso"> = fecha
+    else
+        out<"iso"> = fecha + "T" + _pad2(c[3]) + ":" + _pad2(c[4]) + ":" + _pad2(c[5])
+    end
+    return out
+}
+
+task _parsear(string texto, string fmt) = none[] ;
+{
+    var y: int = 1900
+    var mo: int = 1
+    var d: int = 1
+    var h: int = 0
+    var mi: int = 0
+    var sec: int = 0
+    var pos: int = 0
+    var i: int = 0
+    var n: int = fmt::len()
+    var pm: bool = False
+    var h12: int = -1
+    while i < n do
+        var ch: string = fmt[i]
+        if ch == "%" && i + 1 < n then
+            var sig: string = fmt[i + 1]
+            if sig == "Y" then
+                y = int(texto::slice(pos, pos + 4))
+                pos += 4
+            else if sig == "m" then
+                mo = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "d" then
+                d = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "H" then
+                h = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "M" then
+                mi = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "S" then
+                sec = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "I" then
+                h12 = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "p" then
+                if texto::slice(pos, pos + 2)::upper() == "PM" then
+                    pm = True
+                end
+                pos += 2
+            else if sig == "b" then
+                mo = _mes_por_nombre(texto, pos, 3)
+                pos += 3
+            else if sig == "B" then
+                mo = _mes_por_nombre(texto, pos, -1)
+            else if sig == "a" then
+                pos += 3
+            else if sig == "A" then
+                pos += _largo_dia(texto, pos)
+            else if sig == "%" then
+                pos += 1
+            end
+            i += 2
+        else
+            pos += 1
+            i += 1
+        end
+    end
+    if h12 >= 0 then
+        h = h12 % 12
+        if pm then
+            h += 12
+        end
+    end
+    return [y, mo, d, h, mi, sec]
+}
+
+## busca el mes por nombre corto (3) o largo (-1 = buscar todos)
+task _mes_por_nombre(string texto, int pos, int largo) = int ;
+{
+    var i: int = 0
+    while i < _meses::len() do
+        var nombre: string = _meses[i]
+        if largo == 3 then
+            nombre = nombre::slice(0, 3)
+        end
+        if texto::slice(pos, pos + nombre::len()) == nombre then
+            return i + 1
+        end
+        i += 1
+    end
+    return 1
+}
+
+task _largo_dia(string texto, int pos) = int ;
+{
+    var i: int = 0
+    while i < _dias::len() do
+        var nombre: string = _dias[i]
+        if texto::slice(pos, pos + nombre::len()) == nombre then
+            return nombre::len()
+        end
+        i += 1
+    end
+    return 0
+}

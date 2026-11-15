@@ -1,0 +1,1519 @@
+## math.ayce — funciones matemáticas EN AYCE PURO (v0.6.0).
+## Sin primitivas nativas: los algoritmos corren aquí, igual que los
+## módulos .py de CPython implementan sus algoritmos en Python.
+## Técnicas (las mismas de libm, escritas en ayce):
+##   - Series de Taylor con truncamiento (~1e-17) para exp/sen/cos/erf
+##   - Reducción de rango por potencias de 2 (exp/ln) y por cuadrantes (sen/cos)
+##   - Método de Newton para raíces (sqrt, cbrt, isqrt)
+##   - Identidad atan(x) = 2·atan(x/(1+√(1+x²))) para acotar la serie de atan
+##   - ln por atanh: ln(m) = 2·atanh((m-1)/(m+1)) con m ∈ [1,2)
+##   - π por la fórmula de Machin: π = 16·atan(1/5) − 4·atan(1/239)
+##   - Aproximación de Lanczos (g=7, n=9) para gamma/lgamma
+##   - Fracción continua para erfc
+##
+## Contacto con la máquina: NINGUNO. Sólo el lenguaje (float/int/string,
+## las 4 operaciones y los operadores bit a bit añadidos en v0.6.0).
+
+task _atan_small(float z) = float ;
+{
+    ## atan(z) = z - z³/3 + z⁵/5 - ... para |z| <= ~0.25
+    ## (Machin la usa con z = 1/5 y z = 1/239), con suma compensada
+    ## de Kahan para conservar el último dígito.
+    var total: float = 0.0
+    var comp: float = 0.0
+    var p: float = z
+    var d: int = 1
+    var n: int = 0
+    var signo: int = 1
+    while n < 40 do
+        var t: float = p / float(d)
+        if signo == -1 then
+            t = -t
+        end
+        var y1: float = t - comp
+        var t1: float = total + y1
+        comp = (t1 - total) - y1
+        total = t1
+        if t < 1.0e-18 && t > -1.0e-18 then
+            break
+        end
+        p = p * z * z
+        d += 2
+        signo = -signo
+        n += 1
+    end
+    return total
+}
+
+task _atan_general(float z) = float ;
+{
+    ## atan para todo rango. Para |z| > 1: atan(z) = π/2 − atan(1/z).
+    ## Para acotar la serie se aplica el "halving":
+    ##   atan(x) = 2·atan(x / (1 + √(1+x²)))
+    ## tras 7 aplicaciones |t| < 0.01 y la serie converge en 4 términos.
+    if z > 1.0 then
+        return half_pi - _atan_general(1.0 / z)
+    end
+    if z < -1.0 then
+        return -half_pi - _atan_general(1.0 / z)
+    end
+    var t: float = z
+    var n: int = 0
+    while n < 7 do
+        t = t / (1.0 + _sqrt_core(1.0 + t * t))
+        n += 1
+    end
+    var acc: float = _atan_small(t)
+    var i: int = 0
+    while i < n do
+        acc = acc + acc
+        i += 1
+    end
+    return acc
+}
+
+task _ln2() = float ;
+{
+    ## ln 2 = 2·atanh(1/3): la serie z + z³/3 + z⁵/5 con z = 1/3
+    ## converge a precisión completa de double en ~20 términos (con Kahan).
+    var z: float = 1.0 / 3.0
+    var total: float = 0.0
+    var comp: float = 0.0
+    var p: float = z
+    var d: int = 1
+    var n: int = 0
+    while n < 24 do
+        var t: float = p / float(d)
+        var y1: float = t - comp
+        var t1: float = total + y1
+        comp = (t1 - total) - y1
+        total = t1
+        p = p * z * z
+        d += 2
+        n += 1
+    end
+    return 2.0 * total
+}
+
+task _ln_core(float x) = float ;
+{
+    ## ln(x) para x > 0: se reduce a mantisa m ∈ [1,2) multiplicando por
+    ## potencias de 2, y ln(m) por la serie de atanh.
+    if x <= 0.0 then
+        raise Error("math::ln: dominio (x > 0)", 1)
+    end
+    var m: float = x
+    var k: int = 0
+    while m >= 2.0 do
+        m = m * 0.5
+        k += 1
+    end
+    while m < 1.0 do
+        m = m * 2.0
+        k -= 1
+    end
+    var z: float = (m - 1.0) / (m + 1.0)
+    var total: float = 0.0
+    var comp: float = 0.0
+    var p: float = z
+    var d: int = 1
+    var n: int = 0
+    while n < 22 do
+        var t: float = p / float(d)
+        var y1: float = t - comp
+        var t1: float = total + y1
+        comp = (t1 - total) - y1
+        total = t1
+        p = p * z * z
+        d += 2
+        n += 1
+    end
+    return 2.0 * total + float(k) * _ln2()
+}
+
+task _exp_taylor(float y) = float ;
+{
+    ## e^y para |y| <= 0.5: 1 + y + y²/2! + ...
+    ## con suma compensada (Kahan) para no perder los dígitos bajos
+    var total: float = 1.0
+    var comp: float = 0.0
+    var term: float = 1.0
+    var k: int = 1
+    while k < 25 do
+        term = term * y / float(k)
+        var y1: float = term - comp
+        var t1: float = total + y1
+        comp = (t1 - total) - y1
+        total = t1
+        if term < 1.0e-20 && term > -1.0e-20 then
+            break
+        end
+        k += 1
+    end
+    return total
+}
+
+task _exp_core(float x) = float ;
+{
+    ## e^x: reducción y = x/2^k con |y| <= 0.5 y e^x = (e^y)^(2^k),
+    ## para x positivo Y negativo (la serie diverge si |y| > 0.5).
+    ## El error relativo del Taylor se multiplica por 2^k a lo sumo.
+    var y: float = x
+    var k: int = 0
+    while y > 0.5 do
+        y = y * 0.5
+        k += 1
+    end
+    while y < -0.5 do
+        y = y * 0.5
+        k += 1
+    end
+    var r: float = _exp_taylor(y)
+    var i: int = 0
+    while i < k do
+        r = r * r
+        i += 1
+    end
+    if r > 1.7976931348623157e308 then
+        raise Error("math::exp: overflow", 1)
+    end
+    return r
+}
+
+task _sqrt_core(float x) = float ;
+{
+    ## Newton: r ← (r + x/r)/2 — convergencia cuadrática, ~6 iteraciones
+    if x < 0.0 then
+        raise Error("math::sqrt: dominio (x >= 0)", 1)
+    end
+    if x == 0.0 then
+        return 0.0
+    end
+    var r: float = x
+    if x < 1.0 then
+        r = 1.0
+    end
+    var i: int = 0
+    while i < 80 do
+        var nr: float = 0.5 * (r + x / r)
+        if nr == r then
+            return nr
+        end
+        var dif: float = nr - r
+        if dif < 0.0 then
+            dif = -dif
+        end
+        r = nr
+        if dif <= 1.0e-16 * r then
+            break
+        end
+        i += 1
+    end
+    return r
+}
+
+task _cbrt_f(float x) = float ;
+{
+    ## Newton para raíz cúbica: r ← (2r + x/r²)/3
+    if x == 0.0 then
+        return 0.0
+    end
+    var neg: bool = False
+    var a: float = x
+    if a < 0.0 then
+        neg = True
+        a = -a
+    end
+    var r: float = a
+    if a < 1.0 then
+        r = 1.0
+    end
+    var i: int = 0
+    while i < 100 do
+        var nr: float = (2.0 * r + a / (r * r)) / 3.0
+        if nr == r then
+            break
+        end
+        r = nr
+        i += 1
+    end
+    if neg then
+        return -r
+    end
+    return r
+}
+
+task _abs_f(float x) = float ;
+{
+    if x < 0.0 then
+        return -x
+    end
+    return x
+}
+
+task _floor_f(float x) = int ;
+{
+    ## piso de un float (int() trunca hacia cero; el piso corrige los negativos)
+    var t: int = int(x)
+    if x < float(t) then
+        return t - 1
+    end
+    return t
+}
+
+task _round_he(float x) = int ;
+{
+    ## redondeo al par (banker's), como round() de CPython
+    var r: int = _floor_f(x)
+    var frac: float = x - float(r)
+    if frac > 0.5 then
+        return r + 1
+    end
+    if frac < 0.5 then
+        return r
+    end
+    if r % 2 == 0 then
+        return r
+    end
+    return r + 1
+}
+
+task _round_half(float t) = int ;
+{
+    ## redondeo al entero más cercano (mitad hacia arriba en valor absoluto);
+    ## se usa para la reducción de cuadrantes de sen/cos
+    if t >= 0.0 then
+        return int(t + 0.5)
+    end
+    return int(t - 0.5)
+}
+
+task _sin_core(float y) = float ;
+{
+    ## sen(y) para |y| <= π/4: y − y³/3! + y⁵/5! − ... (12 términos → error < 1e-17)
+    var total: float = 0.0
+    var term: float = y
+    var y2: float = y * y
+    var n: int = 0
+    while n < 12 do
+        total += term
+        term = term * y2 / float((2 * n + 2) * (2 * n + 3))
+        term = -term
+        n += 1
+    end
+    return total
+}
+
+task _cos_core(float y) = float ;
+{
+    ## cos(y) para |y| <= π/4: 1 − y²/2! + y⁴/4! − ...
+    var total: float = 0.0
+    var term: float = 1.0
+    var y2: float = y * y
+    var n: int = 0
+    while n < 13 do
+        total += term
+        term = term * y2 / float((2 * n + 1) * (2 * n + 2))
+        term = -term
+        n += 1
+    end
+    return total
+}
+
+task _erf_series(float x) = float ;
+{
+    ## erf(x) = (2/√π)·Σ (−1)ⁿ·x^(2n+1)/(n!·(2n+1)), precisa para |x| <= 1.5
+    var total: float = 0.0
+    var term: float = x
+    var x2: float = x * x
+    var n: int = 0
+    while n < 40 do
+        total += term
+        term = term * x2 * float(2 * n + 1) / float((n + 1) * (2 * n + 3))
+        term = -term
+        if term < 1.0e-18 && term > -1.0e-18 then
+            break
+        end
+        n += 1
+    end
+    return (2.0 / sqrt_pi) * total
+}
+
+task _erfc_cf(float x) = float ;
+{
+    ## erfc(x) para x >= 1.5 por fracción continua (evaluada hacia atrás):
+    ##   erfc(x) ≈ e^(−x²)/(x·√π) · 1/(1 + a₁/(1 + a₂/(1 + ...))),  aᵢ = i/(2x²)
+    var x2: float = x * x
+    var f: float = 0.0
+    var i: int = 40
+    while i >= 1 do
+        f = float(i) / (2.0 * x2) / (1.0 + f)
+        i -= 1
+    end
+    var j: float = 1.0 / (1.0 + f)
+    return _exp_core(-x2) / (x * sqrt_pi) * j
+}
+
+task _ipow(int base, int exp) = int ;
+{
+    ## base^exp por cuadrados — exacto con enteros
+    var result: int = 1
+    var b: int = base
+    var n: int = exp
+    while n > 0 do
+        if n % 2 == 1 then
+            result *= b
+        end
+        b *= b
+        n = n // 2
+    end
+    return result
+}
+
+task _pow_int(int base, int exp) = float ;
+{
+    if exp < 0 then
+        var p: int = _ipow(base, -exp)
+        if p == 0 then
+            return inf
+        end
+        return 1.0 / float(p)
+    end
+    return float(_ipow(base, exp))
+}
+
+task _fpow_int(float base, int n) = float ;
+{
+    ## base^n por cuadrados, con aritmética float exacta para n entero:
+    ## cada cuadrado/producto es el redondeo de un producto exacto, igual
+    ## que el pow de C para exponentes enteros chicos.
+    if n < 0 then
+        return 1.0 / _fpow_int(base, -n)
+    end
+    var result: float = 1.0
+    var b: float = base
+    var m: int = n
+    while m > 0 do
+        if m % 2 == 1 then
+            result *= b
+        end
+        b *= b
+        m = m // 2
+    end
+    return result
+}
+
+task _pow_float(float base, float exp) = float ;
+{
+    ## pow float: exponente de valor entero → cuadrados exactos;
+    ## base > 0 arbitrario vía exp(exp·ln(base)); base negativa admite
+    ## exponente de valor entero (paridad del entero), como CPython.
+    if base == 0.0 then
+        if exp > 0.0 then
+            return 0.0
+        end
+        if exp == 0.0 then
+            return 1.0
+        end
+        raise Error("math::pow: 0 elevado a exponente negativo", 1)
+    end
+    var kk: int = int(exp)
+    if float(kk) == exp then
+        var r: float = _fpow_int(_abs_f(base), kk)
+        if base < 0.0 && kk % 2 == 1 then
+            return -r
+        end
+        return r
+    end
+    if base < 0.0 then
+        raise Error("math::pow: base negativa con exponente no entero", 1)
+    end
+    return _exp_core(exp * _ln_core(base))
+}
+
+task _gcd2(int a, int b) = int ;
+{
+    ## Euclides con valores absolutos
+    var x: int = a
+    if x < 0 then
+        x = -x
+    end
+    var y: int = b
+    if y < 0 then
+        y = -y
+    end
+    while y != 0 do
+        var t: int = x % y
+        x = y
+        y = t
+    end
+    return x
+}
+
+task _lcm2(int a, int b) = int ;
+{
+    var g: int = _gcd2(a, b)
+    if g == 0 then
+        return 0
+    end
+    var x: int = a // g * b
+    if x < 0 then
+        x = -x
+    end
+    return x
+}
+
+task _min2(int a, int b) | (float a, float b) | (int a, float b) | (float a, int b) ;
+{
+    if a <= b then
+        return a
+    end
+    return b
+    |
+    if a <= b then
+        return a
+    end
+    return b
+    |
+    if a <= b then
+        return a
+    end
+    return b
+    |
+    if a <= b then
+        return a
+    end
+    return b
+}
+
+task _max2(int a, int b) | (float a, float b) | (int a, float b) | (float a, int b) ;
+{
+    if a >= b then
+        return a
+    end
+    return b
+    |
+    if a >= b then
+        return a
+    end
+    return b
+    |
+    if a >= b then
+        return a
+    end
+    return b
+    |
+    if a >= b then
+        return a
+    end
+    return b
+}
+
+task _isclose2(float a, float b) = bool ;
+{
+    ## |a−b| <= rel_tol·max(|a|,|b|), con rel_tol = 1e-9 (como CPython)
+    var dif: float = _abs_f(a - b)
+    var m: float = _abs_f(a)
+    if _abs_f(b) > m then
+        m = _abs_f(b)
+    end
+    return dif <= 1.0e-9 * m
+}
+
+task _isclose3(float a, float b, float rel) = bool ;
+{
+    ## versión con tolerancia relativa dada por el usuario
+    var dif: float = _abs_f(a - b)
+    var m: float = _abs_f(a)
+    if _abs_f(b) > m then
+        m = _abs_f(b)
+    end
+    return dif <= rel * m
+}
+
+task _atan2_f(float y, float x) = float ;
+{
+    if x > 0.0 then
+        return _atan_general(y / x)
+    end
+    if x < 0.0 then
+        if y >= 0.0 then
+            return _atan_general(y / x) + pi
+        end
+        return _atan_general(y / x) - pi
+    end
+    if y > 0.0 then
+        return half_pi
+    end
+    if y < 0.0 then
+        return -half_pi
+    end
+    return 0.0
+}
+
+task _asin_f(float x) = float ;
+{
+    if x < -1.0 || x > 1.0 then
+        raise Error("math::asin: dominio (|x| <= 1)", 1)
+    end
+    if x == 1.0 then
+        return half_pi
+    end
+    if x == -1.0 then
+        return -half_pi
+    end
+    return _atan_general(x / _sqrt_core(1.0 - x * x))
+}
+
+task _acos_f(float x) = float ;
+{
+    if x < -1.0 || x > 1.0 then
+        raise Error("math::acos: dominio (|x| <= 1)", 1)
+    end
+    return half_pi - _asin_f(x)
+}
+
+task _sin_f(float ang) = float ;
+{
+    ## Reducción de rango por cuadrantes con el esquema de Cody-Waite:
+    ##   π/2 = HI + LO, con HI de mantisa terminada en ceros → k·HI es
+    ## EXACTO en double para k < 2^29, y k·LO < 4e-11 aporta error ~1e-26.
+    ## (HI y LO son las constantes de fdlibm; el error es ~1 ulp hasta
+    ## ángulos de ~8e8, igual que la reducción de libm para ese rango.)
+    var k: int = _round_half(ang / half_pi)
+    var y: float = (ang - float(k) * 1.5707963267341256) - float(k) * 6.077100506506192e-11
+    var q: int = k % 4
+    if q == 0 then
+        return _sin_core(y)
+    end
+    if q == 1 then
+        return _cos_core(y)
+    end
+    if q == 2 then
+        return -_sin_core(y)
+    end
+    return -_cos_core(y)
+}
+
+task _cos_f(float ang) = float ;
+{
+    var k: int = _round_half(ang / half_pi)
+    var y: float = (ang - float(k) * 1.5707963267341256) - float(k) * 6.077100506506192e-11
+    var q: int = k % 4
+    if q == 0 then
+        return _cos_core(y)
+    end
+    if q == 1 then
+        return -_sin_core(y)
+    end
+    if q == 2 then
+        return -_cos_core(y)
+    end
+    return _sin_core(y)
+}
+
+task _tan_f(float ang) = float ;
+{
+    return _sin_f(ang) / _cos_f(ang)
+}
+
+task _sinh_f(float x) = float ;
+{
+    var ax: float = _abs_f(x)
+    if ax > 25.0 then
+        ## sinh(x) → ±e^|x|/2; evita calcular e^(−|x|), que no aporta
+        var big: float = _exp_core(ax) * 0.5
+        if x < 0.0 then
+            return -big
+        end
+        return big
+    end
+    var ep: float = _exp_core(x)
+    var em: float = _exp_core(-x)
+    return (ep - em) * 0.5
+}
+
+task _cosh_f(float x) = float ;
+{
+    var ax: float = _abs_f(x)
+    if ax > 25.0 then
+        return _exp_core(ax) * 0.5
+    end
+    var ep: float = _exp_core(x)
+    var em: float = _exp_core(-x)
+    return (ep + em) * 0.5
+}
+
+task _tanh_f(float x) = float ;
+{
+    ## para |x| grande tanh → ±1; se evita e^(2x), que desbordaría
+    var ax: float = _abs_f(x)
+    if ax > 20.0 then
+        if x < 0.0 then
+            return -1.0
+        end
+        return 1.0
+    end
+    var z: float = _exp_core(2.0 * ax)
+    var r: float = (z - 1.0) / (z + 1.0)
+    if x < 0.0 then
+        return -r
+    end
+    return r
+}
+
+task _expm1_f(float x) = float ;
+{
+    ## e^x − 1 sin pérdida de precisión: serie directa para |x| <= 0.5
+    var ax: float = _abs_f(x)
+    if ax <= 0.5 then
+        var total: float = 0.0
+        var term: float = 1.0
+        var k: int = 1
+        while k < 19 do
+            term = term * x / float(k)
+            total += term
+            if term < 1.0e-18 && term > -1.0e-18 then
+                break
+            end
+            k += 1
+        end
+        return total
+    end
+    return _exp_core(x) - 1.0
+}
+
+task _log1p_f(float x) = float ;
+{
+    ## ln(1+x) sin pérdida: atanh con z = x/(2+x) para |x| <= 0.5
+    if x == -1.0 then
+        return -inf
+    end
+    if x < -1.0 then
+        raise Error("math::log1p: dominio (x > -1)", 1)
+    end
+    var ax: float = _abs_f(x)
+    if ax <= 0.5 then
+        var z: float = x / (2.0 + x)
+        var total: float = 0.0
+        var p: float = z
+        var d: int = 1
+        var n: int = 0
+        while n < 24 do
+            total += p / float(d)
+            p = p * z * z
+            d += 2
+            n += 1
+        end
+        return 2.0 * total
+    end
+    return _ln_core(1.0 + x)
+}
+
+task _fmod_f(float x, float y) = float ;
+{
+    ## resto exacto de floats por escala binaria (mismo signo que x, como fmod de C)
+    if y == 0.0 then
+        raise Error("math::fmod: divisor cero", 1)
+    end
+    var r: float = _abs_f(x)
+    var d: float = _abs_f(y)
+    while r >= d do
+        var s: float = d
+        while s + s <= r && s < 1.0e308 do
+            s = s + s
+        end
+        r = r - s
+    end
+    if x < 0.0 then
+        return -r
+    end
+    return r
+}
+
+task _remainder_f(float x, float y) = float ;
+{
+    ## resto IEEE: x − y·q con q redondeado al par (como remainder de CPython)
+    if y == 0.0 then
+        raise Error("math::remainder: divisor cero", 1)
+    end
+    var q: int = _round_he(x / y)
+    return x - float(q) * y
+}
+
+task _hypot_f(float a, float b) = float ;
+{
+    ## hipotenusa sin desbordes: factoriza el máximo
+    var ax: float = _abs_f(a)
+    var bx: float = _abs_f(b)
+    if ax == 0.0 then
+        return bx
+    end
+    if bx == 0.0 then
+        return ax
+    end
+    if ax > bx then
+        var q: float = bx / ax
+        return ax * _sqrt_core(1.0 + q * q)
+    end
+    var q: float = ax / bx
+    return bx * _sqrt_core(1.0 + q * q)
+}
+
+task _copysign_f(float x, float s) = float ;
+{
+    var ax: float = _abs_f(x)
+    if s < 0.0 then
+        return -ax
+    end
+    return ax
+}
+
+task _gamma_f(float x) = float ;
+{
+    ## Γ(x) por Lanczos (g = 7, n = 9) con reflexión para x < 0.5:
+    ##   Γ(x)·Γ(1−x) = π / sen(πx)
+    if x < 0.5 then
+        var sp: float = _sin_f(pi * x)
+        if sp == 0.0 then
+            raise Error("math::gamma: polo (x entero no positivo)", 1)
+        end
+        return pi / (sp * _gamma_f(1.0 - x))
+    end
+    if x > 141.0 then
+        ## pow(t, x) desbordaría por sí solo; como CPython, para x grande
+        ## se pasa por exp(lgamma(x)) que cabe en double hasta Γ(171)
+        return _exp_core(_lgamma_f(x))
+    end
+    var xx: float = x - 1.0
+    var a: float = _LNZ[0]
+    var t: float = xx + 7.5
+    var i: int = 1
+    while i < 9 do
+        a += _LNZ[i] / (xx + float(i))
+        i += 1
+    end
+    return sqrt2pi * _pow_float(t, xx + 0.5) * _exp_core(-t) * a
+}
+
+task _lgamma_f(float x) = float ;
+{
+    ## ln|Γ(x)|: se acumula en forma logarítmica para no desbordar
+    ## (Γ(171) ya excede el rango de double).
+    if x < 0.5 then
+        var sp: float = _sin_f(pi * x)
+        if sp == 0.0 then
+            raise Error("math::lgamma: polo (x entero no positivo)", 1)
+        end
+        return _ln_core(pi / _abs_f(sp)) - _lgamma_f(1.0 - x)
+    end
+    var xx: float = x - 1.0
+    var a: float = _LNZ[0]
+    var t: float = xx + 7.5
+    var i: int = 1
+    while i < 9 do
+        a += _LNZ[i] / (xx + float(i))
+        i += 1
+    end
+    return 0.5 * _ln_core(2.0 * pi) + (xx + 0.5) * _ln_core(t) - t + _ln_core(a)
+}
+
+## ── Constantes del módulo: calculadas aquí mismo al cargar el módulo.
+## π por Machin; e por su serie Σ 1/k! (ambas con Kahan dentro de las series).
+const pi: float = 16.0 * _atan_small(0.2) - 4.0 * _atan_small(1.0 / 239.0)
+const half_pi: float = pi / 2.0
+const quarter_pi: float = pi / 4.0
+const tau: float = 2.0 * pi
+const e: float = _e_series()
+const ln10: float = _ln_core(10.0)
+const sqrt_pi: float = _sqrt_core(pi)
+const sqrt2pi: float = _sqrt_core(2.0 * pi)
+const inf: float = 1.0e308 * 10.0
+const nan: float = inf - inf
+
+task _e_series() = float ;
+{
+    ## e = Σ 1/k!, k = 0..30, con suma compensada: 1/30! ≈ 3e-33
+    var total: float = 1.0
+    var comp: float = 0.0
+    var term: float = 1.0
+    var k: int = 1
+    while k < 31 do
+        term = term / float(k)
+        var y1: float = term - comp
+        var t1: float = total + y1
+        comp = (t1 - total) - y1
+        total = t1
+        k += 1
+    end
+    return total
+}
+
+## Coeficientes de Lanczos (g = 7, n = 9) — tabla del algoritmo
+const _LNZ: float[] = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]
+
+## ══════════════════════════════════════════════════════════════════════
+##  API pública (mismas firmas que la versión anterior)
+## ══════════════════════════════════════════════════════════════════════
+
+task abs(int x) | (float x) ;
+{
+    if x < 0 then
+        return -x
+    end
+    return x
+    |
+    return _abs_f(x)
+}
+
+task sign(int x) | (float x) = int ;
+{
+    if x > 0 then
+        return 1
+    end
+    if x < 0 then
+        return -1
+    end
+    return 0
+    |
+    if x > 0.0 then
+        return 1
+    end
+    if x < 0.0 then
+        return -1
+    end
+    return 0
+}
+
+task min(int a) | (float a) | (int a, int b) | (int a, float b) | (float a, int b) | (float a, float b) | (int a, int b, int c) | (int a, int b, float c) | (int a, float b, int c) | (int a, float b, float c) | (float a, int b, int c) | (float a, int b, float c) | (float a, float b, int c) | (float a, float b, float c) ;
+{
+    return a
+    |
+    return a
+    |
+    return _min2(a, b)
+    |
+    return _min2(a, b)
+    |
+    return _min2(a, b)
+    |
+    return _min2(a, b)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+    |
+    return _min2(_min2(a, b), c)
+}
+
+task max(int a) | (float a) | (int a, int b) | (int a, float b) | (float a, int b) | (float a, float b) | (int a, int b, int c) | (int a, int b, float c) | (int a, float b, int c) | (int a, float b, float c) | (float a, int b, int c) | (float a, int b, float c) | (float a, float b, int c) | (float a, float b, float c) ;
+{
+    return a
+    |
+    return a
+    |
+    return _max2(a, b)
+    |
+    return _max2(a, b)
+    |
+    return _max2(a, b)
+    |
+    return _max2(a, b)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+    |
+    return _max2(_max2(a, b), c)
+}
+
+task floor(int x) | (float x) = int ;
+{
+    return x
+    |
+    return _floor_f(x)
+}
+
+task ceil(int x) | (float x) = int ;
+{
+    return x
+    |
+    var t: int = int(x)
+    if x > float(t) then
+        return t + 1
+    end
+    return t
+}
+
+task trunc(int x) | (float x) = int ;
+{
+    return x
+    |
+    return int(x)
+}
+
+task round(int x) | (float x) | (int x, int decimales) | (float x, int decimales) ;
+{
+    ## redondeo bancario (al par), como round() de CPython
+    return x
+    |
+    return _round_he(x)
+    |
+    return x
+    |
+    return _round_scaled(x, decimales)
+}
+
+task _frexp_m(float x) = int ;
+{
+    ## descompone |x| = f·2^e con f ∈ [0.5, 1) y devuelve m = f·2^53
+    ## (entero exacto: m·2^(e-53) reproduce x sin pérdida)
+    var f: float = x
+    var e: int = 0
+    while f >= 1.0 do
+        f = f * 0.5
+        e += 1
+    end
+    while f < 0.5 do
+        f = f * 2.0
+        e -= 1
+    end
+    var t: float = f
+    var s: int = 53
+    while s > 0 do
+        t = t * 2.0
+        s -= 1
+    end
+    return int(t)
+}
+
+task _frexp_e(float x) = int ;
+{
+    ## exponente e de la descomposición |x| = f·2^e, f ∈ [0.5, 1)
+    var f: float = x
+    var e: int = 0
+    while f >= 1.0 do
+        f = f * 0.5
+        e += 1
+    end
+    while f < 0.5 do
+        f = f * 2.0
+        e -= 1
+    end
+    return e
+}
+
+task _round_div_he(int q, int r, int half) = int ;
+{
+    ## q + redondeo al par del resto r frente a la mitad del denominador
+    if r > half then
+        return q + 1
+    end
+    if r < half then
+        return q
+    end
+    if q % 2 == 0 then
+        return q
+    end
+    return q + 1
+}
+
+task _round_scaled(float x, int n) = float ;
+{
+    ## round(x, n) con redondeo correcto al valor decimal EXACTO del double,
+    ## como _Py_dg_dtoa en CPython (el escalado float introduce errores:
+    ## 2.675·100 = 267.5 exacto en float, pero el valor de 2.675 es
+    ## 2.6749999999999998223... → round(2.675, 2) = 2.67).
+    ## x = m·2^p (m de 53 bits, exacto) → x·10^n = m·5^n·2^(p+n) y el
+    ## redondeo se hace con enteros exactos.
+    if x == 0.0 then
+        return x
+    end
+    var neg: bool = False
+    var a: float = x
+    if a < 0.0 then
+        neg = True
+        a = -a
+    end
+    var m: int = _frexp_m(a)
+    var p: int = _frexp_e(a) - 53
+    var N: int = 0
+    var res: float = 0.0
+    if n >= 0 then
+        var ee: int = p + n
+        if ee >= 0 then
+            ## x·10^n es un entero exacto: no hay nada que redondear
+            N = m * _ipow(5, n) * _ipow(2, ee)
+            res = float(N) / float(_ipow(10, n))
+        else
+            var M: int = m * _ipow(5, n)
+            var d2: int = _ipow(2, -ee)
+            var q: int = M // d2
+            var r: int = M - q * d2
+            N = _round_div_he(q, r, d2 // 2)
+            res = float(N) / float(_ipow(10, n))
+        end
+    else
+        var k: int = -n
+        var ee: int = p - k
+        if ee >= 0 then
+            var M: int = m * _ipow(2, ee)
+            var den: int = _ipow(5, k)
+            var q: int = M // den
+            var r: int = M - q * den
+            ## 5^k es impar: no hay empate exacto; compara 2r con den
+            if 2 * r > den then
+                N = q + 1
+            else
+                N = q
+            end
+            res = float(N) * float(_ipow(10, k))
+        else
+            var den: int = _ipow(2, -ee) * _ipow(5, k)
+            var q: int = m // den
+            var r: int = m - q * den
+            N = _round_div_he(q, r, den // 2)
+            res = float(N) * float(_ipow(10, k))
+        end
+    end
+    if neg then
+        return -res
+    end
+    return res
+}
+
+task _pow10_int(int n) = int ;
+{
+    var r: int = 1
+    var i: int = 0
+    while i < n do
+        r *= 10
+        i += 1
+    end
+    return r
+}
+
+task sqrt(int x) | (float x) = float ;
+{
+    return _sqrt_core(float(x))
+    |
+    return _sqrt_core(x)
+}
+
+task cbrt(int x) | (float x) = float ;
+{
+    return _cbrt_f(float(x))
+    |
+    return _cbrt_f(x)
+}
+
+task pow(int base, int exp) | (int base, float exp) | (float base, int exp) | (float base, float exp) = float ;
+{
+    return _pow_int(base, exp)
+    |
+    return _pow_float(float(base), exp)
+    |
+    return _pow_float(base, float(exp))
+    |
+    return _pow_float(base, exp)
+}
+
+task exp(int x) | (float x) = float ;
+{
+    return _exp_core(float(x))
+    |
+    return _exp_core(x)
+}
+
+task ln(int x) | (float x) = float ;
+{
+    return _ln_core(float(x))
+    |
+    return _ln_core(x)
+}
+
+task log(int x) | (float x) | (int x, int base) | (int x, float base) | (float x, int base) | (float x, float base) = float ;
+{
+    ## log natural (como math.log de CPython); con base: cambio de base
+    return _ln_core(float(x))
+    |
+    return _ln_core(x)
+    |
+    return _ln_core(float(x)) / _ln_core(float(base))
+    |
+    return _ln_core(float(x)) / _ln_core(base)
+    |
+    return _ln_core(x) / _ln_core(float(base))
+    |
+    return _ln_core(x) / _ln_core(base)
+}
+
+task log2(int x) | (float x) = float ;
+{
+    return _ln_core(float(x)) / _ln2()
+    |
+    return _ln_core(x) / _ln2()
+}
+
+task log10(int x) | (float x) = float ;
+{
+    return _ln_core(float(x)) / ln10
+    |
+    return _ln_core(x) / ln10
+}
+
+task sin(int ang) | (float ang) = float ;
+{
+    return _sin_f(float(ang))
+    |
+    return _sin_f(ang)
+}
+
+task cos(int ang) | (float ang) = float ;
+{
+    return _cos_f(float(ang))
+    |
+    return _cos_f(ang)
+}
+
+task tan(int ang) | (float ang) = float ;
+{
+    return _tan_f(float(ang))
+    |
+    return _tan_f(ang)
+}
+
+task asin(int x) | (float x) = float ;
+{
+    return _asin_f(float(x))
+    |
+    return _asin_f(x)
+}
+
+task acos(int x) | (float x) = float ;
+{
+    return _acos_f(float(x))
+    |
+    return _acos_f(x)
+}
+
+task atan(int x) | (float x) = float ;
+{
+    return _atan_general(float(x))
+    |
+    return _atan_general(x)
+}
+
+task atan2(int y, int x) | (int y, float x) | (float y, int x) | (float y, float x) = float ;
+{
+    return _atan2_f(float(y), float(x))
+    |
+    return _atan2_f(float(y), x)
+    |
+    return _atan2_f(y, float(x))
+    |
+    return _atan2_f(y, x)
+}
+
+task sinh(int x) | (float x) = float ;
+{
+    return _sinh_f(float(x))
+    |
+    return _sinh_f(x)
+}
+
+task cosh(int x) | (float x) = float ;
+{
+    return _cosh_f(float(x))
+    |
+    return _cosh_f(x)
+}
+
+task tanh(int x) | (float x) = float ;
+{
+    return _tanh_f(float(x))
+    |
+    return _tanh_f(x)
+}
+
+task hypot(int a, int b) | (int a, float b) | (float a, int b) | (float a, float b) = float ;
+{
+    return _hypot_f(float(a), float(b))
+    |
+    return _hypot_f(float(a), b)
+    |
+    return _hypot_f(a, float(b))
+    |
+    return _hypot_f(a, b)
+}
+
+task degrees(int n) | (float x) = float ;
+{
+    return float(n) * 180.0 / pi
+    |
+    return x * 180.0 / pi
+}
+
+task radians(int n) | (float x) = float ;
+{
+    return float(n) * pi / 180.0
+    |
+    return x * pi / 180.0
+}
+
+task gcd(int n, int n2) | (int n, int n2, int n3) | (int n, int n2, int n3, int n4) = int ;
+{
+    return _gcd2(n, n2)
+    |
+    return _gcd2(_gcd2(n, n2), n3)
+    |
+    return _gcd2(_gcd2(_gcd2(n, n2), n3), n4)
+}
+
+task lcm(int n, int n2) | (int n, int n2, int n3) | (int n, int n2, int n3, int n4) = int ;
+{
+    return _lcm2(n, n2)
+    |
+    return _lcm2(_lcm2(n, n2), n3)
+    |
+    return _lcm2(_lcm2(_lcm2(n, n2), n3), n4)
+}
+
+task factorial(int n) = int ;
+{
+    if n < 0 then
+        raise Error("math::factorial: n negativo", 1)
+    end
+    var r: int = 1
+    var i: int = 2
+    while i <= n do
+        r *= i
+        i += 1
+    end
+    return r
+}
+
+task isqrt(int n) = int ;
+{
+    ## parte entera de √n por Newton entero (exacta)
+    if n < 0 then
+        raise Error("math::isqrt: n negativo", 1)
+    end
+    if n < 2 then
+        return n
+    end
+    var r: int = n
+    var t: int = 0
+    while t < 200 do
+        var r2: int = (r + n // r) // 2
+        if r2 >= r then
+            return r
+        end
+        r = r2
+        t += 1
+    end
+    return r
+}
+
+task perm(int n, int n2) = int ;
+{
+    if n2 < 0 || n2 > n then
+        raise Error("math::perm: requiere 0 <= k <= n", 1)
+    end
+    var r: int = 1
+    var i: int = 0
+    while i < n2 do
+        r *= n - i
+        i += 1
+    end
+    return r
+}
+
+task comb(int n, int n2) = int ;
+{
+    if n2 < 0 || n2 > n then
+        return 0
+    end
+    ## producto escalonado: cada paso r·(n−i)//(i+1) es exacto porque
+    ## el resultado intermedio es C(n, i+1)
+    var r: int = 1
+    var i: int = 0
+    while i < n2 do
+        r = r * (n - i) // (i + 1)
+        i += 1
+    end
+    return r
+}
+
+task isclose(int n, int n2) | (int n, float x) | (float x, int n) | (float x, float x2) | (int n, int n2, int n3) | (int n, int n2, float x) | (int n, float x, int n3) | (int n, float x, float x3) | (float x, int n, int n3) | (float x, int n, float x3) | (float x, float x2, int n) | (float x, float x2, float x3) = bool ;
+{
+    return _isclose2(float(n), float(n2))
+    |
+    return _isclose2(float(n), x)
+    |
+    return _isclose2(x, float(n))
+    |
+    return _isclose2(x, x2)
+    |
+    return _isclose3(float(n), float(n2), float(n3))
+    |
+    return _isclose3(float(n), float(n2), x)
+    |
+    return _isclose3(float(n), x, float(n3))
+    |
+    return _isclose3(float(n), x, x3)
+    |
+    return _isclose3(x, float(n), float(n3))
+    |
+    return _isclose3(x, float(n), x3)
+    |
+    return _isclose3(x, x2, float(n))
+    |
+    return _isclose3(x, x2, x3)
+}
+
+task copysign(int n, int n2) | (int n, float x) | (float x, int n) | (float x, float x2) = float ;
+{
+    return _copysign_f(float(n), float(n2))
+    |
+    return _copysign_f(float(n), x)
+    |
+    return _copysign_f(x, float(n))
+    |
+    return _copysign_f(x, x2)
+}
+
+task fmod(int n, int n2) | (int n, float x) | (float x, int n) | (float x, float x2) = float ;
+{
+    return _fmod_f(float(n), float(n2))
+    |
+    return _fmod_f(float(n), x)
+    |
+    return _fmod_f(x, float(n))
+    |
+    return _fmod_f(x, x2)
+}
+
+task remainder(int n, int n2) | (int n, float x) | (float x, int n) | (float x, float x2) = float ;
+{
+    return _remainder_f(float(n), float(n2))
+    |
+    return _remainder_f(float(n), x)
+    |
+    return _remainder_f(x, float(n))
+    |
+    return _remainder_f(x, x2)
+}
+
+task expm1(int n) | (float x) = float ;
+{
+    return _expm1_f(float(n))
+    |
+    return _expm1_f(x)
+}
+
+task log1p(int n) | (float x) = float ;
+{
+    return _log1p_f(float(n))
+    |
+    return _log1p_f(x)
+}
+
+task dist(none[] arg, none[] arg2) = float ;
+{
+    ## distancia euclídea entre dos vectores, escalada para no desbordar
+    if arg::len() != arg2::len() then
+        raise Error("math::dist: listas de distinta longitud", 1)
+    end
+    var n: int = arg::len()
+    var mx: float = 0.0
+    var i: int = 0
+    while i < n do
+        var d: float = _abs_f(float(arg[i]) - float(arg2[i]))
+        if d > mx then
+            mx = d
+        end
+        i += 1
+    end
+    if mx == 0.0 then
+        return 0.0
+    end
+    var total: float = 0.0
+    i = 0
+    while i < n do
+        var q: float = (float(arg[i]) - float(arg2[i])) / mx
+        total += q * q
+        i += 1
+    end
+    return mx * _sqrt_core(total)
+}
+
+task gamma(int n) | (float x) = float ;
+{
+    return _gamma_f(float(n))
+    |
+    return _gamma_f(x)
+}
+
+task lgamma(int n) | (float x) = float ;
+{
+    return _lgamma_f(float(n))
+    |
+    return _lgamma_f(x)
+}
+
+task erf(int n) | (float x) = float ;
+{
+    return _erf_f(float(n))
+    |
+    return _erf_f(x)
+}
+
+task erfc(int n) | (float x) = float ;
+{
+    return _erfc_f(float(n))
+    |
+    return _erfc_f(x)
+}
+
+task _erf_f(float x) = float ;
+{
+    if x > 1.5 then
+        return 1.0 - _erfc_cf(x)
+    end
+    if x < -1.5 then
+        return _erfc_cf(-x) - 1.0
+    end
+    return _erf_series(x)
+}
+
+task _erfc_f(float x) = float ;
+{
+    if x < 0.0 then
+        return 2.0 - _erfc_f(-x)
+    end
+    if x <= 1.5 then
+        return 1.0 - _erf_series(x)
+    end
+    return _erfc_cf(x)
+}

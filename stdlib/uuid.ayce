@@ -1,0 +1,282 @@
+## uuid.ayce — identificadores únicos universales EN AYCE PURO (v0.6.0).
+## uuid4 desde urandom() con los bits de versión/variante del RFC 4122
+## (el mismo esquema de uuid.py de CPython). uuid1 usa el reloj del módulo
+## time (frontera, como time en CPython) con reloj de secuencia y nodo
+## aleatorios, como hace uuid.py cuando no hay _uuid C disponible.
+## uuid3/uuid5 (hashes MD5/SHA-1 de espacios de nombres) sobre hashlib puro.
+
+require hashlib as h
+require binascii as ba
+require time as t
+
+task uuid4() = string ;
+{
+    ## 16 bytes de urandom; bits de versión (4) y variante (10xx)
+    var ent: bytes = urandom(16)
+    var b: list = []
+    var i: int = 0
+    while i < 16 do
+        b::append(ent[i])
+        i += 1
+    end
+    b[6] = (b[6] & 0x0F) | 0x40
+    b[8] = (b[8] & 0x3F) | 0x80
+    return _format(b)
+}
+
+task uuid1() = string ;
+{
+    ## marca de tiempo de 60 bits (intervalos de 100 ns desde 1582-10-15),
+    ## reloj de secuencia y nodo aleatorios con el bit multicast a 1
+    var now: float = t::now()
+    var ts: int = int((now + 12219292800.0) * 10000000.0)
+    var cs: bytes = urandom(2)
+    var seq: int = ((cs[0] << 8) | cs[1]) & 0x3FFF
+    var nd: bytes = urandom(6)
+    var node: int = ((nd[0] << 40) | (nd[1] << 32) | (nd[2] << 24) | (nd[3] << 16) | (nd[4] << 8) | nd[5]) | 0x010000000000
+    var time_low: int = ts & 0xFFFFFFFF
+    var time_mid: int = (ts >> 32) & 0xFFFF
+    var time_hi: int = ((ts >> 48) & 0x0FFF) | 0x1000
+    var out: string = ""
+    out += _hex_pad(time_low, 8)
+    out += "-"
+    out += _hex_pad(time_mid, 4)
+    out += "-"
+    out += _hex_pad(time_hi, 4)
+    out += "-"
+    out += _hex_pad((seq >> 8) | 0x80, 2)
+    out += _hex_pad(seq & 0xFF, 2)
+    out += "-"
+    out += _hex_pad(node, 12)
+    return out
+}
+
+task uuid3(stdlib::Cualquiera ns, string nombre) = string ;
+{
+    ## UUID v3: MD5 del namespace + nombre, versión 3
+    return _from_hash(ns, nombre, "md5", 3)
+}
+
+task uuid5(stdlib::Cualquiera ns, string nombre) = string ;
+{
+    ## UUID v5: SHA-1 del namespace + nombre, versión 5
+    return _from_hash(ns, nombre, "sha1", 5)
+}
+
+task _from_hash(stdlib::Cualquiera ns, string nombre, string algoritmo, int version) = string ;
+{
+    ## como uuid.py: hash(bytes_del_ns + nombre) y se sobreescriben
+    ## los bits de versión y variante
+    var nsb: list = _ns_bytes(ns)
+    var nb: bytes = bytes(nombre)
+    var msg: list = []
+    var i: int = 0
+    while i < nsb::len() do
+        msg::append(nsb[i])
+        i += 1
+    end
+    var enc: bytes = bytes(nombre)
+    i = 0
+    while i < enc::len() do
+        msg::append(enc[i])
+        i += 1
+    end
+    var data: bytes = bytes_from_ints(msg)
+    var dig: list = []
+    if algoritmo == "md5" then
+        dig = h::_md5_bytes(data)
+    else
+        dig = h::_sha1_bytes(data)
+    end
+    dig[6] = (dig[6] & 0x0F) | ((version & 0x0F) << 4)
+    dig[8] = (dig[8] & 0x3F) | 0x80
+    return _format(dig)
+}
+
+## espacios de nombres estándar (RFC 4122, como uuid.NAMESPACE_* de CPython)
+const NAMESPACE_DNS: string = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+const NAMESPACE_URL: string = "6ba7b811-9dad-11d1-80b4-00c04fd430c8"
+const NAMESPACE_OID: string = "6ba7b812-9dad-11d1-80b4-00c04fd430c8"
+const NAMESPACE_X500: string = "6ba7b814-9dad-11d1-80b4-00c04fd430c8"
+
+task _ns_bytes(stdlib::Cualquiera ns) = list ;
+{
+    ## namespace dado como string uuid canónico → 16 bytes
+    var hx: string = _strip_dashes(ns)
+    var out: list = []
+    var i: int = 0
+    while i < 16 do
+        var hi: int = _hex_val(hx[2 * i])
+        var lo: int = _hex_val(hx[2 * i + 1])
+        out::append(hi * 16 + lo)
+        i += 1
+    end
+    return out
+}
+
+task parse(string s) = string ;
+{
+    ## valida y devuelve la forma canónica 8-4-4-4-12 en minúsculas;
+    ## acepta llaves { } y el prefijo urn:uuid: como uuid.py
+    var txt: string = s
+    if txt::len() > 9 then
+        ## urn:uuid: + 36 caracteres
+        var prefijo: string = "urn:uuid:"
+        var es_urn: bool = True
+        var i: int = 0
+        while i < 9 do
+            var c: string = txt[i]
+            var ref: string = prefijo[i]
+            var cu: string = c
+            var ru: string = ref
+            ## comparación en minúsculas
+            if _lower_char(cu) != _lower_char(ru) then
+                es_urn = False
+            end
+            i += 1
+        end
+        if es_urn then
+            txt = _slice(txt, 9, txt::len())
+        end
+    end
+    if txt::len() > 0 then
+        if txt[0] == "{" then
+            txt = _slice(txt, 1, txt::len())
+        end
+    end
+    if txt::len() > 0 then
+        if txt[txt::len() - 1] == "}" then
+            txt = _slice(txt, 0, txt::len() - 1)
+        end
+    end
+    if txt::len() != 36 then
+        raise Error("uuid::parse: longitud inválida (esperada 36)", 1)
+    end
+    ## posiciones de los guiones: 8, 13, 18, 23
+    var guiones: list = [8, 13, 18, 23]
+    var i: int = 0
+    while i < 36 do
+        var es_guion: bool = False
+        var k: int = 0
+        while k < 4 do
+            if guiones[k] == i then
+                es_guion = True
+            end
+            k += 1
+        end
+        if es_guion then
+            if txt[i] != "-" then
+                raise Error("uuid::parse: se esperaba '-' en la posición " + string(i + 1), 1)
+            end
+        else
+            if _hex_val(txt[i]) < 0 then
+                raise Error("uuid::parse: carácter no hexadecimal en la posición " + string(i + 1), 1)
+            end
+        end
+        i += 1
+    end
+    return _lower(txt)
+}
+
+task _format(list b) = string ;
+{
+    ## 16 bytes → uuid canónico con guiones
+    var hx: string = ""
+    var i: int = 0
+    while i < 16 do
+        var v: int = b[i]
+        var hi: int = v // 16
+        var lo: int = v % 16
+        hx += _hex_char(hi)
+        hx += _hex_char(lo)
+        i += 1
+    end
+    var out: string = ""
+    out += _slice(hx, 0, 8)
+    out += "-"
+    out += _slice(hx, 8, 12)
+    out += "-"
+    out += _slice(hx, 12, 16)
+    out += "-"
+    out += _slice(hx, 16, 20)
+    out += "-"
+    out += _slice(hx, 20, 32)
+    return out
+}
+
+task _hex_pad(int v, int digitos) = string ;
+{
+    ## hexadecimal con ceros a la izquierda, en minúsculas
+    var out: string = ""
+    var i: int = digitos - 1
+    while i >= 0 do
+        out += _hex_char((v >> (4 * i)) & 0xF)
+        i -= 1
+    end
+    return out
+}
+
+task _hex_char(int v) = string ;
+{
+    if v < 10 then
+        return chr(48 + v)
+    end
+    return chr(87 + v)
+}
+
+task _hex_val(string ch) = int ;
+{
+    if ch >= "0" && ch <= "9" then
+        return ord(ch) - 48
+    end
+    if ch >= "a" && ch <= "f" then
+        return ord(ch) - 87
+    end
+    if ch >= "A" && ch <= "F" then
+        return ord(ch) - 55
+    end
+    return -1
+}
+
+task _strip_dashes(string s) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        if s[i] != "-" then
+            out += s[i]
+        end
+        i += 1
+    end
+    return out
+}
+
+task _lower(string s) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        out += _lower_char(s[i])
+        i += 1
+    end
+    return out
+}
+
+task _lower_char(string c) = string ;
+{
+    if c >= "A" && c <= "Z" then
+        return chr(ord(c) + 32)
+    end
+    return c
+}
+
+task _slice(string s, int ini, int fin) = string ;
+{
+    var out: string = ""
+    var i: int = ini
+    while i < fin do
+        out += s[i]
+        i += 1
+    end
+    return out
+}

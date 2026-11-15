@@ -1,0 +1,117 @@
+## zlib.ayce — compresión y sumas de verificación (v0.6.0).
+## crc32 y adler32 están implementados EN AYCE PURO (con tabla generada
+## aquí mismo para el CRC). `compress`/`decompress` delegan en el batch
+## privado `_zlib`: en CPython el módulo zlib también ES la librería C
+## externa (no existe una implementación de DEFLATE en Python), así que
+## aquí sigue siendo frontera con la máquina, igual que io/os.
+
+require _zlib as zl
+
+task crc32(string datos) | (bytes datos) = int ;
+{
+    ## CRC-32 (polinomio 0xEDB88320) — implementado aquí, compatible con zlib
+    var msg: list = []
+    var b: bytes = bytes(datos)
+    var i: int = 0
+    while i < b::len() do
+        msg::append(b[i])
+        i += 1
+    end
+    var tbl: list = _crc32_table()
+    var crc: int = 0xFFFFFFFF
+    i = 0
+    while i < msg::len() do
+        crc = tbl[(crc ^ msg[i]) & 0xFF] ^ (crc >> 8)
+        i += 1
+    end
+    return crc ^ 0xFFFFFFFF
+    |
+    var msg: list = []
+    var i: int = 0
+    while i < datos::len() do
+        msg::append(datos[i])
+        i += 1
+    end
+    var tbl: list = _crc32_table()
+    var crc: int = 0xFFFFFFFF
+    i = 0
+    while i < msg::len() do
+        crc = tbl[(crc ^ msg[i]) & 0xFF] ^ (crc >> 8)
+        i += 1
+    end
+    return crc ^ 0xFFFFFFFF
+}
+
+task _crc32_table() = list ;
+{
+    ## genera la tabla de 256 entradas del CRC-32 reflejado
+    var tbl: list = []
+    var i: int = 0
+    while i < 256 do
+        var cc: int = i
+        var k: int = 0
+        while k < 8 do
+            if cc & 1 == 1 then
+                cc = (cc >> 1) ^ 0xEDB88320
+            else
+                cc = cc >> 1
+            end
+            k += 1
+        end
+        tbl::append(cc)
+        i += 1
+    end
+    return tbl
+}
+
+task adler32(string datos) | (bytes datos) = int ;
+{
+    ## Adler-32: a = 1 + Σ bytes (mod 65521), b = Σ a (mod 65521)
+    var msg: list = []
+    var b: bytes = bytes(datos)
+    var i: int = 0
+    while i < b::len() do
+        msg::append(b[i])
+        i += 1
+    end
+    var a: int = 1
+    var bb: int = 0
+    i = 0
+    while i < msg::len() do
+        a = (a + msg[i]) % 65521
+        bb = (bb + a) % 65521
+        i += 1
+    end
+    return (bb << 16) | a
+    |
+    var msg: list = []
+    var i: int = 0
+    while i < datos::len() do
+        msg::append(datos[i])
+        i += 1
+    end
+    var a: int = 1
+    var bb: int = 0
+    i = 0
+    while i < msg::len() do
+        a = (a + msg[i]) % 65521
+        bb = (bb + a) % 65521
+        i += 1
+    end
+    return (bb << 16) | a
+}
+
+task compress(string s) | (bytes datos) = string ;
+{
+    ## frontera C: zlib/DEFLATE en CPython también es la librería C externa
+    return zl::compress(s)
+    |
+    return zl::compress(datos)
+}
+
+task decompress(string s) | (bytes datos) ;
+{
+    return zl::decompress(s)
+    |
+    return zl::decompress(datos)
+}

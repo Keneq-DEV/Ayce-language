@@ -1,0 +1,109 @@
+## pruebas de os, io, sys, time, stat, glob, tempfile, shutil
+require os as OS
+require io as IO
+require sys as SYS
+require time as T
+require stat as ST
+require glob as G
+require tempfile as TF
+require shutil as SH
+
+## ── os ──
+say("os cwd:", OS::cwd()::contains("/") || OS::cwd() == ".")
+say("os sep:", OS::sep())                       ## /
+say("os name:", OS::name() == "posix" || OS::name() == "nt")
+say("os exists:", OS::exists("/tmp"))           ## true
+say("os isdir:", OS::isdir("/tmp"))             ## true
+say("os isfile:", OS::isfile("/tmp"))           ## false
+say("os getpid:", OS::getpid() > 0)
+say("os getenv vacío:", "[" + OS::getenv("NO_EXISTE_XYZ") + "]")       ## []
+say("os getenv default:", OS::getenv("NO_EXISTE_XYZ", "valor"))        ## valor
+
+## ── io: archivos ──
+IO::write_file("/tmp/ayce_io_test.txt", "línea 1\nlínea 2\nlínea 3\n")
+say("io read:", IO::read_file("/tmp/ayce_io_test.txt")::contains("línea 2"))
+var lineas: none[] = IO::read_lines("/tmp/ayce_io_test.txt")
+say("io lines:", lineas::len(), lineas[1])      ## 3 línea 2
+IO::append_file("/tmp/ayce_io_test.txt", "línea 4\n")
+say("io append:", IO::read_lines("/tmp/ayce_io_test.txt")::len())  ## 4
+say("io size:", IO::file_size("/tmp/ayce_io_test.txt") > 0)
+IO::rename_file("/tmp/ayce_io_test.txt", "/tmp/ayce_io_test2.txt")
+say("io rename:", IO::file_exists("/tmp/ayce_io_test2.txt"))       ## true
+IO::write_lines("/tmp/ayce_io_test3.txt", ["a", "b", "c"])
+say("io writelines:", IO::read_file("/tmp/ayce_io_test3.txt"))     ## a\nb\nc\n
+IO::delete_file("/tmp/ayce_io_test2.txt")
+IO::delete_file("/tmp/ayce_io_test3.txt")
+say("io delete:", IO::file_exists("/tmp/ayce_io_test2.txt"))       ## false
+IO::write_bytes("/tmp/ayce_io_bytes.bin", "ABC")
+var bs: bytes = IO::read_bytes("/tmp/ayce_io_bytes.bin")
+say("io bytes:", bs::len(), bs[0])              ## 3 65
+IO::delete_file("/tmp/ayce_io_bytes.bin")
+
+## ── sys ──
+say("sys version:", SYS::version()::contains("."))
+say("sys platform:", SYS::platform() != "")
+SYS::stdout("stdout sin salto")
+say(" <- luego say")
+
+## ── time ──
+say("time now > 0:", T::now() > 1000000000.0)
+var t0: float = T::clock()
+T::sleep(0.05)
+say("time clock avanza:", T::clock() >= t0)
+say("time strftime:", T::strftime("%Y-%m-%d %H:%M:%S")::len() == 19)
+var loc: none<> = T::localtime()
+say("time localtime keys:", loc::keys()::len() >= 7)
+var g: none<> = T::gmtime()
+say("time gmtime:", g<"year"> >= 2024)
+var par: none<> = T::strptime("2024-05-03 09:15:00", "%Y-%m-%d %H:%M:%S")
+say("time strptime:", par<"iso">)               ## 2024-05-03T09:15:00
+say("time timestamp:", T::timestamp()::contains("T"))
+
+## ── stat ──
+IO::write_file("/tmp/ayce_stat.txt", "contenido")
+var info: none<> = ST::stat("/tmp/ayce_stat.txt")
+say("stat size:", info<"size">)                 ## 9
+say("stat is_file:", info<"is_file">)           ## true
+say("stat is_dir:", info<"is_dir">)             ## false
+say("stat mode_str:", ST::mode_str("/tmp/ayce_stat.txt")::len() == 9)
+say("stat mtime:", ST::mtime("/tmp/ayce_stat.txt") > 1000000000.0)
+say("stat S_IFDIR:", ST::S_IFDIR)               ## 16384
+say("stat S_IFREG:", ST::S_IFREG)               ## 32768
+IO::delete_file("/tmp/ayce_stat.txt")
+
+## ── glob ──
+IO::write_file("/tmp/ayce_g1.txt", "1")
+IO::write_file("/tmp/ayce_g2.txt", "2")
+IO::write_file("/tmp/ayce_g3.log", "3")
+var hallados: none[] = G::glob("/tmp/ayce_g*.txt")
+say("glob:", hallados::len())                    ## 2
+say("glob ?:", G::glob("/tmp/ayce_g?.log")::len())  ## 1
+say("glob literal:", G::glob("/tmp/ayce_g1.txt")::len())  ## 1
+IO::delete_file("/tmp/ayce_g1.txt")
+IO::delete_file("/tmp/ayce_g2.txt")
+IO::delete_file("/tmp/ayce_g3.log")
+
+## ── tempfile ──
+say("tempdir:", TF::gettempdir() != "")
+var ruta_tmp: string = TF::mktemp()
+say("mktemp único:", ruta_tmp::starts_with(TF::gettempdir()))
+var dir_tmp: string = TF::mkdtemp()
+say("mkdtemp existe:", OS::isdir(dir_tmp))       ## true
+
+## ── shutil ──
+IO::write_file("/tmp/ayce_sh_origen.txt", "datos a copiar")
+SH::copy("/tmp/ayce_sh_origen.txt", "/tmp/ayce_sh_copia.txt")
+say("shutil copy:", IO::read_file("/tmp/ayce_sh_copia.txt"))  ## datos a copiar
+SH::move("/tmp/ayce_sh_copia.txt", "/tmp/ayce_sh_movido.txt")
+say("shutil move:", IO::file_exists("/tmp/ayce_sh_copia.txt") == False && IO::read_file("/tmp/ayce_sh_movido.txt")::contains("datos"))
+var dir_sh: string = TF::mkdtemp()
+IO::write_file(dir_sh + "/a.txt", "a")
+IO::write_file(dir_sh + "/b.txt", "b")
+SH::rmtree(dir_sh)
+say("shutil rmtree:", OS::exists(dir_sh) == False)  ## true
+say("shutil which python:", SH::which("python3") != "")
+var du: none<> = SH::disk_usage("/")
+say("shutil disk_usage:", du::keys()::len() >= 3)
+IO::delete_file("/tmp/ayce_sh_origen.txt")
+IO::delete_file("/tmp/ayce_sh_movido.txt")
+say("OK grupo3")

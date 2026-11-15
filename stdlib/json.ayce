@@ -1,0 +1,581 @@
+## json.ayce — parser y serializador JSON EN AYCE PURO (v0.6.0).
+## El parser es descendente recursivo, carácter a carácter (con ord para
+## clasificar y chr para construir), igual que json/decoder.py de CPython
+## es Python puro. Soporta: objetos {}, arreglos [], strings con escapes
+## (\", \\, \/, \b, \f, \n, \r, \t, \uXXXX y pares sustitutos), números
+## enteros y flotantes con exponente, true/false/null.
+## La serialización escapa controles y mantiene los no-ASCII (como
+## ensure_ascii=False). parse_file/write_file usan io (frontera con el SO,
+## como json.load(fp) de CPython que recibe un archivo abierto).
+
+require io as io
+
+## ── Parseo ──────────────────────────────────────────────────────────────
+
+task parse(string texto) ;
+{
+    var i: int = _skip_ws(texto, 0)
+    var res: list = _parse_value(texto, i)
+    var fin: int = _skip_ws(texto, res[1])
+    if fin < texto::len() then
+        raise Error("json::parse: contenido sobrante tras el valor", 1)
+    end
+    return res[0]
+}
+
+task _skip_ws(string s, int i) = int ;
+{
+    var n: int = s::len()
+    while i < n do
+        var c: string = s[i]
+        if c == " " || c == "\t" || c == "\n" || c == "\r" then
+            i += 1
+        else
+            break
+        end
+    end
+    return i
+}
+
+task _parse_value(string s, int i) = list ;
+{
+    ## devuelve [valor, posición_siguiente]
+    i = _skip_ws(s, i)
+    if i >= s::len() then
+        raise Error("json::parse: entrada incompleta", 1)
+    end
+    var c: string = s[i]
+    if c == "{" then
+        return _parse_object(s, i)
+    end
+    if c == "[" then
+        return _parse_array(s, i)
+    end
+    if c == "\"" then
+        return _parse_string(s, i)
+    end
+    if c == "t" then
+        return _expect_word(s, i, "true", True)
+    end
+    if c == "f" then
+        return _expect_word(s, i, "false", False)
+    end
+    if c == "n" then
+        return _expect_word(s, i, "null", none)
+    end
+    return _parse_number(s, i)
+}
+
+task _expect_word(string s, int i, string palabra, stdlib::Cualquiera valor) = list ;
+{
+    ## verifica una palabra literal (true/false/null)
+    var k: int = 0
+    while k < palabra::len() do
+        if i + k >= s::len() || s[i + k] != palabra[k] then
+            raise Error("json::parse: literal inválido", 1)
+        end
+        k += 1
+    end
+    return [valor, i + palabra::len()]
+}
+
+task _parse_array(string s, int i) = list ;
+{
+    ## s[i] == '['
+    var out: list = []
+    var j: int = _skip_ws(s, i + 1)
+    if j < s::len() && s[j] == "]" then
+        return [out, j + 1]
+    end
+    while j < s::len() do
+        var res: list = _parse_value(s, j)
+        out::append(res[0])
+        j = _skip_ws(s, res[1])
+        if j >= s::len() then
+            raise Error("json::parse: arreglo sin cerrar", 1)
+        end
+        if s[j] == "," then
+            j = _skip_ws(s, j + 1)
+        else
+            if s[j] == "]" then
+                return [out, j + 1]
+            end
+            raise Error("json::parse: se esperaba ',' o ']'", 1)
+        end
+    end
+    raise Error("json::parse: arreglo sin cerrar", 1)
+}
+
+task _parse_object(string s, int i) = list ;
+{
+    ## s[i] == '{'; las claves deben ser strings
+    var d: dict = <>
+    var j: int = _skip_ws(s, i + 1)
+    if j < s::len() && s[j] == "}" then
+        return [d, j + 1]
+    end
+    while j < s::len() do
+        if s[j] != "\"" then
+            raise Error("json::parse: la clave debe ser string", 1)
+        end
+        var kv: list = _parse_string(s, j)
+        var key: string = kv[0]
+        j = _skip_ws(s, kv[1])
+        if j >= s::len() || s[j] != ":" then
+            raise Error("json::parse: se esperaba ':'", 1)
+        end
+        var res: list = _parse_value(s, j + 1)
+        d<key> = res[0]
+        j = _skip_ws(s, res[1])
+        if j >= s::len() then
+            raise Error("json::parse: objeto sin cerrar", 1)
+        end
+        if s[j] == "," then
+            j = _skip_ws(s, j + 1)
+        else
+            if s[j] == "}" then
+                return [d, j + 1]
+            end
+            raise Error("json::parse: se esperaba ',' o '}'", 1)
+        end
+    end
+    raise Error("json::parse: objeto sin cerrar", 1)
+}
+
+task _parse_string(string s, int i) = list ;
+{
+    ## s[i] == '"'; procesa escapes, incluidos \uXXXX y pares sustitutos
+    var out: string = ""
+    var j: int = i + 1
+    var n: int = s::len()
+    while j < n do
+        var c: string = s[j]
+        if c == "\"" then
+            return [out, j + 1]
+        end
+        if c == "\\" then
+            if j + 1 >= n then
+                raise Error("json::parse: escape incompleto", 1)
+            end
+            var e: string = s[j + 1]
+            if e == "\"" then
+                out += "\""
+                j += 2
+            else
+                if e == "\\" then
+                    out += "\\"
+                    j += 2
+                else
+                    if e == "/" then
+                        out += "/"
+                        j += 2
+                    else
+                        if e == "b" then
+                            out += chr(8)
+                            j += 2
+                        else
+                            if e == "f" then
+                                out += chr(12)
+                                j += 2
+                            else
+                                if e == "n" then
+                                    out += "\n"
+                                    j += 2
+                                else
+                                    if e == "r" then
+                                        out += "\r"
+                                        j += 2
+                                    else
+                                        if e == "t" then
+                                            out += "\t"
+                                            j += 2
+                                        else
+                                            if e == "u" then
+                                                var res: list = _parse_u(s, j + 2)
+                                                var cp: int = res[0]
+                                                j = res[1]
+                                                ## par sustituto alto: necesita \uDC00-\uDFFF a continuación
+                                                if cp >= 0xD800 && cp < 0xDC00 then
+                                                    if j + 1 < n && s[j] == "\\" && s[j + 1] == "u" then
+                                                        var res2: list = _parse_u(s, j + 2)
+                                                        var lo: int = res2[0]
+                                                        if lo >= 0xDC00 && lo < 0xE000 then
+                                                            out += chr(0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00))
+                                                            j = res2[1]
+                                                        else
+                                                            out += chr(cp)
+                                                        end
+                                                    else
+                                                        out += chr(cp)
+                                                    end
+                                                else
+                                                    out += chr(cp)
+                                                end
+                                            else
+                                                raise Error("json::parse: escape inválido '\\" + e + "'", 1)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            out += c
+            j += 1
+        end
+    end
+    raise Error("json::parse: string sin cerrar", 1)
+}
+
+task _parse_u(string s, int i) = list ;
+{
+    ## lee exactamente 4 dígitos hexadecimales → [código, nueva_pos]
+    var cp: int = 0
+    var k: int = 0
+    while k < 4 do
+        if i + k >= s::len() then
+            raise Error("json::parse: \\u incompleto", 1)
+        end
+        var v: int = _hex_val(s[i + k])
+        if v < 0 then
+            raise Error("json::parse: \\u con dígito inválido", 1)
+        end
+        cp = (cp << 4) | v
+        k += 1
+    end
+    return [cp, i + 4]
+}
+
+task _hex_val(string ch) = int ;
+{
+    if ch >= "0" && ch <= "9" then
+        return ord(ch) - 48
+    end
+    if ch >= "a" && ch <= "f" then
+        return ord(ch) - 87
+    end
+    if ch >= "A" && ch <= "F" then
+        return ord(ch) - 55
+    end
+    return -1
+}
+
+task _parse_number(string s, int i) = list ;
+{
+    ## número JSON: -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
+    var n: int = s::len()
+    var ini: int = i
+    if i < n && s[i] == "-" then
+        i += 1
+    end
+    if i >= n || s[i] < "0" || s[i] > "9" then
+        raise Error("json::parse: número inválido", 1)
+    end
+    if s[i] == "0" then
+        i += 1
+    else
+        while i < n && s[i] >= "0" && s[i] <= "9" do
+            i += 1
+        end
+    end
+    var es_float: bool = False
+    if i < n && s[i] == "." then
+        es_float = True
+        i += 1
+        if i >= n || s[i] < "0" || s[i] > "9" then
+            raise Error("json::parse: fracción inválida", 1)
+        end
+        while i < n && s[i] >= "0" && s[i] <= "9" do
+            i += 1
+        end
+    end
+    if i < n && (s[i] == "e" || s[i] == "E") then
+        es_float = True
+        i += 1
+        if i < n && (s[i] == "+" || s[i] == "-") then
+            i += 1
+        end
+        if i >= n || s[i] < "0" || s[i] > "9" then
+            raise Error("json::parse: exponente inválido", 1)
+        end
+        while i < n && s[i] >= "0" && s[i] <= "9" do
+            i += 1
+        end
+    end
+    var lit: string = ""
+    var k: int = ini
+    while k < i do
+        lit += s[k]
+        k += 1
+    end
+    if es_float then
+        return [float(lit), i]
+    end
+    return [int(lit), i]
+}
+
+## ── Serialización ───────────────────────────────────────────────────────
+
+task stringify(stdlib::Cualquiera valor) = string ;
+{
+    ## separadores por defecto de CPython (", " y ": ")
+    return _dump_sep(valor, ", ", ": ")
+}
+
+task stringify_compact(stdlib::Cualquiera valor) = string ;
+{
+    return _dump_sep(valor, ",", ":")
+}
+
+task _dump_sep(stdlib::Cualquiera valor, string sep, string kvsep) = string ;
+{
+    return _flat(valor, sep, kvsep)
+}
+
+## _flat distingue bool/int/float/string/none/lista/dict por overloads
+task _flat(bool b, string sep, string kvsep) = string ;
+{
+    if b then
+        return "true"
+    end
+    return "false"
+}
+
+task _flat(int n, string sep, string kvsep) = string ;
+{
+    return string(n)
+}
+
+task _flat(float x, string sep, string kvsep) = string ;
+{
+    return string(x)
+}
+
+task _flat(none v, string sep, string kvsep) = string ;
+{
+    return "null"
+}
+
+task _flat(string s, string sep, string kvsep) = string ;
+{
+    return _quote(s)
+}
+
+task _flat(none[] lista, string sep, string kvsep) = string ;
+{
+    var out: string = "["
+    var i: int = 0
+    while i < lista::len() do
+        if i > 0 then
+            out += sep
+        end
+        out += _flat(lista[i], sep, kvsep)
+        i += 1
+    end
+    out += "]"
+    return out
+}
+
+task _flat(none<> d, string sep, string kvsep) = string ;
+{
+    var keys: list = d::keys()
+    var out: string = "{"
+    var i: int = 0
+    while i < keys::len() do
+        if i > 0 then
+            out += sep
+        end
+        var k: string = keys[i]
+        out += _quote(k)
+        out += kvsep
+        out += _flat(d<k>, sep, kvsep)
+        i += 1
+    end
+    out += "}"
+    return out
+}
+
+task _quote(string s) = string ;
+{
+    ## comillas con escapes de JSON; los controles < 0x20 como \uXXXX
+    var out: string = "\""
+    var i: int = 0
+    var n: int = s::len()
+    while i < n do
+        var c: string = s[i]
+        var cp: int = ord(c)
+        if c == "\"" then
+            out += "\\\""
+        else
+            if c == "\\" then
+                out += "\\\\"
+            else
+                if c == "\n" then
+                    out += "\\n"
+                else
+                    if c == "\r" then
+                        out += "\\r"
+                    else
+                        if c == "\t" then
+                            out += "\\t"
+                        else
+                            if c == chr(8) then
+                                out += "\\b"
+                            else
+                                if c == chr(12) then
+                                    out += "\\f"
+                                else
+                                    if cp < 0x20 then
+                                        out += "\\u"
+                                        out += _hex4(cp)
+                                    else
+                                        out += c
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        i += 1
+    end
+    out += "\""
+    return out
+}
+
+task _hex4(int cp) = string ;
+{
+    var out: string = ""
+    var i: int = 3
+    while i >= 0 do
+        var d: int = (cp >> (4 * i)) & 0xF
+        if d < 10 then
+            out += chr(48 + d)
+        else
+            out += chr(87 + d)
+        end
+        i -= 1
+    end
+    return out
+}
+
+## ── Archivos (frontera io) y validación ─────────────────────────────────
+
+task parse_file(string ruta) ;
+{
+    return parse(io::read_file(ruta))
+}
+
+task write_file(string ruta, stdlib::Cualquiera valor) ;
+{
+    ## indentación de 2 espacios, como la versión nativa (json.dumps indent=2)
+    io::write_file(ruta, _pretty_top(valor, 0))
+}
+
+task _pretty_top(stdlib::Cualquiera valor, int nivel) = string ;
+{
+    return _pretty(valor, nivel)
+}
+
+task _pretty(bool b, int nivel) = string ;
+{
+    if b then
+        return "true"
+    end
+    return "false"
+}
+
+task _pretty(int n, int nivel) = string ;
+{
+    return string(n)
+}
+
+task _pretty(float x, int nivel) = string ;
+{
+    return string(x)
+}
+
+task _pretty(none v, int nivel) = string ;
+{
+    return "null"
+}
+
+task _pretty(string s, int nivel) = string ;
+{
+    return _quote(s)
+}
+
+task _pretty(none[] lista, int nivel) = string ;
+{
+    if lista::len() == 0 then
+        return "[]"
+    end
+    var pad_in: string = _pad(nivel + 1)
+    var out: string = "[\n"
+    var i: int = 0
+    while i < lista::len() do
+        if i > 0 then
+            out += ",\n"
+        end
+        out += pad_in
+        out += _pretty(lista[i], nivel + 1)
+        i += 1
+    end
+    out += "\n"
+    out += _pad(nivel)
+    out += "]"
+    return out
+}
+
+task _pretty(none<> d, int nivel) = string ;
+{
+    var keys: list = d::keys()
+    if keys::len() == 0 then
+        return "{}"
+    end
+    var pad_in: string = _pad(nivel + 1)
+    var out: string = "{\n"
+    var i: int = 0
+    while i < keys::len() do
+        if i > 0 then
+            out += ",\n"
+        end
+        var k: string = keys[i]
+        out += pad_in
+        out += _quote(k)
+        out += ": "
+        out += _pretty(d<k>, nivel + 1)
+        i += 1
+    end
+    out += "\n"
+    out += _pad(nivel)
+    out += "}"
+    return out
+}
+
+task _pad(int nivel) = string ;
+{
+    ## nivel·2 espacios
+    var out: string = ""
+    var i: int = 0
+    while i < nivel do
+        out += "  "
+        i += 1
+    end
+    return out
+}
+
+task valid(string texto) = bool ;
+{
+    ## como json::valid nativo: True si el texto es JSON válido
+    try
+        parse(texto)
+        return True
+    rescue e: Error
+        return False
+    end
+}

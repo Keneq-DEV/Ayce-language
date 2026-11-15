@@ -97,6 +97,9 @@ NATIVE_ERRORS = {
     "AssertErr":   {"code": 18,  "parent": "RunErr",   "desc": "Aserción fallida."},
     "StopErr":     {"code": 19,  "parent": "RunErr",   "desc": "Iteración detenida."},
 
+    # Errores de formato (v0.6.0)
+    "JSONDecodeError": {"code": 56, "parent": "ValErr",  "desc": "JSON inválido al parsear."},
+
     # Errores de sistema
     "SysErr":      {"code": 20,  "parent": "Excn",     "desc": "Error del sistema."},
     "OSysErr":     {"code": 21,  "parent": "SysErr",   "desc": "Error del sistema operativo."},

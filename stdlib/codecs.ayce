@@ -1,0 +1,302 @@
+## codecs.ayce — codificaciones de texto EN AYCE PURO (v0.6.0).
+## Los algoritmos de codificación corren aquí, escritos en ayce:
+##   - utf-8: el algoritmo estándar (1 a 4 bytes por punto de código)
+##     con ord/chr y los operadores bit a bit del lenguaje
+##   - latin-1 / iso-8859-1: identidad byte a byte (0..255)
+##   - ascii: como latin-1 pero rechaza (o reemplaza) lo no imprimible
+##   - hex: dos dígitos por byte (via binascii.ayce)
+##   - base64 / base64_urlsafe: via base64.ayce
+##   - rot13: rotación de letras
+## El parámetro errors ("strict" por defecto, "replace", "ignore")
+## aplica a utf-8 y ascii, igual que en CPython.
+
+require binascii as ba
+require base64 as b64
+
+## encode(texto, encoding, errors) — devuelve los bytes codificados como
+## cadena latin-1 (cada byte como su carácter), igual que el batch nativo
+task encode(string s, string s2) | (string s, string s2, stdlib::Cualquiera arg) ;
+{
+    return _encode3(s, s2, "strict")
+    |
+    return _encode3(s, s2, string(arg))
+}
+
+task _encode3(string s, string enc, string errors) = string ;
+{
+    if enc == "utf-8" || enc == "utf8" then
+        return _bytes_to_str(_utf8_encode(s))
+    end
+    if enc == "latin-1" || enc == "latin1" || enc == "iso-8859-1" then
+        return _bytes_to_str(_latin1_encode(s))
+    end
+    if enc == "ascii" then
+        return _bytes_to_str(_ascii_encode(s, errors))
+    end
+    if enc == "hex" then
+        return ba::hexlify(s)
+    end
+    if enc == "base64" then
+        return b64::encode(s)
+    end
+    if enc == "base64_urlsafe" then
+        return b64::encode_urlsafe(s)
+    end
+    if enc == "rot13" then
+        return _rot13(s)
+    end
+    error_codec(enc)
+}
+
+## decode(bytes_en_latin1, encoding, errors) → texto decodificado
+task decode(string s, string s2) | (string s, string s2, stdlib::Cualquiera arg) ;
+{
+    return _decode3(s, s2, "strict")
+    |
+    return _decode3(s, s2, string(arg))
+}
+
+task _decode3(string s, string enc, string errors) = string ;
+{
+    if enc == "utf-8" || enc == "utf8" then
+        return _utf8_decode(s, errors)
+    end
+    if enc == "latin-1" || enc == "latin1" || enc == "iso-8859-1" then
+        ## latin-1 es identidad: cada byte es su punto de código
+        return s
+    end
+    if enc == "ascii" then
+        return _ascii_decode(s, errors)
+    end
+    if enc == "hex" then
+        return ba::unhexlify(s)
+    end
+    if enc == "base64" then
+        return b64::decode(s)
+    end
+    if enc == "base64_urlsafe" then
+        return b64::decode_urlsafe(s)
+    end
+    if enc == "rot13" then
+        return _rot13(s)
+    end
+    error_codec(enc)
+}
+
+task error_codec(string enc) ;
+{
+    var d: none<> = <>
+    var clave: string = "codecs: codificación desconocida: " + enc
+    var v: none = d<clave>
+}
+
+## ── UTF-8: algoritmo estándar con bits ──
+task _utf8_encode(string s) = list ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < s::len() do
+        var cp: int = ord(s[i])
+        if cp < 0x80 then
+            out::append(cp)
+        else if cp < 0x800 then
+            out::append(0xC0 | (cp >> 6))
+            out::append(0x80 | (cp & 0x3F))
+        else if cp < 0x10000 then
+            out::append(0xE0 | (cp >> 12))
+            out::append(0x80 | ((cp >> 6) & 0x3F))
+            out::append(0x80 | (cp & 0x3F))
+        else
+            out::append(0xF0 | (cp >> 18))
+            out::append(0x80 | ((cp >> 12) & 0x3F))
+            out::append(0x80 | ((cp >> 6) & 0x3F))
+            out::append(0x80 | (cp & 0x3F))
+        end
+        i += 1
+    end
+    return bytes_from_ints(out)
+}
+
+## decodifica una secuencia de bytes (cadena latin-1) en UTF-8
+task _utf8_decode(string s, string errors) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    var n: int = s::len()
+    while i < n do
+        var b: int = ord(s[i])
+        var cp: int = -1
+        var necesita: int = 0
+        if b < 0x80 then
+            cp = b
+        else if (b & 0xE0) == 0xC0 then
+            cp = b & 0x1F
+            necesita = 1
+        else if (b & 0xF0) == 0xE0 then
+            cp = b & 0x0F
+            necesita = 2
+        else if (b & 0xF8) == 0xF0 then
+            cp = b & 0x07
+            necesita = 3
+        else
+            ## byte de continuación suelto
+            if errors == "replace" then
+                out += chr(0xFFFD)
+                i += 1
+            else if errors == "ignore" then
+                i += 1
+            else
+                error_utf8()
+            end
+            continue
+        end
+        ## consumir los bytes de continuación (10xxxxxx)
+        var valido: bool = True
+        var j: int = 0
+        while j < necesita do
+            if i + 1 + j >= n then
+                valido = False
+                break
+            end
+            var bc: int = ord(s[i + 1 + j])
+            if (bc & 0xC0) != 0x80 then
+                valido = False
+                break
+            end
+            cp = (cp << 6) | (bc & 0x3F)
+            j += 1
+        end
+        if !valido then
+            if errors == "replace" then
+                out += chr(0xFFFD)
+                i += 1
+            else if errors == "ignore" then
+                i += 1
+            else
+                error_utf8()
+            end
+        else
+            out += chr(cp)
+            i += 1 + necesita
+        end
+    end
+    return out
+}
+
+task error_utf8() ;
+{
+    var d: none<> = <>
+    var v: none = d<"codecs: secuencia UTF-8 inválida">
+}
+
+## ── latin-1 y ascii ──
+task _latin1_encode(string s) = list ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < s::len() do
+        out::append(ord(s[i]))
+        i += 1
+    end
+    return bytes_from_ints(out)
+}
+
+task _ascii_encode(string s, string errors) = list ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < s::len() do
+        var cp: int = ord(s[i])
+        if cp >= 0x80 then
+            if errors == "replace" then
+                out::append(0x3F)
+            else if errors == "ignore" then
+                out::append(0)
+            else
+                error_ascii()
+            end
+        else
+            out::append(cp)
+        end
+        i += 1
+    end
+    ## "ignore" usó 0 como marcador: filtrarlo
+    if errors == "ignore" then
+        var limpio: int[] = []
+        var j: int = 0
+        while j < out::len() do
+            if out[j] != 0 then
+                limpio::append(out[j])
+            end
+            j += 1
+        end
+        out = limpio
+    end
+    return bytes_from_ints(out)
+}
+
+task _ascii_decode(string s, string errors) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        var cp: int = ord(s[i])
+        if cp >= 0x80 then
+            if errors == "replace" then
+                out += chr(0xFFFD)
+            else if errors == "ignore" then
+                out += ""
+            else
+                error_ascii()
+            end
+        else
+            out += chr(cp)
+        end
+        i += 1
+    end
+    return out
+}
+
+task error_ascii() ;
+{
+    var d: none<> = <>
+    var v: none = d<"codecs: carácter fuera de ASCII">
+}
+
+## ── utilidades ──
+## bytes (o cadena latin-1) → cadena latin-1
+task _bytes_to_str(stdlib::Cualquiera b) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < b::len() do
+        out += chr(b[i])
+        i += 1
+    end
+    return out
+}
+
+## ROT13: letras A-Z y a-z rotadas 13 posiciones
+task _rot13(string s) = string ;
+{
+    var mayus: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    var minus: string = "abcdefghijklmnopqrstuvwxyz"
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        var ch: string = s[i]
+        var pos: int = mayus::find(ch)
+        if pos != -1 then
+            out += mayus[(pos + 13) % 26]
+        else
+            var pos2: int = minus::find(ch)
+            if pos2 != -1 then
+                out += minus[(pos2 + 13) % 26]
+            else
+                out += ch
+            end
+        end
+        i += 1
+    end
+    return out
+}

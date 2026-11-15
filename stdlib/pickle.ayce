@@ -1,0 +1,18 @@
+## pickle.ayce — serialización de valores EN AYCE (v0.6.0).
+## Igual que pickle.py de CPython (que apoya en el módulo C _pickle
+## para velocidad), la codificación binaria de los valores corre en
+## el batch privado `_pickle`.
+
+require _pickle as pk
+
+## serializa un valor (lista/dict/string/números...) a bytes
+task dumps(stdlib::Cualquiera arg) = string ;
+{
+    return pk::dumps(arg)
+}
+
+## reconstruye el valor desde su forma serializada
+task loads(string s) ;
+{
+    return pk::loads(s)
+}

@@ -1,0 +1,34 @@
+## test_enum.ayce — pruebas de enum (ayce puro)
+require enum as E
+
+## automático 0..n-1
+var color: E::Enum = E::make(["rojo", "verde", "azul"])
+say("value_of(verde): " + string(color::value_of("verde")) + " (1)")
+say("name_of(2): " + color::name_of(2) + " (azul)")
+say("name_of(9): '" + color::name_of(9) + "' ()")
+say("names: " + string(color::names()))
+say("values: " + string(color::values()))
+say("size: " + string(color::size()) + " (3)")
+say("has_name(rojo): " + string(color::has_name("rojo")) + " (True)")
+say("has_value(3): " + string(color::has_value(3)) + " (False)")
+say("to_dict: " + string(color::to_dict()))
+say("next_value(azul): " + string(color::next_value("azul")) + " (0) cíclico")
+
+## valores personalizados
+var prioridad: E::Enum = E::from_pairs(<"baja": 1, "media": 5, "alta": 10>)
+say("prioridad alta: " + string(prioridad::value_of("alta")) + " (10)")
+say("prioridad name_of(5): " + prioridad::name_of(5) + " (media)")
+
+## set_value
+E::set_value(prioridad, "media", 6)
+say("tras set_value media=6: " + string(prioridad::value_of("media")) + " (6)")
+
+## error en miembro inexistente
+try
+    E::set_value(prioridad, "urgente", 99)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_enum")

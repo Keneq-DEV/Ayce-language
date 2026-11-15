@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: ayce
+Version: 0.6.0
+Summary: Intérprete del lenguaje de programación ayce
+Author: Proyecto ayce
+License: MIT
+Requires-Python: >=3.10
+Dynamic: requires-python

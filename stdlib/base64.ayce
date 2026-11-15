@@ -1,0 +1,289 @@
+## base64.ayce — codificación Base64 EN AYCE PURO (v0.6.0).
+## Las tablas y el algoritmo (grupos de 3 bytes → 4 índices) corren aquí,
+## igual que base64.py en CPython implementa su capa en Python.
+## Sin primitivas: sólo builtins del lenguaje (ord, chr, bytes).
+
+const _B64: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const _B64U: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+task _bytes_of(string s) | (bytes s) = list ;
+{
+    ## bytes(s) es la conversión utf-8 del lenguaje; b[i] da cada byte como int
+    var b: bytes = bytes(s)
+    var out: list = []
+    var i: int = 0
+    while i < b::len() do
+        out::append(b[i])
+        i += 1
+    end
+    return out
+    |
+    var out: list = []
+    var i: int = 0
+    while i < s::len() do
+        out::append(s[i])
+        i += 1
+    end
+    return out
+}
+
+task _table_index(string tabla, string ch) = int ;
+{
+    ## índice del carácter en la tabla (0..63) o -1 si no está
+    var i: int = 0
+    while i < 64 do
+        if tabla[i] == ch then
+            return i
+        end
+        i += 1
+    end
+    return -1
+}
+
+task _encode_with(list msg, string tabla) = string ;
+{
+    ## 3 bytes → 4 caracteres; el último grupo incompleto se rellena con '='
+    var out: string = ""
+    var n: int = msg::len()
+    var i: int = 0
+    while i < n do
+        var v: int = msg[i] << 16
+        var hay1: bool = False
+        var hay2: bool = False
+        if i + 1 < n then
+            v = v | (msg[i + 1] << 8)
+            hay1 = True
+        end
+        if i + 2 < n then
+            v = v | msg[i + 2]
+            hay2 = True
+        end
+        out += tabla[(v >> 18) & 63]
+        out += tabla[(v >> 12) & 63]
+        if hay1 then
+            out += tabla[(v >> 6) & 63]
+        else
+            out += "="
+        end
+        if hay2 then
+            out += tabla[v & 63]
+        else
+            out += "="
+        end
+        i += 3
+    end
+    return out
+}
+
+task encode(string datos) | (bytes datos) = string ;
+{
+    return _encode_with(_bytes_of(datos), _B64)
+    |
+    return _encode_with(_bytes_of(datos), _B64)
+}
+
+task _utf8_decode_replace(list bs) = string ;
+{
+    ## decodificador UTF-8 con errores="replace": cada secuencia inválida
+    ## (continuación suelta, overlong, sustituto UTF-16, > U+10FFFF,
+    ## truncada) se sustituye por U+FFFD, como bytes.decode("utf-8") en CPython.
+    var out: string = ""
+    var i: int = 0
+    var n: int = bs::len()
+    while i < n do
+        var b0: int = bs[i]
+        if b0 < 0x80 then
+            ## ASCII directo
+            out += chr(b0)
+            i += 1
+        else
+            if b0 >= 0xC2 && b0 < 0xE0 then
+                ## 2 bytes; b0 >= 0xC2 rechaza overlong
+                if i + 1 < n && bs[i + 1] >= 0x80 && bs[i + 1] < 0xC0 then
+                    out += chr(((b0 & 0x1F) << 6) | (bs[i + 1] & 0x3F))
+                    i += 2
+                else
+                    out += chr(0xFFFD)
+                    i += 1
+                end
+            else
+                if b0 >= 0xE0 && b0 < 0xF0 then
+                    ## 3 bytes; rangos de c1: E0→A0-BF (no overlong), ED→80-9F (no sustitutos)
+                    var lo1: int = 0x80
+                    var hi1: int = 0xBF
+                    if b0 == 0xE0 then
+                        lo1 = 0xA0
+                    end
+                    if b0 == 0xED then
+                        hi1 = 0x9F
+                    end
+                    if i + 2 < n && bs[i + 1] >= lo1 && bs[i + 1] <= hi1 && bs[i + 2] >= 0x80 && bs[i + 2] < 0xC0 then
+                        out += chr(((b0 & 0x0F) << 12) | ((bs[i + 1] & 0x3F) << 6) | (bs[i + 2] & 0x3F))
+                        i += 3
+                    else
+                        out += chr(0xFFFD)
+                        i += 1
+                    end
+                else
+                    if b0 >= 0xF0 && b0 < 0xF5 then
+                        ## 4 bytes; F0→90-BF (no overlong), F4→80-8F (≤ U+10FFFF)
+                        var lo1: int = 0x80
+                        var hi1: int = 0xBF
+                        if b0 == 0xF0 then
+                            lo1 = 0x90
+                        end
+                        if b0 == 0xF4 then
+                            hi1 = 0x8F
+                        end
+                        if i + 3 < n && bs[i + 1] >= lo1 && bs[i + 1] <= hi1 && bs[i + 2] >= 0x80 && bs[i + 2] < 0xC0 && bs[i + 3] >= 0x80 && bs[i + 3] < 0xC0 then
+                            out += chr(((b0 & 0x07) << 18) | ((bs[i + 1] & 0x3F) << 12) | ((bs[i + 2] & 0x3F) << 6) | (bs[i + 3] & 0x3F))
+                            i += 4
+                        else
+                            out += chr(0xFFFD)
+                            i += 1
+                        end
+                    else
+                        ## 0x80-0xBF (continuación suelta), 0xC0/0xC1, 0xF5-0xFF: inválidos
+                        out += chr(0xFFFD)
+                        i += 1
+                    end
+                end
+            end
+        end
+    end
+    return out
+}
+
+task decode(string s) = string ;
+{
+    ## decodifica con tolerancia a espacios y saltos de línea (validate=False
+    ## de CPython); el '=' termina los datos
+    return _decode_with(s, _B64)
+}
+
+task encode_urlsafe(stdlib::Cualquiera arg) = string ;
+{
+    return _encode_with(_bytes_of(arg), _B64U)
+}
+
+task decode_urlsafe(string s) = string ;
+{
+    return _decode_with(s, _B64U)
+}
+
+task _decode_with(string s, string tabla) = string ;
+{
+    var vals: list = []
+    var i: int = 0
+    var n: int = s::len()
+    while i < n do
+        var ch: string = s[i]
+        if ch == "=" then
+            break
+        end
+        var idx: int = _table_index(tabla, ch)
+        if idx >= 0 then
+            vals::append(idx)
+        else
+            ## espacios y saltos se ignoran (como CPython sin validate)
+            if ch != "\n" && ch != "\r" && ch != " " && ch != "\t" then
+                raise Error("base64: carácter inválido en la entrada", 1)
+            end
+        end
+        i += 1
+    end
+    var m: int = vals::len()
+    if m % 4 == 1 then
+        raise Error("base64: longitud inválida", 1)
+    end
+    var out: list = []
+    i = 0
+    while i < m do
+        var quedan: int = m - i
+        var v: int = vals[i] << 18
+        var cant: int = 1
+        if quedan >= 2 then
+            v = v | (vals[i + 1] << 12)
+            cant = 2
+        end
+        if quedan >= 3 then
+            v = v | (vals[i + 2] << 6)
+            cant = 3
+        end
+        if quedan >= 4 then
+            v = v | vals[i + 3]
+            cant = 4
+        end
+        out::append((v >> 16) & 255)
+        if cant >= 3 then
+            out::append((v >> 8) & 255)
+        end
+        if cant >= 4 then
+            out::append(v & 255)
+        end
+        i += 4
+    end
+    return _utf8_decode_replace(out)
+}
+
+task _hex_of(list msg) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < msg::len() do
+        out += _hex_val_char(msg[i] // 16)
+        out += _hex_val_char(msg[i] % 16)
+        i += 1
+    end
+    return out
+}
+
+task _hex_val_char(int v) = string ;
+{
+    ## dígito hex para 0..15
+    if v < 10 then
+        return chr(48 + v)
+    end
+    return chr(87 + v)
+}
+
+task hex_encode(stdlib::Cualquiera arg) = string ;
+{
+    return _hex_of(_bytes_of(arg))
+}
+
+task hex_decode(string s) = string ;
+{
+    ## pares hexadecimales → bytes (como unhexlify)
+    var out: string = ""
+    var n: int = s::len()
+    if n % 2 == 1 then
+        raise Error("base64::hex_decode: longitud impar", 1)
+    end
+    var i: int = 0
+    while i < n do
+        var hi: int = _hex_val(s[i])
+        var lo: int = _hex_val(s[i + 1])
+        if hi < 0 || lo < 0 then
+            raise Error("base64::hex_decode: carácter no hexadecimal", 1)
+        end
+        out += chr(hi * 16 + lo)
+        i += 2
+    end
+    return out
+}
+
+task _hex_val(string ch) = int ;
+{
+    ## 0-9 → 0..9, a-f → 10..15, A-F → 10..15; otro → -1
+    if ch >= "0" && ch <= "9" then
+        return ord(ch) - 48
+    end
+    if ch >= "a" && ch <= "f" then
+        return ord(ch) - 87
+    end
+    if ch >= "A" && ch <= "F" then
+        return ord(ch) - 55
+    end
+    return -1
+}

@@ -1,0 +1,302 @@
+## itertools.ayce — herramientas de iteración (stdlib ayce puro)
+##
+## Trabaja sobre listas de enteros y devuelve listas nuevas
+## (las entradas no se modifican).
+##
+## Tareas:
+##   chain(a, b)                concatena dos listas
+##   chain3(a, b, c)            concatena tres listas
+##   combinations(xs, k)        combinaciones sin repetición (k elementos)
+##   permutations(xs, k)        permutaciones de k elementos
+##   product(a, b)              producto cartesiano (pares [x, y])
+##   cycle(xs, n)               repite la lista n veces
+##   repeat(x, n)               lista con x repetido n veces
+##   take_while(pred, xs)       toma mientras pred sea verdadero
+##   drop_while(pred, xs)       descarta mientras pred sea verdadero
+##   islice(xs, start, stop)    recorte por índices
+##   zip_longest(a, b, fill)    empareja rellenando con `fill`
+##   accumulate(xs)             sumas acumuladas
+##   accumulate_by(xs, f)       acumulación con función binaria
+##   pairwise(xs)               pares consecutivos
+##   group_by(xs, key)          dict flexible: clave → lista de elementos
+##   flatten(pares)             aplana una lista de listas
+
+task chain(int[] a, int[] b) = int[] ;
+{
+    var out: int[] = a::copy()
+    out::extend(b)
+    return out
+}
+
+task chain3(int[] a, int[] b, int[] c) = int[] ;
+{
+    var out: int[] = a::copy()
+    out::extend(b)
+    out::extend(c)
+    return out
+}
+
+task repeat(int x, int n) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < n do
+        out::append(x)
+        i = i + 1
+    end
+    return out
+}
+
+task cycle(int[] xs, int n) = int[] ;
+{
+    var out: int[] = []
+    var r: int = 0
+    while r < n do
+        out::extend(xs)
+        r = r + 1
+    end
+    return out
+}
+
+## Combinaciones de k elementos de xs (orden de índices ascendente)
+task combinations(int[] xs, int k) = none[] ;
+{
+    var out: none[] = []
+    var n: int = xs::len()
+    if k > n || k <= 0 then
+        return out
+    end
+    ## índices actuales
+    var idx: int[] = []
+    var i: int = 0
+    while i < k do
+        idx::append(i)
+        i = i + 1
+    end
+    while True do
+        ## construir la combinación actual
+        var combo: int[] = []
+        for j in idx do
+            combo::append(xs[j])
+        end
+        out::append(combo)
+        ## avanzar índices (combinaciones en orden lexicográfico)
+        var pos: int = k - 1
+        while pos >= 0 do
+            if idx[pos] < n - (k - pos) then
+                break
+            end
+            pos = pos - 1
+        end
+        if pos < 0 then
+            break
+        end
+        idx[pos] = idx[pos] + 1
+        var q: int = pos + 1
+        while q < k do
+            idx[q] = idx[q - 1] + 1
+            q = q + 1
+        end
+    end
+    return out
+}
+
+## Permutaciones de k elementos de xs
+task permutations(int[] xs, int k) = none[] ;
+{
+    var out: none[] = []
+    var n: int = xs::len()
+    if k > n || k <= 0 then
+        return out
+    end
+    var used: bool[] = []
+    var i: int = 0
+    while i < n do
+        used::append(False)
+        i = i + 1
+    end
+    _perm_rec(xs, k, [], used, out)
+    return out
+}
+
+## Recursión auxiliar de permutations
+task _perm_rec(int[] xs, int k, int[] actual, bool[] used, none[] out) ;
+{
+    if actual::len() == k then
+        var copia: int[] = actual::copy()
+        out::append(copia)
+        return
+    end
+    var i: int = 0
+    while i < xs::len() do
+        if not used[i] then
+            used[i] = True
+            actual::append(xs[i])
+            _perm_rec(xs, k, actual, used, out)
+            actual::delete(actual::len() - 1)
+            used[i] = False
+        end
+        i = i + 1
+    end
+}
+
+## Producto cartesiano de dos listas (pares [x, y])
+task product(int[] a, int[] b) = none[] ;
+{
+    var out: none[] = []
+    for x in a do
+        for y in b do
+            var par: int[] = [x, y]
+            out::append(par)
+        end
+    end
+    return out
+}
+
+task take_while(task pred, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < xs::len() do
+        if not pred(xs[i]) then
+            break
+        end
+        out::append(xs[i])
+        i = i + 1
+    end
+    return out
+}
+
+task drop_while(task pred, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    var descartando: bool = True
+    while i < xs::len() do
+        if descartando then
+            if not pred(xs[i]) then
+                descartando = False
+            end
+        end
+        if not descartando then
+            out::append(xs[i])
+        end
+        i = i + 1
+    end
+    return out
+}
+
+task islice(int[] xs, int start, int stop) = int[] ;
+{
+    var out: int[] = []
+    var n: int = xs::len()
+    var hi: int = stop
+    if hi > n then
+        hi = n
+    end
+    var i: int = start
+    if i < 0 then
+        i = 0
+    end
+    while i < hi do
+        out::append(xs[i])
+        i = i + 1
+    end
+    return out
+}
+
+task zip_longest(int[] a, int[] b, int fill) = none[] ;
+{
+    var out: none[] = []
+    var n: int = a::len()
+    if b::len() > n then
+        n = b::len()
+    end
+    var i: int = 0
+    while i < n do
+        var x: int = fill
+        var y: int = fill
+        if i < a::len() then
+            x = a[i]
+        end
+        if i < b::len() then
+            y = b[i]
+        end
+        var par: int[] = [x, y]
+        out::append(par)
+        i = i + 1
+    end
+    return out
+}
+
+## Sumas acumuladas: [x0, x0+x1, x0+x1+x2, ...]
+task accumulate(int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var s: int = 0
+    for x in xs do
+        s += x
+        out::append(s)
+    end
+    return out
+}
+
+## Acumulación con función binaria: out[i] = f(out[i-1], xs[i])
+task accumulate_by(int[] xs, task f) = int[] ;
+{
+    var out: int[] = []
+    if xs::len() == 0 then
+        return out
+    end
+    var acc: int = xs[0]
+    out::append(acc)
+    var i: int = 1
+    while i < xs::len() do
+        acc = f(acc, xs[i])
+        out::append(acc)
+        i = i + 1
+    end
+    return out
+}
+
+## Pares consecutivos: [x0,x1], [x1,x2], ...
+task pairwise(int[] xs) = none[] ;
+{
+    var out: none[] = []
+    var i: int = 0
+    while i + 1 < xs::len() do
+        var par: int[] = [xs[i], xs[i + 1]]
+        out::append(par)
+        i = i + 1
+    end
+    return out
+}
+
+## Agrupa por el valor de key(x): devuelve dict {clave: lista}
+task group_by(int[] xs, task key) = none ;
+{
+    var out: none = <>
+    for x in xs do
+        var k: string = string(key(x))
+        if out::has(k) then
+            var lista: int[] = out<k>
+            lista::append(x)
+            out<k> = lista
+        else
+            var nueva: int[] = [x]
+            out<k> = nueva
+        end
+    end
+    return out
+}
+
+## Aplana una lista de listas
+task flatten(none[] pares) = int[] ;
+{
+    var out: int[] = []
+    for p in pares do
+        var sub: int[] = p
+        out::extend(sub)
+    end
+    return out
+}

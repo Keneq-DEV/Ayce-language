@@ -1,0 +1,912 @@
+## re.ayce — motor de expresiones regulares EN AYCE PURO (v0.6.0).
+## Un motor completo de backtracking escrito aquí en ayce, con la misma
+## semántica observable que el módulo `re` de CPython para el subconjunto
+## estándar de sintaxis:
+##   - literales y escapes (\d \D \w \W \s \S \b \B \n \t \r \\ \.)
+##   - clases de caracteres [a-z] [^abc] con escapes dentro
+##   - punto . (cualquiera menos \n; con DOTALL incluye \n)
+##   - anclas ^ $ (con MULTILINE respetan los saltos de línea)
+##   - cuantificadores * + ? {n} {n,} {n,m} y sus versiones perezosas
+##   - alternación | y grupos de captura (...) / no captura (?:...)
+##   - referencias \1..\9 en el reemplazo de sub()
+## Resultado de match/search: dict {"match", "groups", "start", "end"}.
+##
+## Diseño: parser descendente → árbol de nodos → matcher recursivo con
+## retroceso (backtracking) y capturas restaurables por rama.
+
+const IGNORECASE: int = 2
+const MULTILINE: int = 8
+const DOTALL: int = 16
+
+## ── estado del parser ──
+var _pat: string = ""
+var _i: int = 0
+var _flags: int = 0
+var _n_grupos: int = 0
+
+## ── estado del matcher ──
+var _texto: string = ""
+var _caps: none<> = <>
+
+## ── API del módulo ──
+task match(string patron, string texto) | (string patron, string texto, stdlib::Cualquiera arg) = none ;
+{
+    return _busca(patron, texto, 0, 0)
+    |
+    return _busca(patron, texto, _flags_de(arg), 0)
+}
+
+task search(string patron, string texto) | (string patron, string texto, stdlib::Cualquiera arg) = none ;
+{
+    return _busca(patron, texto, 0, 0)
+    |
+    return _busca(patron, texto, _flags_de(arg), 0)
+}
+
+task find_all(string patron, string texto) | (string patron, string texto, stdlib::Cualquiera arg) = none[] ;
+{
+    return _find_all(patron, texto, 0)
+    |
+    return _find_all(patron, texto, _flags_de(arg))
+}
+
+task replace(string patron, string texto, string reemplazo) = string ;
+{
+    return _sub(patron, texto, reemplazo, 0)
+}
+
+task split(string patron, string texto) | (string patron, string texto, stdlib::Cualquiera arg) = none[] ;
+{
+    return _split(patron, texto, 0)
+    |
+    return _split(patron, texto, _flags_de(arg))
+}
+
+task _flags_de(stdlib::Cualquiera arg) = int ;
+{
+    if arg == none then
+        return 0
+    end
+    return int(arg)
+}
+
+## ── PARSER ──
+## parsea el patrón y devuelve el árbol {"ramas": [...], "grupos": n}
+task _compilar(string patron, int flags) = none<> ;
+{
+    _pat = patron
+    _i = 0
+    _flags = flags
+    _n_grupos = 0
+    var ramas: none[] = _parse_ramas()
+    var arbol: none<> = <>
+    arbol<"ramas"> = ramas
+    arbol<"grupos"> = _n_grupos
+    return arbol
+}
+
+## alternación: seq (| seq)*
+task _parse_ramas() = none[] ;
+{
+    var ramas: none[] = []
+    ramas::append(_parse_seq())
+    while _i < _pat::len() && _pat[_i] == "|" do
+        _i += 1
+        ramas::append(_parse_seq())
+    end
+    return ramas
+}
+
+## secuencia de términos hasta | ) o fin
+task _parse_seq() = none[] ;
+{
+    var seq: none[] = []
+    while _i < _pat::len() do
+        var ch: string = _pat[_i]
+        if ch == "|" || ch == ")" then
+            break
+        end
+        var atom: none<> = _parse_atom()
+        if atom != none then
+            var term: none<> = _parse_cuant(atom)
+            if term != none then
+                seq::append(term)
+            end
+        end
+    end
+    return seq
+}
+
+## un átomo: literal, clase, grupo, ancla o punto
+task _parse_atom() = none<> ;
+{
+    var ch: string = _pat[_i]
+    if ch == "(" then
+        return _parse_grupo()
+    end
+    if ch == "[" then
+        return _parse_clase()
+    end
+    if ch == "\\" then
+        return _parse_escape()
+    end
+    if ch == "." then
+        _i += 1
+        return _nodo("any")
+    end
+    if ch == "^" then
+        _i += 1
+        var n: none<> = _nodo("ancla")
+        n<"c"> = "^"
+        return n
+    end
+    if ch == "$" then
+        _i += 1
+        var n: none<> = _nodo("ancla")
+        n<"c"> = "$"
+        return n
+    end
+    ## carácter literal
+    _i += 1
+    var n: none<> = _nodo("char")
+    n<"c"> = ch
+    return n
+}
+
+task _nodo(string tipo) = none<> ;
+{
+    var n: none<> = <>
+    n<"tipo"> = tipo
+    return n
+}
+
+## grupo (…) o (?:…)
+task _parse_grupo() = none<> ;
+{
+    _i += 1
+    var captura: bool = True
+    if _i + 1 < _pat::len() && _pat[_i] == "?" && _pat[_i + 1] == ":" then
+        captura = False
+        _i += 2
+    end
+    var idx: int = 0
+    if captura then
+        _n_grupos += 1
+        idx = _n_grupos
+    end
+    var ramas: none[] = _parse_ramas()
+    if _i < _pat::len() && _pat[_i] == ")" then
+        _i += 1
+    end
+    ## un grupo puede contener alternación: es un sub-árbol con ramas
+    var hijo: none<> = <>
+    hijo<"ramas"> = ramas
+    hijo<"grupos"> = _n_grupos
+    var n: none<> = _nodo("grupo")
+    n<"idx"> = idx
+    n<"hijo"> = hijo
+    return n
+}
+
+## clase de caracteres [..]
+task _parse_clase() = none<> ;
+{
+    _i += 1
+    var neg: bool = False
+    if _i < _pat::len() && _pat[_i] == "^" then
+        neg = True
+        _i += 1
+    end
+    var rangos: none[] = []
+    var sueltos: string = ""
+    var primero: bool = True
+    while _i < _pat::len() do
+        var ch: string = _pat[_i]
+        if ch == "]" && !primero then
+            _i += 1
+            break
+        end
+        primero = False
+        ## escape dentro de la clase
+        if ch == "\\" && _i + 1 < _pat::len() then
+            var sig: string = _pat[_i + 1]
+            var rango: none[] = _rango_escape(sig)
+            if rango != none then
+                rangos::append(rango)
+                _i += 2
+            else
+                ## \] \- \\ etc.: literal
+                sueltos += sig
+                _i += 2
+            end
+            continue
+        end
+        ## rango a-z (el - entre dos caracteres y no junto al ])
+        if _i + 2 < _pat::len() && _pat[_i + 1] == "-" && _pat[_i + 2] != "]" then
+            var lo: int = ord(ch)
+            var hi: int = ord(_pat[_i + 2])
+            rangos::append([lo, hi])
+            _i += 3
+            continue
+        end
+        sueltos += ch
+        _i += 1
+    end
+    var n: none<> = _nodo("clase")
+    n<"rangos"> = rangos
+    n<"sueltos"> = sueltos
+    n<"neg"> = neg
+    return n
+}
+
+## escapes que son conjuntos: d w s → rangos; otros → none
+task _rango_escape(string sig) = none[] ;
+{
+    if sig == "d" then
+        return [48, 57]
+    end
+    if sig == "w" then
+        return [95, 95]
+    end
+    if sig == "s" then
+        return [9, 13]
+    end
+    return none
+}
+
+## escape fuera de clase: \d \w \s \D \W \S \b \B \n \t \r \\ backref \1..\9
+task _parse_escape() = none<> ;
+{
+    _i += 1
+    if _i >= _pat::len() then
+        return _char_nodo("\\")
+    end
+    var sig: string = _pat[_i]
+    _i += 1
+    if sig == "d" || sig == "w" || sig == "s" then
+        var n: none<> = _nodo("clase")
+        n<"rangos"> = _rangos_positivo(sig)
+        n<"sueltos"> = ""
+        n<"neg"> = False
+        return n
+    end
+    if sig == "D" || sig == "W" || sig == "S" then
+        ## negación: los rangos del conjunto positivo con "neg" activo
+        var n: none<> = _nodo("clase")
+        n<"rangos"> = _rangos_positivo(sig::lower())
+        n<"sueltos"> = ""
+        n<"neg"> = True
+        return n
+    end
+    if sig == "b" || sig == "B" then
+        var n: none<> = _nodo("ancla")
+        n<"c"> = "\\" + sig
+        return n
+    end
+    if sig == "n" then
+        return _char_nodo("\n")
+    end
+    if sig == "t" then
+        return _char_nodo("\t")
+    end
+    if sig == "r" then
+        return _char_nodo("\r")
+    end
+    var code: int = ord(sig)
+    if code >= 49 && code <= 57 then
+        ## backref \1..\9
+        var n: none<> = _nodo("backref")
+        n<"n"> = code - 48
+        return n
+    end
+    ## cualquier otro escape: el carácter literal (\., \\, \{, ...)
+    return _char_nodo(sig)
+}
+
+task _rangos_positivo(string sig) = none[] ;
+{
+    var rangos: none[] = []
+    if sig == "d" then
+        rangos::append([48, 57])
+    else if sig == "w" then
+        rangos::append([48, 57])
+        rangos::append([65, 90])
+        rangos::append([95, 95])
+        rangos::append([97, 122])
+    else
+        rangos::append([9, 13])
+        rangos::append([32, 32])
+    end
+    return rangos
+}
+
+task _char_nodo(string c) = none<> ;
+{
+    var n: none<> = _nodo("char")
+    n<"c"> = c
+    return n
+}
+
+## cuantificador opcional sobre el átomo
+task _parse_cuant(none<> atom) = none<> ;
+{
+    if _i >= _pat::len() then
+        return atom
+    end
+    var ch: string = _pat[_i]
+    var min: int = -1
+    var max: int = -1
+    if ch == "*" then
+        min = 0
+        max = -1
+        _i += 1
+    else if ch == "+" then
+        min = 1
+        max = -1
+        _i += 1
+    else if ch == "?" then
+        min = 0
+        max = 1
+        _i += 1
+    else if ch == "{" then
+        ## {n} {n,} {n,m} — si no cierra bien o no son dígitos, literal
+        var cierre: int = _find_desde(_pat, "}", _i)
+        if cierre == -1 || cierre == _i + 1 then
+            return atom
+        end
+        var cuerpo: string = _pat::slice(_i + 1, cierre)
+        var coma: int = cuerpo::find(",")
+        if coma == -1 then
+            if !_todo_digitos(cuerpo) then
+                return atom
+            end
+            min = int(cuerpo)
+            max = min
+        else
+            var izq: string = cuerpo::slice(0, coma)
+            var der: string = cuerpo::slice(coma + 1, cuerpo::len())
+            if !_todo_digitos(izq) then
+                return atom
+            end
+            min = int(izq)
+            if der == "" then
+                max = -1
+            else
+                if !_todo_digitos(der) then
+                    return atom
+                end
+                max = int(der)
+            end
+        end
+        _i = cierre + 1
+    else
+        return atom
+    end
+    ## perezoso: *? +? ?? {m,n}?
+    var greedy: bool = True
+    if _i < _pat::len() && _pat[_i] == "?" then
+        greedy = False
+        _i += 1
+    end
+    var n: none<> = _nodo("cuant")
+    n<"min"> = min
+    n<"max"> = max
+    n<"greedy"> = greedy
+    n<"hijo"> = atom
+    return n
+}
+
+## find con offset (el método string::find del lenguaje no lo trae)
+task _find_desde(string s, string sub, int desde) = int ;
+{
+    if desde >= s::len() then
+        return -1
+    end
+    var cola: string = s::slice(desde, s::len())
+    var rel: int = cola::find(sub)
+    if rel == -1 then
+        return -1
+    end
+    return desde + rel
+}
+
+task _todo_digitos(string s) = bool ;
+{
+    if s::len() == 0 then
+        return False
+    end
+    var i: int = 0
+    while i < s::len() do
+        var code: int = ord(s[i])
+        if code < 48 || code > 57 then
+            return False
+        end
+        i += 1
+    end
+    return True
+}
+
+## ── MATCHER ──
+## _flags queda fijado por _compilar; _texto por el caller
+## busca desde "desde" (0 = como match; libre = como search)
+task _busca(string patron, string texto, int flags, int desde) = none ;
+{
+    var arbol: none<> = _compilar(patron, flags)
+    _texto = texto
+    var ramas: none[] = arbol<"ramas">
+    var inicio: int = desde
+    var limite: int = texto::len()
+    while inicio <= limite do
+        _caps = <>
+        var fin: int = _match_ramas(ramas, inicio)
+        if fin != -1 then
+            return _resultado(arbol<"grupos">, inicio, fin)
+        end
+        inicio += 1
+    end
+    return none
+}
+
+## prueba todas las ramas de una alternación en una posición
+task _match_ramas(none[] ramas, int pos) = int ;
+{
+    var i: int = 0
+    while i < ramas::len() do
+        var guardado: none<> = _caps_copia()
+        var fin: int = _match_terms(ramas[i], 0, pos)
+        if fin != -1 then
+            return fin
+        end
+        _caps = guardado
+        i += 1
+    end
+    return -1
+}
+
+## casa la secuencia terms[ti..] desde pos; devuelve posición final o -1
+task _match_terms(none[] terms, int ti, int pos) = int ;
+{
+    if ti >= terms::len() then
+        return pos
+    end
+    var t: none<> = terms[ti]
+    var tipo: string = t<"tipo">
+    if tipo == "cuant" then
+        return _match_cuant(t<"hijo">, terms, ti + 1, pos, 0, t<"min">, t<"max">, t<"greedy">)
+    end
+    var p2: int = _match_term(t, pos)
+    if p2 == -1 then
+        return -1
+    end
+    return _match_terms(terms, ti + 1, p2)
+}
+
+## aplica UNA vez un término; devuelve posición nueva o -1
+task _match_term(none<> t, int pos) = int ;
+{
+    var tipo: string = t<"tipo">
+    if tipo == "char" then
+        return _match_char(t<"c">, pos)
+    end
+    if tipo == "any" then
+        if pos >= _texto::len() then
+            return -1
+        end
+        if (_flags & DOTALL) == 0 && _texto[pos] == "\n" then
+            return -1
+        end
+        return pos + 1
+    end
+    if tipo == "clase" then
+        if pos >= _texto::len() then
+            return -1
+        end
+        if _clase_tiene(t, _texto[pos]) then
+            return pos + 1
+        end
+        return -1
+    end
+    if tipo == "ancla" then
+        if _ancla_ok(t<"c">, pos) then
+            return pos
+        end
+        return -1
+    end
+    if tipo == "grupo" then
+        var hijo: none<> = t<"hijo">
+        var guardado: none<> = _caps_copia()
+        var fin: int = _match_ramas(hijo<"ramas">, pos)
+        if fin == -1 then
+            _caps = guardado
+            return -1
+        end
+        if t<"idx"> > 0 then
+            var idx: int = t<"idx">
+            _caps<idx> = [pos, fin]
+        end
+        return fin
+    end
+    if tipo == "backref" then
+        if !_caps::has(t<"n">) then
+            return -1
+        end
+        var nref: int = t<"n">
+        var cap: none[] = _caps<nref>
+        var s: string = _texto::slice(cap[0], cap[1])
+        var fin2: int = pos + s::len()
+        if fin2 <= _texto::len() && _texto::slice(pos, fin2) == s then
+            return fin2
+        end
+        return -1
+    end
+    return -1
+}
+
+task _match_char(string c, int pos) = int ;
+{
+    if pos >= _texto::len() then
+        return -1
+    end
+    var objetivo: string = _texto[pos]
+    if objetivo == c then
+        return pos + 1
+    end
+    if (_flags & IGNORECASE) != 0 then
+        ## comparación sin mayúsculas (ASCII/Latin-1)
+        if objetivo::lower() == c::lower() then
+            return pos + 1
+        end
+    end
+    return -1
+}
+
+## ¿el carácter está en la clase (con negación y bandera)?
+task _clase_tiene(none<> t, string ch) = bool ;
+{
+    var en_clase: bool = _clase_tiene_pos(t, ch)
+    if !en_clase && (_flags & IGNORECASE) != 0 then
+        var variantes: none[] = [ch::lower(), ch::upper()]
+        var k: int = 0
+        while k < variantes::len() do
+            if _clase_tiene_pos(t, variantes[k]) then
+                en_clase = True
+            end
+            k += 1
+        end
+    end
+    if t<"neg"> then
+        return !en_clase
+    end
+    return en_clase
+}
+
+task _clase_tiene_pos(none<> t, string ch) = bool ;
+{
+    var code: int = ord(ch)
+    var rangos: none[] = t<"rangos">
+    var i: int = 0
+    while i < rangos::len() do
+        var r: none[] = rangos[i]
+        if code >= r[0] && code <= r[1] then
+            return True
+        end
+        i += 1
+    end
+    var sueltos: string = t<"sueltos">
+    if sueltos::contains(ch) then
+        return True
+    end
+    return False
+}
+
+## ^ $ \b \B en la posición pos (MULTILINE consciente)
+task _ancla_ok(string c, int pos) = bool ;
+{
+    var n: int = _texto::len()
+    if c == "^" then
+        if pos == 0 then
+            return True
+        end
+        if (_flags & MULTILINE) != 0 && _texto[pos - 1] == "\n" then
+            return True
+        end
+        return False
+    end
+    if c == "$" then
+        if pos == n then
+            return True
+        end
+        if (_flags & MULTILINE) != 0 && _texto[pos] == "\n" then
+            return True
+        end
+        ## sin MULTILINE, $ también admite un \n final (como Python)
+        if (_flags & MULTILINE) == 0 && pos == n - 1 && _texto[pos] == "\n" then
+            return True
+        end
+        return False
+    end
+    ## \b y \B: frontera de palabra
+    var antes: bool = False
+    if pos > 0 then
+        antes = _es_palabra(_texto[pos - 1])
+    end
+    var despues: bool = False
+    if pos < n then
+        despues = _es_palabra(_texto[pos])
+    end
+    if c == "\\b" then
+        return antes != despues
+    end
+    return antes == despues
+}
+
+## copia del dict de capturas (el lenguaje no trae dict::copy)
+task _caps_copia() = none<> ;
+{
+    var out: none<> = <>
+    for k in _caps::keys() do
+        out<k> = _caps<k>
+    end
+    return out
+}
+
+task _es_palabra(string ch) = bool ;
+{
+    var code: int = ord(ch)
+    var letra: bool = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+    return letra || code == 95
+}
+
+## cuantificador con backtracking (greedy y perezoso)
+task _match_cuant(none<> hijo, none[] terms, int ti, int pos, int cuenta, int min, int max, bool greedy) = int ;
+{
+    if greedy then
+        if max == -1 || cuenta < max then
+            var guardado: none<> = _caps_copia()
+            var p2: int = _match_term(hijo, pos)
+            if p2 != -1 && p2 != pos then
+                ## evita bucle infinito con términos de ancho cero
+                var fin: int = _match_cuant(hijo, terms, ti, p2, cuenta + 1, min, max, greedy)
+                if fin != -1 then
+                    return fin
+                end
+            end
+            _caps = guardado
+        end
+        if cuenta >= min then
+            return _match_terms(terms, ti, pos)
+        end
+        return -1
+    end
+    ## perezoso: primero la continuación con lo mínimo hecho
+    if cuenta >= min then
+        var fin: int = _match_terms(terms, ti, pos)
+        if fin != -1 then
+            return fin
+        end
+    end
+    if max == -1 || cuenta < max then
+        var guardado: none<> = _caps_copia()
+        var p2: int = _match_term(hijo, pos)
+        if p2 != -1 && p2 != pos then
+            var fin: int = _match_cuant(hijo, terms, ti, p2, cuenta + 1, min, max, greedy)
+            if fin != -1 then
+                return fin
+            end
+        end
+        _caps = guardado
+    end
+    return -1
+}
+
+## arma el dict de resultado (groups con none donde no hubo captura)
+task _resultado(int n_grupos, int inicio, int fin) = none<> ;
+{
+    var grupos: none[] = []
+    var i: int = 1
+    while i <= n_grupos do
+        if _caps::has(i) then
+            var cap: none[] = _caps<i>
+            grupos::append(_texto::slice(cap[0], cap[1]))
+        else
+            grupos::append(none)
+        end
+        i += 1
+    end
+    var r: none<> = <>
+    r<"match"> = _texto::slice(inicio, fin)
+    r<"groups"> = grupos
+    r<"start"> = inicio
+    r<"end"> = fin
+    return r
+}
+
+## ── find_all ──
+task _find_all(string patron, string texto, int flags) = none[] ;
+{
+    var arbol: none<> = _compilar(patron, flags)
+    _texto = texto
+    var ramas: none[] = arbol<"ramas">
+    var n_grupos: int = arbol<"grupos">
+    var out: none[] = []
+    var pos: int = 0
+    var limite: int = texto::len()
+    while pos <= limite do
+        _caps = <>
+        var encontrado: int = -1
+        var fin: int = -1
+        var inicio_try: int = pos
+        while inicio_try <= limite do
+            fin = _match_ramas(ramas, inicio_try)
+            if fin != -1 then
+                encontrado = inicio_try
+                break
+            end
+            inicio_try += 1
+        end
+        if encontrado == -1 then
+            break
+        end
+        ## findall devuelve los grupos si hay; si no, el match entero
+        if n_grupos == 0 then
+            out::append(_texto::slice(encontrado, fin))
+        else if n_grupos == 1 then
+            if _caps::has(1) then
+                var cap1: none[] = _caps<1>
+                out::append(_texto::slice(cap1[0], cap1[1]))
+            else
+                out::append("")
+            end
+        else
+            var tupla: none[] = []
+            var g: int = 1
+            while g <= n_grupos do
+                if _caps::has(g) then
+                    var capg: none[] = _caps<g>
+                    tupla::append(_texto::slice(capg[0], capg[1]))
+                else
+                    tupla::append(none)
+                end
+                g += 1
+            end
+            out::append(tupla)
+        end
+        ## avanzar: un match de ancho cero no se repite en la misma pos
+        if fin > encontrado then
+            pos = fin
+        else
+            pos = encontrado + 1
+        end
+    end
+    return out
+}
+
+## ── sub (replace con backrefs \1..\9) ──
+task _sub(string patron, string texto, string reemplazo, int flags) = string ;
+{
+    var arbol: none<> = _compilar(patron, flags)
+    _texto = texto
+    var ramas: none[] = arbol<"ramas">
+    var out: string = ""
+    var ultimo: int = 0
+    var pos: int = 0
+    var limite: int = texto::len()
+    while pos <= limite do
+        _caps = <>
+        var encontrado: int = -1
+        var fin: int = -1
+        var inicio_try: int = pos
+        while inicio_try <= limite do
+            fin = _match_ramas(ramas, inicio_try)
+            if fin != -1 then
+                encontrado = inicio_try
+                break
+            end
+            inicio_try += 1
+        end
+        if encontrado == -1 then
+            break
+        end
+        out += _texto::slice(ultimo, encontrado)
+        out += _expandir(reemplazo)
+        if fin > encontrado then
+            ultimo = fin
+            pos = fin
+        else
+            ## ancho cero: copiar el carácter actual y avanzar
+            ultimo = fin
+            pos = encontrado + 1
+            if encontrado < limite then
+                out += _texto[encontrado]
+                ultimo = encontrado + 1
+            end
+        end
+    end
+    out += _texto::slice(ultimo, _texto::len())
+    return out
+}
+
+## expande \1..\9 y \\ en la cadena de reemplazo
+task _expandir(string reemplazo) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    var n: int = reemplazo::len()
+    while i < n do
+        var ch: string = reemplazo[i]
+        if ch == "\\" && i + 1 < n then
+            var sig: string = reemplazo[i + 1]
+            var code: int = ord(sig)
+            if code >= 49 && code <= 57 then
+                var idx: int = code - 48
+                if _caps::has(idx) then
+                    var capx: none[] = _caps<idx>
+                    out += _texto::slice(capx[0], capx[1])
+                end
+                i += 2
+                continue
+            end
+            if sig == "\\" then
+                out += "\\"
+                i += 2
+                continue
+            end
+            out += "\\"
+            i += 1
+            continue
+        end
+        out += ch
+        i += 1
+    end
+    return out
+}
+
+## ── split ──
+task _split(string patron, string texto, int flags) = none[] ;
+{
+    var arbol: none<> = _compilar(patron, flags)
+    _texto = texto
+    var ramas: none[] = arbol<"ramas">
+    var n_grupos: int = arbol<"grupos">
+    var out: none[] = []
+    var ultimo: int = 0
+    var pos: int = 0
+    var limite: int = texto::len()
+    while pos <= limite do
+        _caps = <>
+        var encontrado: int = -1
+        var fin: int = -1
+        var inicio_try: int = pos
+        while inicio_try <= limite do
+            fin = _match_ramas(ramas, inicio_try)
+            if fin != -1 then
+                encontrado = inicio_try
+                break
+            end
+            inicio_try += 1
+        end
+        if encontrado == -1 then
+            break
+        end
+        ## no partir dos veces en la misma posición (match vacío pegado)
+        if !(encontrado == ultimo && fin == ultimo) then
+            out::append(_texto::slice(ultimo, encontrado))
+            var g: int = 1
+            while g <= n_grupos do
+                if _caps::has(g) then
+                    var capg: none[] = _caps<g>
+                    out::append(_texto::slice(capg[0], capg[1]))
+                end
+                g += 1
+            end
+            ultimo = fin
+        end
+        if fin > encontrado then
+            pos = fin
+        else
+            pos = encontrado + 1
+        end
+    end
+    out::append(_texto::slice(ultimo, _texto::len()))
+    return out
+}

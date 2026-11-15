@@ -1,0 +1,53 @@
+## t_datetime.ayce — datetime puro contra datetime de CPython
+require datetime as DT
+
+## construcciones
+say("date:", DT::date(2024, 3, 15))                     ## iso 2024-03-15, viernes
+say("date weekday:", DT::date(2024, 3, 15)<"weekday">)  ## 4 (viernes)
+say("date 1970:", DT::date(1970, 1, 1)<"weekday">)      ## 3 (jueves)
+say("datetime:", DT::datetime(2024, 3, 15, 10, 30, 45)<"iso">)  ## 2024-03-15T10:30:45
+say("datetime h0:", DT::datetime(2024, 3, 15)<"iso">)   ## 2024-03-15 (sin hora)
+say("datetime keys:", DT::datetime(2024, 1, 2)::keys()) ## sin "str"
+## weekday de fechas conocidas
+say("wd 2000-01-01:", DT::date(2000, 1, 1)<"weekday">)  ## 5 (sábado)
+say("wd 2024-02-29:", DT::date(2024, 2, 29)<"weekday">) ## 3 (jueves)
+say("wd 1900-01-01:", DT::date(1900, 1, 1)<"weekday">)  ## 0 (lunes, 1900 NO bisiesto)
+## aritmética
+var base: none<> = DT::datetime(2024, 1, 15, 12, 0, 0)
+say("add_days 45:", DT::add_days(base, 45)<"iso">)           ## 2024-02-29T12:00:00
+say("add_days -45:", DT::add_days(base, -45)<"iso">)         ## 2023-12-01T12:00:00
+say("add_hours 13:", DT::add_hours(base, 13)<"iso">)         ## 2024-01-16T01:00:00
+say("add_hours -13:", DT::add_hours(base, -13)<"iso">)       ## 2024-01-15T23:00:00 (día anterior)
+say("add_minutes 90:", DT::add_minutes(base, 90)<"iso">)     ## 2024-01-15T13:30:00
+say("add_seconds 3661:", DT::add_seconds(base, 3661)<"iso">) ## 2024-01-15T13:01:01
+say("add_months 1:", DT::add_months(DT::date(2024, 1, 31), 1)<"iso">)   ## 2024-02-29
+say("add_months 25:", DT::add_months(DT::date(2023, 11, 30), 1)<"iso">) ## 2023-12-30
+say("add_years 4:", DT::add_years(DT::date(2024, 2, 29), 1)<"iso">)     ## 2025-02-28
+say("add_years -4:", DT::add_years(DT::date(2024, 2, 29), -4)<"iso">)   ## 2020-02-29
+## diferencias
+var a: none<> = DT::datetime(2024, 1, 1, 0, 0, 0)
+var b: none<> = DT::datetime(2024, 3, 1, 12, 30, 0)
+say("diff_days:", DT::diff_days(a, b))                  ## 60.520833...
+say("diff_seconds:", DT::diff_seconds(a, b))            ## 5229000
+say("diff neg:", DT::diff_seconds(b, a))                ## -5229000
+## nombres
+say("wd_name:", DT::weekday_name(DT::date(2024, 3, 15)))      ## Viernes
+say("day_of_year:", DT::day_of_year(DT::date(2024, 3, 15)))   ## 75 (bisiesto)
+say("day_of_year 2023:", DT::day_of_year("2023-03-15"))       ## 74
+## strftime desde timestamp fijo (UTC+0 en el contenedor)
+say("strftime:", DT::strftime(1700000000, "%Y-%m-%d %H:%M:%S"))
+say("strftime B:", DT::strftime(1700000000, "%d de %B de %Y"))
+say("strftime j:", DT::strftime(1700000000, "%j"))
+## strptime
+var p: none<> = DT::strptime("15/03/2024 14:30", "%d/%m/%Y %H:%M")
+say("strptime:", p<"iso">)                              ## 2024-03-15T14:30:00
+var p2: none<> = DT::strptime("2024-03-15", "%Y-%m-%d")
+say("strptime solo fecha:", p2<"iso">)                  ## 2024-03-15
+## from_iso
+say("from_iso:", DT::from_iso("2024-06-01T09:00:00")<"iso">)
+## ISO string como argumento de aritmética
+say("add_days iso:", DT::add_days("2024-01-01", 31)<"iso">)  ## 2024-02-01
+## hoy (sólo forma)
+var hoy: none<> = DT::today()
+say("today iso len:", hoy<"iso">::len())                 ## 10
+say("OK datetime")

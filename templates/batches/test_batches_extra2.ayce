@@ -1,0 +1,88 @@
+## Tests de los batches extra v0.6.0 (parte 2 — los que faltan)
+
+require gzip
+require zlib
+require bz2
+require lzma
+require pickle
+require sqlite3
+require zipfile
+require shutil
+require io
+require csv
+require tempfile
+require warnings
+require logging
+require difflib
+require unicodedata
+require queue
+
+## gzip
+var gz_data: string = "Hola gzip"
+var gz_compressed: string = gzip::compress(gz_data)
+say(gz_compressed::len())
+say(gzip::decompress(gz_compressed))
+
+## zlib
+var z_data: string = "Hola zlib"
+var z_compressed: string = zlib::compress(z_data)
+say(zlib::decompress(z_compressed))
+
+## bz2
+var bz_data: string = "Hola bz2"
+var bz_compressed: string = bz2::compress(bz_data)
+say(bz2::decompress(bz_compressed))
+
+## lzma
+var lz_data: string = "Hola lzma"
+var lz_compressed: string = lzma::compress(lz_data)
+say(lzma::decompress(lz_compressed))
+
+## pickle
+var obj: <string, int> = <"x": 1, "y": 2>
+var pickled: string = pickle::dumps(obj)
+say(pickle::loads(pickled))
+
+## sqlite3 (en memoria)
+var db: none = sqlite3::connect(":memory:")
+sqlite3::execute(db, "CREATE TABLE t (id INT, name TEXT)")
+sqlite3::execute(db, "INSERT INTO t VALUES (1, 'Alice')")
+sqlite3::execute(db, "INSERT INTO t VALUES (2, 'Bob')")
+var rows: none[] = sqlite3::execute(db, "SELECT * FROM t")
+say(rows)
+sqlite3::close(db)
+
+## zipfile
+var zip_path: string = "/tmp/test_ayce.zip"
+zipfile::create(zip_path, ["/etc/hostname"])
+say(zipfile::list(zip_path))
+
+## shutil.copy
+shutil::copy("/etc/hostname", "/tmp/test_ayce_copy.txt")
+say(io::read_file("/tmp/test_ayce_copy.txt")::len())
+
+## csv
+var csv_path: string = "/tmp/test_ayce.csv"
+csv::write(csv_path, [["id", "name"], [1, "Alice"], [2, "Bob"]])
+var csv_rows: none[] = csv::read(csv_path)
+say(csv_rows)
+
+## tempfile
+var tmp_dir: string = tempfile::mkdtemp()
+say(tmp_dir::len() > 0)
+say(tempfile::mktemp(".ayce"))
+
+## warnings (no tira output pero no rompe)
+warnings::warn("Esto es un warning de prueba")
+
+## logging (no tira output pero no rompe)
+logging::info("Info de prueba")
+logging::warning("Warning de prueba")
+
+## queue
+var q: none = queue::create()
+queue::put(q, "a")
+queue::put(q, "b")
+say(queue::size(q))
+say(queue::get(q))
+say(queue::get(q))

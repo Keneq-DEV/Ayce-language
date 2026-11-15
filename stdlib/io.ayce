@@ -1,0 +1,171 @@
+## io.ayce — entrada/salida EN AYCE (v0.6.0).
+## Consola y archivos. Las operaciones de disco (leer/escribar/
+## renombrar/borrar) vienen del batch privado `_io` — el equivalente
+## de los flujos de C — y la lógica (parseo de números leídos,
+## formateo de print con valores arbitrarios) vive aquí en ayce.
+
+require _io as fio
+
+## ── archivos de texto ──
+task read_file(string ruta) ;
+{
+    return fio::read_file(ruta)
+}
+
+task write_file(string ruta, string datos) ;
+{
+    fio::write_file(ruta, datos)
+}
+
+task append_file(string ruta, string datos) ;
+{
+    fio::append_file(ruta, datos)
+}
+
+task file_exists(string ruta) = bool ;
+{
+    return fio::file_exists(ruta)
+}
+
+task file_size(string ruta) = int ;
+{
+    return fio::file_size(ruta)
+}
+
+task delete_file(string ruta) ;
+{
+    fio::delete_file(ruta)
+}
+
+task rename_file(string vieja, string nueva) ;
+{
+    fio::rename_file(vieja, nueva)
+}
+
+task copy_file(string origen, string destino) ;
+{
+    fio::copy_file(origen, destino)
+}
+
+## ── archivos de bytes ──
+task read_bytes(string ruta) = bytes ;
+{
+    return fio::read_bytes(ruta)
+}
+
+task write_bytes(string ruta, string datos) | (string ruta, bytes datos) ;
+{
+    return fio::write_bytes(ruta, datos)
+    |
+    return fio::write_bytes(ruta, datos)
+}
+
+## ── archivos línea a línea ──
+task read_lines(string ruta) = none[] ;
+{
+    return _lineas_de(fio::read_file(ruta))
+}
+
+## divide el texto en líneas sin incluir el \n final
+task _lineas_de(string texto) = none[] ;
+{
+    var out: none[] = []
+    var actual: string = ""
+    var i: int = 0
+    while i < texto::len() do
+        var ch: string = texto[i]
+        if ch == "\n" then
+            if actual::ends_with("\r") then
+                actual = actual::slice(0, actual::len() - 1)
+            end
+            out::append(actual)
+            actual = ""
+        else
+            actual += ch
+        end
+        i += 1
+    end
+    ## última línea sin salto final (si hay contenido)
+    if actual != "" then
+        out::append(actual)
+    end
+    return out
+}
+
+task write_lines(string ruta, none[] lineas) ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < lineas::len() do
+        out += lineas[i] + "\n"
+        i += 1
+    end
+    fio::write_file(ruta, out)
+}
+
+## ── consola ──
+## print con 0..4 valores, separados por espacio y con salto final
+task print() | (stdlib::Cualquiera valores) | (stdlib::Cualquiera valores, stdlib::Cualquiera arg) | (stdlib::Cualquiera valores, stdlib::Cualquiera arg, stdlib::Cualquiera arg3) | (stdlib::Cualquiera valores, stdlib::Cualquiera arg, stdlib::Cualquiera arg3, stdlib::Cualquiera arg4) ;
+{
+    return _decir([])
+    |
+    return _decir([valores])
+    |
+    return _decir([valores, arg])
+    |
+    return _decir([valores, arg, arg3])
+    |
+    return _decir([valores, arg, arg3, arg4])
+}
+
+task _decir(none[] valores) ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < valores::len() do
+        if i > 0 then
+            out += " "
+        end
+        out += _a_texto(valores[i])
+        i += 1
+    end
+    fio::print(out)
+}
+
+## convierte un valor cualquiera a su texto visible
+task _a_texto(stdlib::Cualquiera v) = string ;
+{
+    if is_str(v) then
+        return v
+    end
+    return string(v)
+}
+
+## lee una línea del teclado (con prompt opcional)
+task read_line(string prompt = "") = string ;
+{
+    return fio::read_line(prompt)
+}
+
+## lee y convierte a int (falla como int() de CPython si no es número)
+task read_int(string prompt = "") = int ;
+{
+    var linea: string = read_line(prompt)
+    return int(linea::trim())
+}
+
+task read_float(string prompt = "") = float ;
+{
+    var linea: string = read_line(prompt)
+    return float(linea::trim())
+}
+
+## predicados locales por sobrecarga
+task is_str(string x) = bool ;
+{
+    return True
+}
+task is_str(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}

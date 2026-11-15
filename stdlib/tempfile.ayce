@@ -1,0 +1,72 @@
+## tempfile.ayce — archivos y directorios temporales EN AYCE (v0.6.0).
+## Como tempfile.py de CPython: el directorio base se elige del entorno
+## (TMPDIR, TEMP, TMP o /tmp) y el nombre único se genera con la stdlib
+## de azar (random.ayce, que a su vez siembra con el builtin urandom).
+## Sólo toca la máquina para leer el entorno y crear el directorio.
+
+require _os as posix
+require random as rnd
+
+## elige el directorio temporal como tempfile.gettempdir()
+task gettempdir() = string ;
+{
+    var candidato: string = ""
+    ## TMPDIR tiene prioridad, luego TEMP y TMP (como en CPython)
+    var orden: string[] = ["TMPDIR", "TEMP", "TMP"]
+    var i: int = 0
+    while i < orden::len() do
+        var v: string = posix::getenv(orden[i])
+        if v != "" then
+            candidato = v
+            i = orden::len()
+        end
+        i += 1
+    end
+    if candidato == "" then
+        candidato = "/tmp"
+    end
+    return candidato
+}
+
+## genera un nombre no usado en el directorio dado
+task _nombre_unico(string dir, string prefijo, string sufijo) = string ;
+{
+    var alfabeto: string = "abcdefghijklmnopqrstuvwxyz0123456789_"
+    var intento: int = 0
+    while intento < 1000 do
+        var cola: string = ""
+        var k: int = 0
+        while k < 8 do
+            cola += alfabeto[rnd::randrange(alfabeto::len())]
+            k += 1
+        end
+        var nombre: string = prefijo + cola + sufijo
+        var ruta: string = nombre
+        if dir != "" then
+            ruta = dir + "/" + nombre
+        end
+        if !posix::exists(ruta) then
+            return ruta
+        end
+        intento += 1
+    end
+    return prefijo + sufijo
+}
+
+## mktemp(prefix) — ruta de un archivo temporal QUE NO CREA el archivo
+## (misma advertencia que CPython: preferí mkstemp para evitar carreras)
+task mktemp() | (string s) = string ;
+{
+    return _nombre_unico(gettempdir(), "tmp", "")
+    |
+    return _nombre_unico(gettempdir(), s, "")
+}
+
+## mkdtemp() — CREA un directorio temporal nuevo y devuelve su ruta
+task mkdtemp() = string ;
+{
+    var dir: string = gettempdir()
+    var ruta: string = _nombre_unico(dir, "tmp", "")
+    posix::mkdir(ruta)
+    return ruta
+}

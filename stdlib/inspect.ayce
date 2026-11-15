@@ -1,0 +1,73 @@
+## inspect.ayce — introspección EN AYCE (v0.6.0).
+## Inspeccionar los objetos vivos del intérprete (tareas, Templates,
+## instancias, errores) requiere leer el interior del runtime: como
+## inspect.py de CPython lee el interior de objetos y frames, aquí
+## las consultas van al batch privado `_inspect`.
+
+require _inspect as ins
+
+## nombre del tipo de un valor ("int", "string", "list", ...)
+task type_of(stdlib::Cualquiera arg) = string ;
+{
+    return ins::type_of(arg)
+}
+
+## ¿es un Template (clase)?
+task is_template(stdlib::Cualquiera arg) = bool ;
+{
+    return ins::is_template(arg)
+}
+
+## ¿es una instancia de Template?
+task is_instance(stdlib::Cualquiera arg) = bool ;
+{
+    return ins::is_instance(arg)
+}
+
+## ¿es un valor de error nativo?
+task is_error(stdlib::Cualquiera arg) = bool ;
+{
+    return ins::is_error(arg)
+}
+
+## ¿es una task (función)?
+task is_task(stdlib::Cualquiera arg) = bool ;
+{
+    return ins::is_task(arg)
+}
+
+## campos de una instancia: lista de nombres
+task fields_of(inspect::Instancia obj) = none[] ;
+{
+    return ins::fields_of(obj)
+}
+
+## ¿la instancia tiene ese campo?
+task has_field(inspect::Instancia obj, string campo) = bool ;
+{
+    return ins::has_field(obj, campo)
+}
+
+## valor de un campo de la instancia
+task get_field(inspect::Instancia obj, string campo) ;
+{
+    return ins::get_field(obj, campo)
+}
+
+## parámetros de una task: lista de dicts {nombre, tipo}
+task params_of(task t) = none[] ;
+{
+    return ins::params_of(t)
+}
+
+## nombre de un objeto (task/template/instancia)
+task name_of(inspect::Objeto obj) = string ;
+{
+    return ins::name_of(obj)
+}
+
+## información del error: dict {mensaje, codigo}
+task error_info(inspect::Error err) = none<> ;
+{
+    return ins::error_info(err)
+}

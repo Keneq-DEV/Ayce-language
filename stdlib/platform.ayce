@@ -1,0 +1,48 @@
+## platform.ayce — identificación de la plataforma EN AYCE (v0.6.0).
+## Los datos del sistema (uname, versión) vienen del kernel: como
+## platform.py de CPython lee os.uname() del módulo C, aquí las
+## consultas van al batch privado `_platform`.
+
+require _platform as pl
+
+## sistema operativo ("Linux", "Darwin", "Windows"...)
+task system() = string ;
+{
+    return pl::system()
+}
+
+## versión del kernel (release)
+task release() = string ;
+{
+    return pl::release()
+}
+
+## versión completa del build
+task version() = string ;
+{
+    return pl::version()
+}
+
+## arquitectura de la máquina ("x86_64", "aarch64"...)
+task machine() = string ;
+{
+    return pl::machine()
+}
+
+## procesador
+task processor() = string ;
+{
+    return pl::processor()
+}
+
+## versión del Python que corre el intérprete de referencia
+task python_version() = string ;
+{
+    return pl::python_version()
+}
+
+## uname completo: dict {system, node, release, version, machine}
+task uname() = none<> ;
+{
+    return pl::uname()
+}

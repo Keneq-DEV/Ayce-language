@@ -1,0 +1,214 @@
+## textwrap.ayce — envoltura y formato de texto (stdlib ayce puro)
+##
+## Tareas:
+##   wrap(texto, ancho)            divide en líneas de máximo `ancho`
+##   fill(texto, ancho)            wrap + join con salto de línea
+##   dedent(texto)                 elimina la sangría común de todas las líneas
+##   indent(texto, prefijo)        añade `prefijo` al inicio de cada línea
+##   indent_first(texto, prefijo)  añade el prefijo sólo a la primera línea
+##   shorten(texto, ancho, marcador)  recorta a `ancho` con marcador final
+##   initial_width(texto)          sangría de la primera línea (int)
+
+## ── divide el texto en "palabras" separadas por espacios ──
+task _split_words(string texto) = string[] ;
+{
+    var palabras: string[] = []
+    var actual: string = ""
+    var n: int = texto::len()
+    var i: int = 0
+    while i < n do
+        var c: string = texto::slice(i, i + 1)
+        if c == " " then
+            if actual != "" then
+                palabras::append(actual)
+                actual = ""
+            end
+        else
+            actual += c
+        end
+        i = i + 1
+    end
+    if actual != "" then
+        palabras::append(actual)
+    end
+    return palabras
+}
+
+## ── envolver en líneas de `ancho` caracteres ──
+task wrap(string texto, int ancho) = string[] ;
+{
+    if ancho < 1 then
+        raise Error("textwrap::wrap: el ancho debe ser >= 1", 22)
+    end
+    var palabras: string[] = _split_words(texto)
+    var lineas: string[] = []
+    var actual: string = ""
+    for w in palabras do
+        var palabra: string = w
+        if actual == "" then
+            ## si la palabra sola excede el ancho, se corta
+            while palabra::len() > ancho do
+                lineas::append(palabra::slice(0, ancho))
+                palabra = palabra::slice(ancho, palabra::len())
+            end
+            actual = palabra
+        else
+            if actual::len() + 1 + palabra::len() <= ancho then
+                actual += " "
+                actual += palabra
+            else
+                lineas::append(actual)
+                while palabra::len() > ancho do
+                    lineas::append(palabra::slice(0, ancho))
+                    palabra = palabra::slice(ancho, palabra::len())
+                end
+                actual = palabra
+            end
+        end
+    end
+    if actual != "" then
+        lineas::append(actual)
+    end
+    return lineas
+}
+
+## ── texto envuelto con saltos de línea ──
+task fill(string texto, int ancho) = string ;
+{
+    var lineas: string[] = wrap(texto, ancho)
+    return lineas::join("\n")
+}
+
+## ── sangría de una línea: cuántos espacios inicia tiene ──
+task _line_indent(string linea) = int ;
+{
+    var n: int = linea::len()
+    var i: int = 0
+    while i < n do
+        if linea::slice(i, i + 1) != " " then
+            break
+        end
+        i = i + 1
+    end
+    return i
+}
+
+## ── eliminar la sangría común de todas las líneas ──
+task dedent(string texto) = string ;
+{
+    ## separar en líneas (conservando líneas vacías)
+    var lineas: string[] = texto::split("\n")
+    ## buscar la sangría común (ignorando líneas en blanco)
+    var comun: int = -1
+    for ln in lineas do
+        var linea: string = ln
+        if linea::trim() != "" then
+            var sangria: int = _line_indent(linea)
+            if comun < 0 || sangria < comun then
+                comun = sangria
+            end
+        end
+    end
+    if comun < 0 then
+        comun = 0
+    end
+    var out: string[] = []
+    for ln2 in lineas do
+        var linea2: string = ln2
+        if linea2::len() >= comun then
+            out::append(linea2::slice(comun, linea2::len()))
+        else
+            out::append(linea2)
+        end
+    end
+    return out::join("\n")
+}
+
+## ── añadir prefijo a cada línea ──
+task indent(string texto, string prefijo) = string ;
+{
+    var lineas: string[] = texto::split("\n")
+    var out: string[] = []
+    for ln in lineas do
+        var linea: string = ln
+        var nueva: string = prefijo
+        nueva += linea
+        out::append(nueva)
+    end
+    return out::join("\n")
+}
+
+## ── prefijo sólo en la primera línea (estilo documentación) ──
+task indent_first(string texto, string prefijo) = string ;
+{
+    var lineas: string[] = texto::split("\n")
+    var out: string[] = []
+    var i: int = 0
+    for ln in lineas do
+        var linea: string = ln
+        if i == 0 then
+            var nueva: string = prefijo
+            nueva += linea
+            out::append(nueva)
+        else
+            out::append(linea)
+        end
+        i = i + 1
+    end
+    return out::join("\n")
+}
+
+## ── recortar a `ancho` caracteres con marcador final ──
+task shorten(string texto, int ancho, string marcador) = string ;
+{
+    if ancho < 1 then
+        raise Error("textwrap::shorten: el ancho debe ser >= 1", 22)
+    end
+    if marcador::len() > ancho then
+        raise Error("textwrap::shorten: el marcador no cabe en el ancho", 22)
+    end
+    if texto::len() <= ancho then
+        return texto
+    end
+    var limite: int = ancho - marcador::len()
+    var palabras: string[] = _split_words(texto)
+    var actual: string = ""
+    var resultado: string = ""
+    var i: int = 0
+    var cortado: bool = False
+    while i < palabras::len() do
+        var candidata: string = palabras[i]
+        if actual == "" then
+            if candidata::len() > limite then
+                cortado = True
+                break
+            end
+            actual = candidata
+        else
+            if actual::len() + 1 + candidata::len() <= limite then
+                actual += " "
+                actual += candidata
+            else
+                cortado = True
+                break
+            end
+        end
+        i = i + 1
+    end
+    resultado = actual
+    if cortado then
+        resultado += marcador
+    end
+    return resultado
+}
+
+## ── sangría de la primera línea ──
+task initial_width(string texto) = int ;
+{
+    var primera: string = texto
+    var idx: int = texto::find("\n")
+    if idx >= 0 then
+        primera = texto::slice(0, idx)
+    end
+    return _line_indent(primera)
+}

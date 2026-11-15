@@ -1,0 +1,447 @@
+## decimal.ayce — aritmética decimal exacta EN AYCE PURO (v0.6.0).
+## El módulo maneja números decimales exactos (sin el error binario del
+## float) y los devuelve como cadenas canónicas, igual que str(Decimal)
+## de CPython. Todo el algoritmo corre en ayce con los enteros de
+## precisión arbitraria del lenguaje:
+##   - valor = mantisa × 10^(−escala), con signo aparte
+##   - suma/resta: alinear escalas y sumar mantisas con signo
+##   - producto: multiplicar mantisas, escala = suma de escalas
+##   - división: división larga con 28 dígitos significativos y
+##     redondeo HALF_EVEN, reduciendo los ceros finales (la regla del
+##     "exponente ideal" de IEEE 754, la misma del módulo _decimal)
+##   - round_dp: HALF_UP sobre la mantisa escalada (2.675 → 2.68)
+##
+## Los valores del módulo son SIEMPRE strings ("1.10", "0.5"), para
+## que las tareas se encadenen: add(decimal("0.1"), "0.2") → "0.3".
+
+## ── parse: "12.34", "-0.5", "1e-3", ints y floats → representación ──
+## representación: dict <"dig": int sin signo, "esc": int >= 0, "neg": bool>
+task _parse(string s) = none<> ;
+{
+    var t: string = s::trim()
+    var neg: bool = False
+    if t::starts_with("-") then
+        neg = True
+        t = t::slice(1, t::len())
+    else if t::starts_with("+") then
+        t = t::slice(1, t::len())
+    end
+    ## separar exponente científico si lo hay (se expande a notación plana)
+    var exp: int = 0
+    var pos_e: int = _find_e(t)
+    if pos_e != -1 then
+        var cola: string = t::slice(pos_e + 1, t::len())
+        t = t::slice(0, pos_e)
+        exp = int(cola)
+    end
+    ## separar parte entera y fraccionaria
+    var punto: int = t::find(".")
+    var ent: string = ""
+    var frac: string = ""
+    if punto == -1 then
+        ent = t
+    else
+        ent = t::slice(0, punto)
+        frac = t::slice(punto + 1, t::len())
+    end
+    if ent == "" then
+        ent = "0"
+    end
+    var dig: int = int(ent + frac)
+    var esc: int = frac::len() - exp
+    if esc < 0 then
+        dig = dig * _pow10(-esc)
+        esc = 0
+    end
+    var v: none<> = <>
+    v<"dig"> = dig
+    v<"esc"> = esc
+    v<"neg"> = neg
+    if dig == 0 then
+        v<"neg"> = False
+    end
+    return v
+}
+
+task _find_e(string t) = int ;
+{
+    var i: int = t::find("e")
+    if i != -1 then
+        return i
+    end
+    return t::find("E")
+}
+
+task _pow10(int n) = int ;
+{
+    var out: int = 1
+    var i: int = 0
+    while i < n do
+        out = out * 10
+        i += 1
+    end
+    return out
+}
+
+## ── formato canónico: mantisa × 10^(−escala) → string ──
+task _str(none<> v) = string ;
+{
+    var dig: int = v<"dig">
+    var esc: int = v<"esc">
+    var neg: bool = v<"neg">
+    var digitos: string = string(dig)
+    var out: string = ""
+    if esc == 0 then
+        out = digitos
+    else if digitos::len() > esc then
+        ## punto dentro de los dígitos: "123", esc 1 → "12.3"
+        var corte: int = digitos::len() - esc
+        out = digitos::slice(0, corte) + "." + digitos::slice(corte, digitos::len())
+    else
+        ## más escala que dígitos: rellenar a la izquierda "0.05"
+        var ceros: int = esc - digitos::len()
+        out = "0." + _zeros(ceros) + digitos
+    end
+    if neg && dig != 0 then
+        return "-" + out
+    end
+    return out
+}
+
+task _zeros(int n) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < n do
+        out += "0"
+        i += 1
+    end
+    return out
+}
+
+## alinea dos valores a la misma escala; devuelve mantisas con signo + escala
+task _alinear(none<> a, none<> b) = none[] ;
+{
+    var dig_a: int = a<"dig">
+    var dig_b: int = b<"dig">
+    var esc: int = a<"esc">
+    if b<"esc"> > esc then
+        esc = b<"esc">
+    end
+    if a<"esc"> < esc then
+        dig_a = dig_a * _pow10(esc - a<"esc">)
+    end
+    if b<"esc"> < esc then
+        dig_b = dig_b * _pow10(esc - b<"esc">)
+    end
+    if a<"neg"> then
+        dig_a = -dig_a
+    end
+    if b<"neg"> then
+        dig_b = -dig_b
+    end
+    return [dig_a, dig_b, esc]
+}
+
+task _empaquetar(int dig_con_signo, int esc) = none<> ;
+{
+    var neg: bool = dig_con_signo < 0
+    var magn: int = dig_con_signo
+    if neg then
+        magn = -magn
+    end
+    var v: none<> = <>
+    v<"dig"> = magn
+    v<"esc"> = esc
+    v<"neg"> = neg
+    if magn == 0 then
+        v<"neg"> = False
+    end
+    return v
+}
+
+task _con_signo(int magn, bool neg) = int ;
+{
+    if neg then
+        return -magn
+    end
+    return magn
+}
+
+## ── API del módulo: los valores entran y salen como strings ──
+task decimal(string s) | (int n) | (float x) = string ;
+{
+    return _str(_parse(string(s)))
+    |
+    return _str(_parse(string(n)))
+    |
+    return _str(_parse(string(x)))
+}
+
+task add(stdlib::Cualquiera a, stdlib::Cualquiera b) ;
+{
+    var al: none[] = _alinear(_parse(string(a)), _parse(string(b)))
+    return _str(_empaquetar(al[0] + al[1], al[2]))
+}
+
+task sub(stdlib::Cualquiera a, stdlib::Cualquiera b) ;
+{
+    var al: none[] = _alinear(_parse(string(a)), _parse(string(b)))
+    return _str(_empaquetar(al[0] - al[1], al[2]))
+}
+
+task mul(stdlib::Cualquiera a, stdlib::Cualquiera b) ;
+{
+    var va: none<> = _parse(string(a))
+    var vb: none<> = _parse(string(b))
+    var dig: int = va<"dig"> * vb<"dig">
+    var esc: int = va<"esc"> + vb<"esc">
+    var neg: bool = va<"neg"> != vb<"neg">
+    return _str(_empaquetar(_con_signo(dig, neg), esc))
+}
+
+task div(stdlib::Cualquiera a, stdlib::Cualquiera b) ;
+{
+    var va: none<> = _parse(string(a))
+    var vb: none<> = _parse(string(b))
+    if vb<"dig"> == 0 then
+        error_div()
+    end
+    ## división larga: (dig_a·10^esc_b) / (dig_b·10^esc_a)
+    var num: int = va<"dig"> * _pow10(vb<"esc">)
+    var den: int = vb<"dig"> * _pow10(va<"esc">)
+    var neg: bool = va<"neg"> != vb<"neg">
+    return _div_str(num, den, va<"esc">, vb<"esc">, neg)
+}
+
+task error_div() ;
+{
+    var d: none<> = <>
+    var clave: string = "decimal::div: división por cero"
+    var v: none = d<clave>
+}
+
+## división larga con precisión de 28 dígitos significativos y la regla
+## del exponente ideal del módulo _decimal (incluida notación E)
+task _div_str(int num, int den, int esc_a, int esc_b, bool neg) = string ;
+{
+    ## exponente "ideal" del resultado (IEEE 754 / _decimal):
+    ## exp(dividendo) − exp(divisor) = (−esc_a) − (−esc_b)
+    var ideal: int = esc_b - esc_a
+    var cociente: int = num // den
+    var resto: int = num % den
+    var mant: string = string(cociente)
+    var exp: int = 0
+    if resto != 0 then
+        ## cociente no exacto: generar dígitos fraccionarios hasta
+        ## 28 significativos (los ceros del "0." no cuentan)
+        var sig_gen: int = 0
+        if cociente != 0 then
+            sig_gen = _contar_sig(mant)
+        end
+        var con_sig: bool = cociente != 0
+        var decimales: int = 0
+        while resto != 0 && sig_gen < 28 do
+            resto = resto * 10
+            var d: int = resto // den
+            if !con_sig && d == 0 then
+                ## cero no significativo: se guarda pero no cuenta
+                sig_gen = sig_gen
+            else
+                con_sig = True
+                sig_gen += 1
+            end
+            mant += string(d)
+            decimales += 1
+            resto = resto % den
+        end
+        ## dígito 29 con resto vivo: redondeo HALF_EVEN del buffer
+        if resto != 0 then
+            mant = _redondear_div(mant, resto, den)
+        end
+        exp = -decimales
+    else
+        ## cociente exacto: acercar el exponente al ideal, quitando
+        ## ceros finales o añadiéndolos (la mantisa sigue entera)
+        while mant::len() > 1 && mant::ends_with("0") && exp < ideal do
+            mant = mant::slice(0, mant::len() - 1)
+            exp += 1
+        end
+        while exp > ideal do
+            mant += "0"
+            exp -= 1
+        end
+    end
+    ## formato: exponente positivo → notación E (como str(Decimal))
+    var cuerpo: string = ""
+    if exp > 0 then
+        if mant::len() == 1 then
+            cuerpo = mant + "E+" + string(exp)
+        else
+            cuerpo = mant[0] + "." + mant::slice(1, mant::len()) + "E+" + string(exp)
+        end
+    else
+        ## notación plana: mantisa × 10^exp con escala = −exp
+        var v: none<> = <>
+        v<"dig"> = int(mant)
+        v<"esc"> = -exp
+        v<"neg"> = False
+        if v<"dig"> == 0 then
+            v<"neg"> = False
+        end
+        cuerpo = _str(v)
+    end
+    if neg && !(mant == "0" && exp <= 0) then
+        return "-" + cuerpo
+    end
+    return cuerpo
+}
+
+task _contar_sig(string digitos) = int ;
+{
+    ## dígitos significativos: desde el primero distinto de cero
+    var n: int = 0
+    var visto: bool = False
+    var i: int = 0
+    while i < digitos::len() do
+        if digitos[i] != "0" then
+            visto = True
+        end
+        if visto then
+            n += 1
+        end
+        i += 1
+    end
+    if !visto then
+        return 1
+    end
+    return n
+}
+
+## redondeo HALF_EVEN del buffer de dígitos con el resto vivo
+task _redondear_div(string digitos, int resto, int den) = string ;
+{
+    ## el siguiente dígito vale (resto·10)//den; si es < 5 no sube.
+    ## Con resto != 0 no hay empate exacto: sube siempre que >= 5.
+    var nxt: int = (resto * 10) // den
+    if nxt < 5 then
+        return digitos
+    end
+    return string(int(digitos) + 1)
+}
+
+task compare(stdlib::Cualquiera a, stdlib::Cualquiera b) = int ;
+{
+    var al: none[] = _alinear(_parse(string(a)), _parse(string(b)))
+    if al[0] < al[1] then
+        return -1
+    end
+    if al[0] > al[1] then
+        return 1
+    end
+    return 0
+}
+
+task round_dp(stdlib::Cualquiera a) | (stdlib::Cualquiera a, stdlib::Cualquiera dp_arg) ;
+{
+    return _round_dp1(a)
+    |
+    return _round_dp2(a, dp_arg)
+}
+
+task _round_dp1(stdlib::Cualquiera a) = string ;
+{
+    return _cuantizar(_parse(string(a)), 0)
+}
+
+task _round_dp2(stdlib::Cualquiera a, stdlib::Cualquiera dp_arg) = string ;
+{
+    var dp: int = int(dp_arg)
+    if dp < 0 then
+        error_dp()
+    end
+    return _cuantizar(_parse(string(a)), dp)
+}
+
+task error_dp() ;
+{
+    var d: none<> = <>
+    var clave: string = "decimal::round_dp: dp debe ser int >= 0"
+    var v: none = d<clave>
+}
+
+## cuantizar a dp decimales con HALF_UP ("2.675", 2 → "2.68")
+task _cuantizar(none<> v, int dp) = string ;
+{
+    var dig: int = v<"dig">
+    var esc: int = v<"esc">
+    if dp >= esc then
+        dig = dig * _pow10(dp - esc)
+        esc = dp
+    else
+        var corte: int = _pow10(esc - dp)
+        var q: int = dig // corte
+        var r: int = dig % corte
+        ## HALF_UP: desde la mitad redondea lejos de cero
+        if r * 2 >= corte then
+            q += 1
+        end
+        dig = q
+        esc = dp
+    end
+    return _str(_empaquetar(_con_signo(dig, v<"neg">), esc))
+}
+
+task abs_dec(stdlib::Cualquiera a) = string ;
+{
+    var v: none<> = _parse(string(a))
+    v<"neg"> = False
+    return _str(v)
+}
+
+task neg(stdlib::Cualquiera a) = string ;
+{
+    var v: none<> = _parse(string(a))
+    if v<"dig"> != 0 then
+        v<"neg"> = !v<"neg">
+    end
+    return _str(v)
+}
+
+task is_zero(stdlib::Cualquiera a) = bool ;
+{
+    return _parse(string(a))<"dig"> == 0
+}
+
+task to_float(stdlib::Cualquiera a) = float ;
+{
+    return float(_str(_parse(string(a))))
+}
+
+task pow_int(stdlib::Cualquiera a, stdlib::Cualquiera n_arg) ;
+{
+    return _potencia(a, n_arg)
+}
+
+task _potencia(stdlib::Cualquiera a, stdlib::Cualquiera n_arg) = string ;
+{
+    var n: int = int(n_arg)
+    if n < 0 then
+        error_pot()
+    end
+    var v: none<> = _parse(string(a))
+    var resultado: int = 1
+    var i: int = 0
+    while i < n do
+        resultado = resultado * v<"dig">
+        i += 1
+    end
+    return _str(_empaquetar(_con_signo(resultado, v<"neg">), v<"esc"> * n))
+}
+
+task error_pot() ;
+{
+    var d: none<> = <>
+    var clave: string = "decimal::pow_int: exponente debe ser int >= 0"
+    var v: none = d<clave>
+}

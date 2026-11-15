@@ -1,0 +1,181 @@
+## calendar.ayce — calendarios (stdlib ayce puro)
+##
+## Tareas:
+##   isleap(y)             ¿es bisiesto?
+##   leapdays(y1, y2)      cuántos bisiestos hay en [y1, y2)
+##   weekday(y, m, d)      día de la semana (0=Lunes .. 6=Domingo)
+##   month_name(m)         nombre del mes (inglés, 1..12)
+##   day_name(d)           nombre del día (inglés, 0=Lunes)
+##   month_days(y, m)      cantidad de días del mes
+##   month_calendar(y, m)  semanas del mes: listas de int (0 = hueco)
+##   month_text(y, m)      grilla del mes como texto
+##   day_of_year(y, m, d)  día del año (1..366)
+##   days_in_year(y)       365 o 366
+##   week_header()         cabecera estándar "Mo Tu We ..."
+
+## ── bisiestos ──
+task isleap(int y) = bool ;
+{
+    return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)
+}
+
+task leapdays(int y1, int y2) = int ;
+{
+    var n: int = 0
+    var y: int = y1
+    while y < y2 do
+        if isleap(y) then
+            n += 1
+        end
+        y += 1
+    end
+    return n
+}
+
+task days_in_year(int y) = int ;
+{
+    if isleap(y) then
+        return 366
+    end
+    return 365
+}
+
+## ── días por mes ──
+task month_days(int y, int m) = int ;
+{
+    if m < 1 || m > 12 then
+        raise Error("calendar::month_days: mes fuera de rango (1..12)", 25)
+    end
+    if m == 2 then
+        if isleap(y) then
+            return 29
+        end
+        return 28
+    end
+    if m == 4 || m == 6 || m == 9 || m == 11 then
+        return 30
+    end
+    return 31
+}
+
+## ── día de la semana por congruencia de Zeller (0=Lunes) ──
+task weekday(int y, int m, int d) = int ;
+{
+    ## truco: enero y febrero cuentan como meses 13 y 14 del año anterior
+    var yy: int = y
+    var mm: int = m
+    if mm < 3 then
+        mm += 12
+        yy -= 1
+    end
+    var K: int = yy % 100
+    var J: int = yy // 100
+    var h: int = (d + (13 * (mm + 1)) // 5 + K + K // 4 + J // 4 + 5 * J) % 7
+    ## h: 0=Sábado, 1=Domingo, ... → convertir a 0=Lunes
+    var w: int = (h + 5) % 7
+    return w
+}
+
+task month_name(int m) = string ;
+{
+    if m < 1 || m > 12 then
+        raise Error("calendar::month_name: mes fuera de rango (1..12)", 25)
+    end
+    var nombres: string[] = ["January", "February", "March", "April",
+        "May", "June", "July", "August", "September", "October",
+        "November", "December"]
+    return nombres[m - 1]
+}
+
+task day_name(int d) = string ;
+{
+    if d < 0 || d > 6 then
+        raise Error("calendar::day_name: día fuera de rango (0..6)", 25)
+    end
+    var nombres: string[] = ["Monday", "Tuesday", "Wednesday", "Thursday",
+        "Friday", "Saturday", "Sunday"]
+    return nombres[d]
+}
+
+## ── semanas del mes: listas de 7 ints, 0 = hueco ──
+task month_calendar(int y, int m) = none[] ;
+{
+    var dias: int = month_days(y, m)
+    var primero: int = weekday(y, m, 1)
+    var semanas: none[] = []
+    var actual: int[] = []
+    ## huecos antes del día 1
+    var i: int = 0
+    while i < primero do
+        actual::append(0)
+        i += 1
+    end
+    var dia: int = 1
+    while dia <= dias do
+        actual::append(dia)
+        if actual::len() == 7 then
+            semanas::append(actual)
+            actual = []
+        end
+        dia += 1
+    end
+    if actual::len() > 0 then
+        while actual::len() < 7 do
+            actual::append(0)
+        end
+        semanas::append(actual)
+    end
+    return semanas
+}
+
+## ── grilla de texto del mes ──
+task week_header() = string ;
+{
+    return "Mo Tu We Th Fr Sa Su"
+}
+
+task month_text(int y, int m) = string ;
+{
+    var cabecera: string = month_name(m) + " " + string(y)
+    var out: string[] = []
+    out::append(cabecera)
+    out::append(week_header())
+    var semanas: none[] = month_calendar(y, m)
+    for sem in semanas do
+        var fila: string = ""
+        var dias: int[] = sem
+        var i: int = 0
+        while i < 7 do
+            var celda: string = "  "
+            if dias[i] > 0 then
+                if dias[i] < 10 then
+                    celda = " " + string(dias[i])
+                else
+                    celda = string(dias[i])
+                end
+            end
+            if i > 0 then
+                fila += " "
+            end
+            fila += celda
+            i += 1
+        end
+        out::append(fila)
+    end
+    return out::join("\n")
+}
+
+## ── día del año (1..366) ──
+task day_of_year(int y, int m, int d) = int ;
+{
+    if m < 1 || m > 12 then
+        raise Error("calendar::day_of_year: mes fuera de rango", 25)
+    end
+    var n: int = d
+    var mes: int = 1
+    while mes < m do
+        n += month_days(y, mes)
+        mes += 1
+    end
+    return n
+}

@@ -1,0 +1,23 @@
+## gzip.ayce — compresión gzip EN AYCE (v0.6.0).
+## El formato gzip es un contenedor alrededor de DEFLATE: igual que
+## gzip.py de CPython usa la librería C zlib, aquí la compresión real
+## corre en el batch privado `_gzip` (frontier con la máquina, como
+## el módulo zlib de CPython).
+
+require _gzip as gz
+
+## comprime datos a formato gzip (bytes como cadena latin-1)
+task compress(string s) | (bytes datos) = string ;
+{
+    return gz::compress(s)
+    |
+    return gz::compress(datos)
+}
+
+## descomprime datos gzip
+task decompress(string s) | (bytes datos) ;
+{
+    return gz::decompress(s)
+    |
+    return gz::decompress(datos)
+}

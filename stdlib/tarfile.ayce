@@ -1,0 +1,38 @@
+## tarfile.ayce — archivos tar y tar.gz EN AYCE (v0.6.0).
+## El formato tar guarda cabeceras de 512 bytes por archivo; igual
+## que tarfile.py de CPython (que usa zlib para el .gz), las
+## operaciones corren en el batch privado `_tarfile`.
+
+require _tarfile as tf
+
+## crea un tar con la lista de archivos dada
+task create(string s, none[] arg) ;
+{
+    tf::create(s, arg)
+}
+
+## crea un tar comprimido con gzip
+task create_gz(string s, none[] arg) ;
+{
+    tf::create_gz(s, arg)
+}
+
+## lista el contenido del tar: entradas con nombre/tamaño
+task list_files(string s) ;
+{
+    return tf::list(s)
+}
+
+## extrae el contenido del tar (en el directorio destino si se da)
+task extract(string s) | (string s, string s2) ;
+{
+    return tf::extract(s)
+    |
+    return tf::extract(s, s2)
+}
+
+## lee un archivo individual de dentro del tar
+task read(string s, string s2) ;
+{
+    return tf::read(s, s2)
+}

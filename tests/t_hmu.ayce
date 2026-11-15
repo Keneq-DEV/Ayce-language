@@ -1,0 +1,45 @@
+require hmac as hm
+require secrets as sc
+require uuid as ud
+require json as js
+require base64 as b64
+## hmac
+say(hm::digest("key", "msg", "md5"))
+say(hm::digest("key", "msg", "sha1"))
+say(hm::digest("key", "The quick brown fox jumps over the lazy dog", "sha256"))
+say(hm::digest("key", "msg", "sha512"))
+say(hm::digest(bytes_from_ints([11]), bytes_from_ints([50]), "sha256"))
+say(hm::digest("k", "m") == hm::digest("k", "m", "sha256"))
+say(hm::compare("abc", "abc"))
+say(hm::compare("abc", "abd"))
+## secrets
+say(sc::token_hex()::len())
+say(sc::token_hex(16)::len())
+say(sc::token_urlsafe(24)::len())
+say(sc::rand_below(1))
+var rb: int = sc::rand_below(1000)
+say(rb >= 0 && rb < 1000)
+say(sc::choice([10, 20, 30]))
+## uuid
+var u4: string = ud::uuid4()
+say(u4::len())
+say(u4[14])
+say(u4[19] == "8" || u4[19] == "9" || u4[19] == "a" || u4[19] == "b")
+say(ud::parse(u4) == u4)
+say(ud::uuid5(ud::NAMESPACE_DNS, "python.org"))
+say(ud::uuid3(ud::NAMESPACE_DNS, "python.org"))
+say(ud::uuid5(ud::NAMESPACE_URL, "http://example.com"))
+## json
+say(js::stringify_compact(js::parse("{\"a\": 1, \"b\": [1, 2.5, \"x\", true, null]}")))
+say(js::stringify_compact(js::parse("[[[[\"fondo\"]]]]")))
+say(js::stringify_compact(js::parse("\"\\u00f1 \\ud83d\\ude00\"")))
+say(js::stringify_compact(js::parse("1e3")))
+say(js::stringify_compact(js::parse("-0.5")))
+say(js::stringify_compact(js::parse("12345678901234567890")))
+say(js::stringify("salto\ny \"comillas\" y tab\t"))
+say(js::stringify_compact(js::stringify_compact(js::parse("{\"clave con espacios\": 0.1}"))))
+say(js::valid("{\"k\": [1, {\"j\": null}]}"))
+say(js::valid("{\"k\": }"))
+say(js::valid("[1, 2,]"))
+say(js::valid("\"abc"))
+say(js::valid("01"))

@@ -1,0 +1,193 @@
+## binascii.ayce — conversiones binario/ASCII y CRC EN AYCE PURO (v0.6.0).
+## hexlify/unhexlify, base64 y CRC-32/CRC-16 con tablas generadas aquí.
+## Sin primitivas: sólo builtins del lenguaje (ord, chr, bytes).
+
+require base64 as b64
+
+task _bytes_of(string s) | (bytes s) = list ;
+{
+    var b: bytes = bytes(s)
+    var out: list = []
+    var i: int = 0
+    while i < b::len() do
+        out::append(b[i])
+        i += 1
+    end
+    return out
+    |
+    var out: list = []
+    var i: int = 0
+    while i < s::len() do
+        out::append(s[i])
+        i += 1
+    end
+    return out
+}
+
+task _hex_val(string ch) = int ;
+{
+    ## 0-9 → 0..9, a-f → 10..15, A-F → 10..15; otro → -1
+    if ch >= "0" && ch <= "9" then
+        return ord(ch) - 48
+    end
+    if ch >= "a" && ch <= "f" then
+        return ord(ch) - 87
+    end
+    if ch >= "A" && ch <= "F" then
+        return ord(ch) - 55
+    end
+    return -1
+}
+
+task _hex_char(int v) = string ;
+{
+    if v < 10 then
+        return chr(48 + v)
+    end
+    return chr(87 + v)
+}
+
+task hexlify(string datos) | (bytes datos) = string ;
+{
+    ## cada byte → dos dígitos hex
+    var msg: list = _bytes_of(datos)
+    var out: string = ""
+    var i: int = 0
+    while i < msg::len() do
+        out += _hex_char(msg[i] // 16)
+        out += _hex_char(msg[i] % 16)
+        i += 1
+    end
+    return out
+    |
+    var msg: list = _bytes_of(datos)
+    var out: string = ""
+    var i: int = 0
+    while i < msg::len() do
+        out += _hex_char(msg[i] // 16)
+        out += _hex_char(msg[i] % 16)
+        i += 1
+    end
+    return out
+}
+
+task unhexlify(string s) = string ;
+{
+    ## dos dígitos hex → byte; valida longitud par y dígitos válidos
+    var n: int = s::len()
+    if n % 2 == 1 then
+        raise Error("binascii::unhexlify: longitud impar", 1)
+    end
+    var out: string = ""
+    var i: int = 0
+    while i < n do
+        var hi: int = _hex_val(s[i])
+        var lo: int = _hex_val(s[i + 1])
+        if hi < 0 || lo < 0 then
+            raise Error("binascii::unhexlify: carácter no hexadecimal", 1)
+        end
+        out += chr(hi * 16 + lo)
+        i += 2
+    end
+    return out
+}
+
+task a2b_base64(string s) = string ;
+{
+    ## ASCII → binario (delega en la implementación pura de base64.ayce)
+    return b64::decode(s)
+}
+
+task b2a_base64(string datos) | (bytes datos) = string ;
+{
+    ## binario → ASCII; SIN salto de línea final (como la versión nativa)
+    return b64::encode(datos)
+    |
+    return b64::encode(datos)
+}
+
+## tabla CRC-32 (polinomio 0xEDB88320, reflejado) generada aquí mismo
+task _crc32_table() = list ;
+{
+    var tbl: list = []
+    var i: int = 0
+    while i < 256 do
+        var c: int = i
+        var k: int = 0
+        while k < 8 do
+            if c & 1 == 1 then
+                c = (c >> 1) ^ 0xEDB88320
+            else
+                c = c >> 1
+            end
+            k += 1
+        end
+        tbl::append(c)
+        i += 1
+    end
+    return tbl
+}
+
+const _CRCT: list = _crc32_table()
+
+task crc32(string datos) | (bytes datos) = int ;
+{
+    ## CRC-32 estándar (compatible con zlib.crc32)
+    var msg: list = _bytes_of(datos)
+    var crc: int = 0xFFFFFFFF
+    var i: int = 0
+    while i < msg::len() do
+        crc = _CRCT[(crc ^ msg[i]) & 0xFF] ^ (crc >> 8)
+        i += 1
+    end
+    return crc ^ 0xFFFFFFFF
+    |
+    var msg: list = _bytes_of(datos)
+    var crc: int = 0xFFFFFFFF
+    var i: int = 0
+    while i < msg::len() do
+        crc = _CRCT[(crc ^ msg[i]) & 0xFF] ^ (crc >> 8)
+        i += 1
+    end
+    return crc ^ 0xFFFFFFFF
+}
+
+task crc_hqx(string s, int n) | (bytes datos, int n) = int ;
+{
+    ## CRC-16/CCITT (polinomio 0x1021), como binascii.crc_hqx
+    var msg: list = _bytes_of(s)
+    var crc: int = n & 0xFFFF
+    var i: int = 0
+    while i < msg::len() do
+        crc = crc ^ (msg[i] << 8)
+        var k: int = 0
+        while k < 8 do
+            if crc & 0x8000 == 0x8000 then
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else
+                crc = (crc << 1) & 0xFFFF
+            end
+            k += 1
+        end
+        i += 1
+    end
+    return crc
+    |
+    var msg: list = _bytes_of(datos)
+    var crc: int = n & 0xFFFF
+    var i: int = 0
+    while i < msg::len() do
+        crc = crc ^ (msg[i] << 8)
+        var k: int = 0
+        while k < 8 do
+            if crc & 0x8000 == 0x8000 then
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else
+                crc = (crc << 1) & 0xFFFF
+            end
+            k += 1
+        end
+        i += 1
+    end
+    return crc
+}

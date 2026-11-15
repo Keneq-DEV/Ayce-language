@@ -1,0 +1,49 @@
+## test_argparse.ayce — pruebas de argparse (ayce puro)
+require argparse as A
+require sys
+
+var p: A::Parser = A::Parser("miapp", "procesa un archivo de entrada")
+p::add_flag("verbose", "v")
+p::add_option("archivo", "config.txt")
+p::add_option("nivel", "1")
+p::add_positional("entrada")
+p::add_positional("salida")
+
+## help
+say(p::help())
+say("---")
+
+## parse normal con -v y opciones
+var res: none = p::parse(["-v", "--archivo", "datos.txt", "--nivel=3", "entrada.txt", "salida.txt"])
+say("verbose: " + string(res<"verbose">) + " (True)")
+say("archivo: " + string(res<"archivo">) + " (datos.txt)")
+say("nivel: " + string(res<"nivel">) + " (3)")
+say("pos entrada: " + string(res<"posicional_entrada">) + " (entrada.txt)")
+say("pos salida: " + string(res<"posicional_salida">) + " (salida.txt)")
+
+## defaults sin pasar opciones
+var res2: none = p::parse(["in.txt", "out.txt"])
+say("default archivo: " + string(res2<"archivo">) + " (config.txt)")
+say("default verbose: " + string(res2<"verbose">) + " (False)")
+
+## forma --flag
+var res3: none = p::parse(["--verbose", "a.txt", "b.txt"])
+say("--verbose: " + string(res3<"verbose">) + " (True)")
+
+## error: opción desconocida
+try
+    p::parse(["--noexiste", "a.txt", "b.txt"])
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+## error: posicional faltante
+try
+    p::parse(["solo_uno.txt"])
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_argparse")

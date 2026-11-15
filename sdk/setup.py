@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup(
     name="ayce",
-    version="0.5.1",
+    version="0.6.0",
     description="Intérprete del lenguaje de programación ayce",
     author="Proyecto ayce",
     license="MIT",

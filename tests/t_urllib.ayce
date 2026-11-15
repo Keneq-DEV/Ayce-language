@@ -1,0 +1,32 @@
+require urllib as U
+
+## quote / unquote
+say("quote:", U::quote("hola mundo"))              ## hola%20mundo
+say("quote seguro:", U::quote("a/b:c"))            ## a/b:c
+say("quote +:", U::quote("2+2=3?"))                ## 2%2B2%3D3%3F
+say("quote acento:", U::quote("á"))                ## %C3%A1
+say("unquote:", U::unquote("hola%20mundo"))        ## hola mundo
+say("unquote acento:", U::unquote("%C3%A1"))       ## á
+say("unquote emoji:", U::unquote("%F0%9F%98%80"))  ## 😀
+say("roundtrip:", U::unquote(U::quote("texto ñ 100%")))  ## texto ñ 100%
+## parse
+var p: none<> = U::parse("https://www.ejemplo.com:8080/ruta/aiuda?q=1&x=y#seccion")
+say("parse scheme:", p<"scheme">)       ## https
+say("parse netloc:", p<"netloc">)       ## www.ejemplo.com:8080
+say("parse path:", p<"path">)           ## /ruta/aiuda
+say("parse query:", p<"query">)         ## q=1&x=y
+say("parse fragment:", p<"fragment">)   ## seccion
+var p2: none<> = U::parse("http://solo.host")
+say("parse sin path:", "[" + p2<"path"> + "]", "[" + p2<"query"> + "]")
+## urlencode / parse_qs
+say("urlencode:", U::urlencode(<"nombre": "Ana Pérez", "edad": 30>))  ## nombre=Ana+P%C3%A9rez&edad=30
+var qs: none<> = U::parse_qs("a=1&b=2&b=3&c=")
+say("qs a:", qs<"a">)                   ## ["1"]
+say("qs b:", qs<"b">)                   ## ["2", "3"]
+say("qs c:", qs<"c">)                   ## [""]
+## join
+say("join abs:", U::join("https://x.com/a/b", "/c/d"))      ## https://x.com/c/d
+say("join rel:", U::join("https://x.com/a/b/c", "d/e"))     ## https://x.com/a/b/d/e
+say("join dots:", U::join("https://x.com/a/b", "../c"))     ## https://x.com/c
+say("join otra url:", U::join("https://x.com/a", "http://y.com/b"))  ## http://y.com/b
+say("OK urllib")

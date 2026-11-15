@@ -1,0 +1,28 @@
+require base64 as b
+require binascii as ba
+require zlib as z
+require struct as st
+say(b::encode("hola mundo"))
+say(b::decode("aG9sYSBtdW5kbw=="))
+say(b::encode(bytes_from_ints([0, 1, 2, 250, 251])))
+say(b::decode(b::encode(bytes_from_ints([0, 255, 128, 7, 7, 7]))))
+say(b::encode_urlsafe("que tal?"))
+say(b::decode_urlsafe(b::encode_urlsafe("que tal?")))
+say(b::hex_encode("abc"))
+say(b::hex_decode("616263"))
+say(ba::hexlify("hex test"))
+say(ba::unhexlify("68656c6c6f"))
+say(ba::crc32("El veloz murcielago"))
+say(ba::crc32(bytes_from_ints([1, 2, 3, 4, 5])))
+say(ba::crc_hqx("123456789", 0))
+say(ba::b2a_base64("test"))
+say(ba::a2b_base64(ba::b2a_base64("test")))
+say(z::crc32("The quick brown fox jumps over the lazy dog"))
+say(z::adler32("The quick brown fox jumps over the lazy dog"))
+say(z::crc32(""))
+say(bytes_to_ints(st::pack("<i", -1234567)))
+say(bytes_to_ints(st::pack(">I", 3000000000)))
+say(bytes_to_ints(st::pack("<2h", [1, -2])))
+say(st::unpack("<i", st::pack("<i", -1234567)))
+say(st::unpack(">2B", bytes_from_ints([10, 20])))
+say(st::unpack("<qh", st::pack("<qh", [-9223372036854775808, -32768])))

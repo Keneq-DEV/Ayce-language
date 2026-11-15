@@ -1,0 +1,18 @@
+require path as P
+say("join:", P::join("tmp", "dir", "f.txt"))          ## tmp/dir/f.txt
+say("join abs:", P::join("tmp", "/etc", "x"))          ## /etc/x
+say("join 1:", P::join("solo"))                        ## solo
+say("basename:", P::basename("/tmp/a/f.txt"))          ## f.txt
+say("basename /:", "[" + P::basename("/tmp/") + "]")   ## []
+say("dirname:", P::dirname("/tmp/a/f.txt"))            ## /tmp/a
+say("dirname raiz:", P::dirname("/f"))                 ## /
+say("splitext:", P::splitext("arch.tar.gz"))           ## ["arch.tar", ".gz"]
+say("splitext oculto:", P::splitext(".bashrc"))        ## [".bashrc", ""]
+say("normpath:", P::normpath("a/./b/../c//d"))         ## a/c/d
+say("normpath abs:", P::normpath("/a/../../b"))        ## /b
+say("normpath rel:", P::normpath("../x"))              ## ../x
+say("abspath:", P::abspath("f.txt")::contains("/") || P::abspath("f.txt") == "f.txt")
+say("exists tmp:", P::exists("/tmp"))                  ## true
+say("isfile:", P::isfile("/tmp"))                      ## false
+say("isdir:", P::isdir("/tmp"))                        ## true
+say("OK path")

@@ -1,0 +1,165 @@
+## csv.ayce — lectura y escritura de CSV EN AYCE PURO (v0.6.0).
+## El parser y el serializador son un autómata de estados escrito aquí,
+## con las mismas reglas del módulo _csv de CPython (dialecto excel):
+##   - los campos pueden ir entre comillas; dentro de ellas un "" es
+##     una comilla literal y el delimitador/nueva línea no separan
+##   - fuera de comillas las comillas son un carácter normal
+##   - la escritura sólo pone comillas si el campo contiene el
+##     delimitador, comillas o saltos de línea (duplicándolas)
+## La única llamada a la máquina es leer el archivo con el batch
+## privado `_io` — como reader(f) de CPython recibe el archivo abierto.
+
+require _io as fio
+
+## read(ruta) → lista de filas (listas de strings)
+task read(string s) | (string s, string s2) = none[] ;
+{
+    return _read_file(s, ",")
+    |
+    return _read_file(s, s2)
+}
+
+task _read_file(string ruta, string delim) = none[] ;
+{
+    var texto: string = fio::read_file(ruta)
+    return _parse(texto, delim)
+}
+
+## el autómata de estados del parser CSV
+task _parse(string texto, string delim) = none[] ;
+{
+    var filas: none[] = []
+    var fila: string[] = []
+    var campo: string = ""
+    var entre_comillas: bool = False
+    var i: int = 0
+    var n: int = texto::len()
+    var inicio: bool = True
+    while i < n do
+        var ch: string = texto[i]
+        if entre_comillas then
+            if ch == "\"" then
+                ## "" dentro de comillas = comilla literal
+                if i + 1 < n && texto[i + 1] == "\"" then
+                    campo += "\""
+                    i += 1
+                else
+                    entre_comillas = False
+                end
+            else
+                campo += ch
+            end
+        else
+            if ch == "\"" then
+                entre_comillas = True
+            else if ch == delim then
+                fila::append(campo)
+                campo = ""
+                inicio = False
+            else if ch == "\n" then
+                fila::append(campo)
+                campo = ""
+                filas::append(fila)
+                fila = []
+                inicio = True
+                ## \r\n: el \r ya fue consumido como parte del campo
+            else if ch == "\r" then
+                ## si viene \r\n, cerrar la fila; si no, es parte del campo
+                if i + 1 < n && texto[i + 1] == "\n" then
+                    fila::append(campo)
+                    campo = ""
+                    filas::append(fila)
+                    fila = []
+                    inicio = True
+                    i += 1
+                else
+                    campo += ch
+                end
+            else
+                campo += ch
+            end
+        end
+        i += 1
+    end
+    ## última fila sin salto final (o campo suelto)
+    if campo != "" || fila::len() > 0 || !inicio then
+        fila::append(campo)
+        filas::append(fila)
+    end
+    return filas
+}
+
+## write(ruta, filas) — serializa y escribe con las reglas del dialecto
+task write(stdlib::Cualquiera arg, stdlib::Cualquiera arg2) | (stdlib::Cualquiera arg, stdlib::Cualquiera arg2, stdlib::Cualquiera arg3) ;
+{
+    return _write_file(arg, arg2, ",")
+    |
+    return _write_file(arg, arg2, arg3)
+}
+
+task _write_file(string ruta, none[] filas, string delim) ;
+{
+    var partes: string[] = []
+    var i: int = 0
+    while i < filas::len() do
+        var fila: none[] = filas[i]
+        var campos: string[] = []
+        var j: int = 0
+        while j < fila::len() do
+            ## los valores no-string (números) se convierten a texto,
+            ## como writer.writerow de CPython
+            campos::append(_escapar(string(fila[j]), delim))
+            j += 1
+        end
+        partes::append(campos::join(delim))
+        i += 1
+    end
+    fio::write_file(ruta, partes::join("\n") + "\n")
+}
+
+## comillas sólo si hacen falta (dialecto excel de CPython)
+task _escapar(string campo, string delim) = string ;
+{
+    if campo::contains(delim) || campo::contains("\"") || campo::contains("\n") || campo::contains("\r") then
+        return "\"" + campo::replace("\"", "\"\"") + "\""
+    end
+    return campo
+}
+
+## read_dict(ruta) → lista de dicts (la primera fila son los encabezados)
+task read_dict(stdlib::Cualquiera arg) | (stdlib::Cualquiera arg, stdlib::Cualquiera arg2) = none[] ;
+{
+    return _read_dict_file(arg, ",")
+    |
+    return _read_dict_file(arg, arg2)
+}
+
+task _read_dict_file(string ruta, string delim) = none[] ;
+{
+    var filas: none[] = _read_file(ruta, delim)
+    var out: none[] = []
+    if filas::len() == 0 then
+        return out
+    end
+    var encabezados: none[] = filas[0]
+    var i: int = 1
+    while i < filas::len() do
+        var fila: none[] = filas[i]
+        var d: none<> = <>
+        var j: int = 0
+        while j < encabezados::len() do
+            var clave: string = encabezados[j]
+            if j < fila::len() then
+                d<clave> = fila[j]
+            else
+                ## filas cortas: campo faltante (DictReader pone None;
+                ## aquí "" para mantener tipos simples)
+                d<clave> = ""
+            end
+            j += 1
+        end
+        out::append(d)
+        i += 1
+    end
+    return out
+}

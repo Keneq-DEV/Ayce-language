@@ -1,0 +1,109 @@
+## bisect.ayce — búsqueda binaria e inserción ordenada (stdlib ayce puro)
+##
+## Opera sobre listas de enteros ordenadas ascendentemente.
+##
+## Tareas:
+##   left(xs, x)        posición de inserción a la izquierda (primera >= x)
+##   right(xs, x)       posición de inserción a la derecha (última <= x)
+##   insert(xs, x)      inserta x manteniendo el orden (a la izquierda de iguales)
+##   insert_right(xs, x)  igual, a la derecha de iguales
+##   index(xs, x)       posición de x, o -1 si no está
+##   find_le(xs, x)     mayor elemento <= x, o none
+##   find_ge(xs, x)     menor elemento >= x, o none
+
+## ── posición de inserción por la izquierda ──
+task left(int[] xs, int x) = int ;
+{
+    var lo: int = 0
+    var hi: int = xs::len()
+    while lo < hi do
+        var mid: int = (lo + hi) // 2
+        if xs[mid] < x then
+            lo = mid + 1
+        else
+            hi = mid
+        end
+    end
+    return lo
+}
+
+## ── posición de inserción por la derecha ──
+task right(int[] xs, int x) = int ;
+{
+    var lo: int = 0
+    var hi: int = xs::len()
+    while lo < hi do
+        var mid: int = (lo + hi) // 2
+        if xs[mid] <= x then
+            lo = mid + 1
+        else
+            hi = mid
+        end
+    end
+    return lo
+}
+
+## ── insertar en una posición manteniendo la referencia (in-place) ──
+task _insert_at(int[] xs, int pos, int x) ;
+{
+    var n: int = xs::len()
+    var nueva: int[] = []
+    var i: int = 0
+    while i < pos do
+        nueva::append(xs[i])
+        i = i + 1
+    end
+    nueva::append(x)
+    while i < n do
+        nueva::append(xs[i])
+        i = i + 1
+    end
+    xs::clear()
+    xs::extend(nueva)
+}
+
+## Inserta x manteniendo el orden (equivalente a insort_left, in-place)
+task insert(int[] xs, int x) ;
+{
+    var pos: int = left(xs, x)
+    _insert_at(xs, pos, x)
+}
+
+## Inserta x por la derecha de los iguales (insort_right, in-place)
+task insert_right(int[] xs, int x) ;
+{
+    var pos: int = right(xs, x)
+    _insert_at(xs, pos, x)
+}
+
+## Posición de x en xs (asumiendo xs ordenada), o -1 si no está
+task index(int[] xs, int x) = int ;
+{
+    var pos: int = left(xs, x)
+    if pos < xs::len() then
+        if xs[pos] == x then
+            return pos
+        end
+    end
+    return -1
+}
+
+## El mayor elemento <= x, o none si no hay
+task find_le(int[] xs, int x) = none ;
+{
+    var pos: int = right(xs, x)
+    if pos > 0 then
+        return xs[pos - 1]
+    end
+    return none
+}
+
+## El menor elemento >= x, o none si no hay
+task find_ge(int[] xs, int x) = none ;
+{
+    var pos: int = left(xs, x)
+    if pos < xs::len() then
+        return xs[pos]
+    end
+    return none
+}

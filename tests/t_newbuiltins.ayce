@@ -1,0 +1,24 @@
+## t_newbuiltins.ayce — builtins globales del lenguaje v0.6.0:
+## ord, chr, urandom, bytes_from_ints, bytes_to_ints — sin `require`,
+## como los builtins de CPython (len, ord, chr...).
+var txt: string = "AyCE"
+say(ord(txt, 0))            ## 65
+say(ord(txt, 2))            ## 67
+say(ord("ñ"))               ## 241
+say(chr(241))               ## ñ
+say(chr(65))                ## A
+var ls: list = [72, 111, 108, 97]
+var bb: bytes = bytes_from_ints(ls)
+say(bytes_to_ints(bb))      ## [72, 111, 108, 97]
+var ent: bytes = urandom(7)
+say(ent::len())             ## 7
+## roundtrip de ord/chr sobre cada carácter del string
+var ok: bool = True
+var i: int = 0
+while i < txt::len() do
+    if chr(ord(txt[i])) != txt[i] then
+        ok = False
+    end
+    i += 1
+end
+say(ok)                     ## True

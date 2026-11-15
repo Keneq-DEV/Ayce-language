@@ -1,0 +1,12 @@
+## array.ayce — arreglos tipados EN AYCE (v0.6.0).
+## Un arreglo de máquina con tipo fijo (int/float/char) es memoria
+## compacta nativa: como array.py de CPython envuelve al módulo C
+## `array`, aquí la construcción va al batch privado `_array`.
+
+require _array as arr
+
+## crea un arreglo tipado a partir de una lista de valores
+task make(stdlib::Cualquiera arg) = none[] ;
+{
+    return arr::make(arg)
+}

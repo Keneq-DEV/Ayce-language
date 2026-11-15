@@ -1,0 +1,49 @@
+## test_strings.ayce — pruebas de strings.ayce
+require strings as Str
+
+say("=== strings.ayce ===")
+
+say("reverse_str(\"hola\") =", Str::reverse_str("hola"))        ## aloh
+say("repeat_str(\"ab\", 3) =", Str::repeat_str("ab", 3))         ## ababab
+say("repeat_str(\"x\", 0) =", Str::repeat_str("x", 0))           ## ""
+
+say("title_case(\"hola mundo\") =", Str::title_case("hola mundo"))    ## Hola Mundo
+say("title_case(\"el QUIJOTE\") =", Str::title_case("el QUIJOTE"))    ## El Quijote
+
+say("count_words(\"hola mundo ayce\") =", Str::count_words("hola mundo ayce"))  ## 3
+say("count_words(\"   \") =", Str::count_words("   "))                        ## 0
+say("count_words(\"\") =", Str::count_words(""))                              ## 0
+
+say("reverse_words(\"hola mundo\") =", Str::reverse_words("hola mundo"))  ## mundo hola
+say("reverse_words(\"uno\") =", Str::reverse_words("uno"))                ## uno
+
+say("slugify(\"¡Hola Mundo!\") =", Str::slugify("¡Hola Mundo!"))           ## hola-mundo
+say("slugify(\"Café Año 2024\") =", Str::slugify("Café Año 2024"))          ## cafe-ano-2024
+say("slugify(\"  --  test  --  \") =", Str::slugify("  --  test  --  "))    ## test
+
+say("camel_case(\"hola mundo\") =", Str::camel_case("hola mundo"))         ## holaMundo
+say("camel_case(\"  multiple   words  \") =", Str::camel_case("  multiple   words  "))  ## multipleWords
+
+say("pascal_case(\"hola mundo\") =", Str::pascal_case("hola mundo"))      ## HolaMundo
+
+say("snake_case(\"HolaMundo\") =", Str::snake_case("HolaMundo"))          ## hola_mundo
+say("snake_case(\"hola mundo\") =", Str::snake_case("hola mundo"))        ## hola_mundo
+
+say("kebab_case(\"HolaMundo\") =", Str::kebab_case("HolaMundo"))          ## hola-mundo
+say("kebab_case(\"hola mundo\") =", Str::kebab_case("hola mundo"))        ## hola-mundo
+
+say("levenshtein(\"kitten\", \"sitting\") =", Str::levenshtein("kitten", "sitting"))  ## 3
+say("levenshtein(\"hola\", \"hola\") =", Str::levenshtein("hola", "hola"))              ## 0
+say("levenshtein(\"\", \"abc\") =", Str::levenshtein("", "abc"))                       ## 3
+say("levenshtein(\"flaw\", \"lawn\") =", Str::levenshtein("flaw", "lawn"))              ## 2
+
+say("count_substr(\"ababab\", \"ab\") =", Str::count_substr("ababab", "ab"))  ## 3
+say("count_substr(\"aaaa\", \"aa\") =", Str::count_substr("aaaa", "aa"))     ## 2 (no solapado)
+say("count_substr(\"hola\", \"x\") =", Str::count_substr("hola", "x"))       ## 0
+
+say("center_str(\"hi\", 6) =", "[" + Str::center_str("hi", 6) + "]")        ## [  hi  ]
+say("center_str(\"long\", 2) =", Str::center_str("long", 2))                ## long
+
+say("pad_left(\"42\", 5, \"0\") =", Str::pad_left("42", 5, "0"))           ## 00042
+say("pad_right(\"x\", 4, \" \") =", "[" + Str::pad_right("x", 4, " ") + "]")  ## [x   ]
+say("pad_left(\"abc\", 3, \"-\") =", Str::pad_left("abc", 3, "-"))          ## abc

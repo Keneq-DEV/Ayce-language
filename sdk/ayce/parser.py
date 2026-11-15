@@ -40,6 +40,13 @@ class Parser:
 
     def _expect(self, type_: TokenType, what: str) -> Token:
         if self._peek().type != type_:
+            # v0.6.0: '>>' se lexifica como un único token RSHIFT, pero en un
+            # tipo dict anidado <K, <V1, V2>> el cierre son dos '>' seguidos.
+            # Igual que hace CPython con los generics: dividimos el token.
+            if type_ == TokenType.GT and self._peek().type == TokenType.RSHIFT:
+                t = self._advance()
+                self.tokens[self.pos] = Token(TokenType.GT, ">", t.line, t.col + 1)
+                return Token(TokenType.GT, ">", t.line, t.col)
             t = self._peek()
             raise AyceSyntaxError(
                 self.filename, t.line, t.col,
@@ -332,15 +339,25 @@ class Parser:
         branches.append((cond, body))
 
         # else if / else (sin end entre ramas — el end va al final de toda la cadena)
+        # v0.6.0 fix: 'else if' sólo se interpreta como cadena else-if cuando
+        # 'else' e 'if' están en la MISMA línea. Si están en líneas distintas,
+        # es un bloque else normal que contiene un if anidado (con su propio end).
+        # Esto resuelve la ambigüedad:
+        #   if A then ... else if B then ... end      (cadena, 1 end)
+        #   if A then ... else                       (bloque, 2 ends)
+        #       if B then ... end
+        #   end
         while self._check(TokenType.ELSE):
-            self._advance()
-            if self._match(TokenType.IF):
+            else_tok = self._advance()
+            if self._check(TokenType.IF) and self._peek().line == else_tok.line:
+                self._advance()  # consume 'if'
                 cond2 = self._parse_expr()
                 self._expect(TokenType.THEN, "'then'")
                 body2 = self._parse_block_body()
                 branches.append((cond2, body2))
             else:
-                # rama else final
+                # rama else final (bloque). Puede contener un if anidado
+                # que tendrá su propio end — eso lo maneja _parse_block_body.
                 body2 = self._parse_block_body()
                 branches.append((None, body2))
                 break
@@ -439,6 +456,10 @@ class Parser:
             TokenType.FLOAT_T:  "float",
             TokenType.BOOL_T:   "bool",
             TokenType.BYTES_T:  "bytes",
+            TokenType.LIST_T:   "list",
+            TokenType.DICT_T:   "dict",
+            TokenType.TUPLE_T:  "tuple",
+            TokenType.SET_T:    "set",
         }
         if self._peek().type in type_token_to_name:
             first = type_token_to_name[self._peek().type]
@@ -538,6 +559,7 @@ class Parser:
             value = self._parse_expr()
             return AssignStmt(target=expr, value=value, line=t.line, col=t.col)
         # Asignación compuesta (v0.4): +=, -=, *=, /=, //=, %=
+        # (v0.6.0: también las bit a bit &=, |=, ^=, <<=, >>=)
         compound_ops = {
             TokenType.PLUS_ASSIGN: "+=",
             TokenType.MINUS_ASSIGN: "-=",
@@ -545,6 +567,11 @@ class Parser:
             TokenType.SLASH_ASSIGN: "/=",
             TokenType.DSLASH_ASSIGN: "//=",
             TokenType.PERCENT_ASSIGN: "%=",
+            TokenType.AMP_ASSIGN: "&=",
+            TokenType.OR_ASSIGN: "|=",
+            TokenType.XOR_ASSIGN: "^=",
+            TokenType.LSHIFT_ASSIGN: "<<=",
+            TokenType.RSHIFT_ASSIGN: ">>=",
         }
         if self._peek().type in compound_ops:
             op_tok = self._advance()
@@ -607,6 +634,21 @@ class Parser:
                 return TupleType(elem_types=[base], line=t.line, col=t.col)
             # Primitivo solo
             return base
+
+        # Tipos colección "flexibles" (sin tipo de elemento): list / dict / tuple / set
+        # v0.6.0: ahora son keywords, no caen al IDENT.
+        if t.type == TokenType.LIST_T:
+            self._advance()
+            return ListType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.DICT_T:
+            self._advance()
+            return DictType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.TUPLE_T:
+            self._advance()
+            return TupleType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.SET_T:
+            self._advance()
+            return SetType(flexible=True, line=t.line, col=t.col)
 
         # Diccionario: <K, V> o <K, V1, V2>
         if t.type == TokenType.LT:
@@ -693,7 +735,7 @@ class Parser:
         return left
 
     def _parse_comparison(self) -> Expr:
-        left = self._parse_additive()
+        left = self._parse_bit_or()
         # Operador `is` para variantes: expr is Tipo::Caso (v0.5: usa ::)
         if self._check(TokenType.IS):
             t = self._advance()
@@ -707,7 +749,7 @@ class Parser:
             t = self._advance()
             op = {TokenType.EQ:"==", TokenType.NEQ:"!=", TokenType.LT:"<",
                   TokenType.GT:">", TokenType.LTE:"<=", TokenType.GTE:">="}[t.type]
-            right = self._parse_additive()
+            right = self._parse_bit_or()
             left = BinaryExpr(op=op, left=left, right=right, line=t.line, col=t.col)
             # Prohibir comparación encadenada
             if self._check(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE):
@@ -716,6 +758,59 @@ class Parser:
                     self.filename, nt.line, nt.col,
                     "Las comparaciones encadenadas (a < b < c) no están permitidas en v0.2"
                 )
+        return left
+
+    # Operadores bit a bit (v0.6.0), con la precedencia de Python:
+    # comparación es más floja que | ^ & << >>, y entre ellos:
+    # | (flojo) < ^ < & < << >> (fuerte).
+    # Para '|' se mira el token SIGUIENTE: si puede iniciar un operando es
+    # OR bit a bit; si no (return, nueva línea, ')', ...), es el separador
+    # de overloads/cuerpos de task y no se consume como operador.
+    _OPERAND_START = frozenset((
+        TokenType.INT, TokenType.FLOAT, TokenType.STRING, TokenType.FSTRING,
+        TokenType.BYTES, TokenType.TRUE, TokenType.FALSE, TokenType.NONE,
+        TokenType.IDENT, TokenType.MINUS, TokenType.NOT, TokenType.BIT_NOT,
+        TokenType.LPAREN, TokenType.LBRACKET, TokenType.LBRACE,
+        TokenType.INT_T, TokenType.FLOAT_T, TokenType.STRING_T,
+        TokenType.BOOL_T, TokenType.BYTES_T,
+        TokenType.LIST_T, TokenType.DICT_T, TokenType.TUPLE_T,
+        TokenType.SET_T, TokenType.RANGE, TokenType.NEW, TokenType.SELF,
+    ))
+
+    def _operand_starts_here(self, tt) -> bool:
+        return tt in self._OPERAND_START
+
+    def _parse_bit_or(self) -> Expr:
+        left = self._parse_bit_xor()
+        while self._check(TokenType.PIPE) and self._operand_starts_here(self._peek(1).type):
+            t = self._advance()
+            right = self._parse_bit_xor()
+            left = BinaryExpr(op="|", left=left, right=right, line=t.line, col=t.col)
+        return left
+
+    def _parse_bit_xor(self) -> Expr:
+        left = self._parse_bit_and()
+        while self._check(TokenType.BIT_XOR):
+            t = self._advance()
+            right = self._parse_bit_and()
+            left = BinaryExpr(op="^", left=left, right=right, line=t.line, col=t.col)
+        return left
+
+    def _parse_bit_and(self) -> Expr:
+        left = self._parse_shift()
+        while self._check(TokenType.AMP):
+            t = self._advance()
+            right = self._parse_shift()
+            left = BinaryExpr(op="&", left=left, right=right, line=t.line, col=t.col)
+        return left
+
+    def _parse_shift(self) -> Expr:
+        left = self._parse_additive()
+        while self._check(TokenType.LSHIFT, TokenType.RSHIFT):
+            t = self._advance()
+            op = "<<" if t.type == TokenType.LSHIFT else ">>"
+            right = self._parse_additive()
+            left = BinaryExpr(op=op, left=left, right=right, line=t.line, col=t.col)
         return left
 
     def _parse_additive(self) -> Expr:
@@ -747,9 +842,14 @@ class Parser:
         return left
 
     def _parse_unary(self) -> Expr:
-        if self._check(TokenType.NOT, TokenType.MINUS):
+        if self._check(TokenType.NOT, TokenType.MINUS, TokenType.BIT_NOT):
             t = self._advance()
-            op = "!" if t.type == TokenType.NOT else "-"
+            if t.type == TokenType.NOT:
+                op = "!"
+            elif t.type == TokenType.MINUS:
+                op = "-"
+            else:
+                op = "~"
             operand = self._parse_unary()
             return UnaryExpr(op=op, operand=operand, line=t.line, col=t.col)
         return self._parse_postfix()
@@ -810,6 +910,10 @@ class Parser:
                     TokenType.BOOL_T:   "bool",
                     TokenType.BYTES_T:  "bytes",
                     TokenType.RANGE:    "range",
+                    TokenType.LIST_T:   "list",
+                    TokenType.DICT_T:   "dict",
+                    TokenType.TUPLE_T:  "tuple",
+                    TokenType.SET_T:    "set",
                 }
                 if self._peek().type in member_type_tokens:
                     name_tok = member_type_tokens[self._peek().type]
@@ -941,7 +1045,8 @@ class Parser:
                     # El segundo argumento es el tipo: int, float, bool, string
                     type_tok = self._peek()
                     type_map = {TokenType.INT_T: "int", TokenType.FLOAT_T: "float",
-                                TokenType.BOOL_T: "bool", TokenType.STRING_T: "string"}
+                                TokenType.BOOL_T: "bool", TokenType.STRING_T: "string",
+                                TokenType.BYTES_T: "bytes"}
                     if type_tok.type in type_map:
                         self._advance()
                         target_type = type_map[type_tok.type]
@@ -951,10 +1056,25 @@ class Parser:
             self._expect(TokenType.RPAREN, "')'")
             return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
-        # Identificador
-        if t.type == TokenType.IDENT:
+        # Identificador — incluido keywords de tipo usados como nombre de batch
+        # (v0.6.0: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
+        #  para permitir list::range(10), string::upper("x"), etc.)
+        type_as_ident = {
+            TokenType.IDENT:    None,   # identificador normal
+            TokenType.INT_T:    "int",
+            TokenType.FLOAT_T:  "float",
+            TokenType.STRING_T: "string",
+            TokenType.BOOL_T:   "bool",
+            TokenType.BYTES_T:  "bytes",
+            TokenType.LIST_T:   "list",
+            TokenType.DICT_T:   "dict",
+            TokenType.TUPLE_T:  "tuple",
+            TokenType.SET_T:    "set",
+        }
+        if t.type in type_as_ident:
             self._advance()
-            return IdentExpr(name=t.value, line=t.line, col=t.col)
+            name = type_as_ident[t.type] if t.type != TokenType.IDENT else t.value
+            return IdentExpr(name=name, line=t.line, col=t.col)
 
         # ( expr ) — agrupación, o tupla literal
         if t.type == TokenType.LPAREN:

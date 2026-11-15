@@ -1,0 +1,105 @@
+## pruebas de zlib, gzip, bz2, lzma, zipfile, tarfile, pickle, array, platform, locale, email, gettext, unicodedata, inspect, traceback
+require zlib as Z
+require gzip as GZ
+require bz2 as BZ
+require lzma as LX
+require zipfile as ZF
+require tarfile as TF
+require pickle as PK
+require array as AR
+require platform as PL
+require locale as LC
+require email as EM
+require gettext as GT
+require unicodedata as UD
+require inspect as IN
+require traceback as TB
+
+## ── zlib (crc32/adler32 puros) ──
+say("crc32:", Z::crc32("hola"))                   ## 1872820616
+say("crc32 bytes:", Z::crc32(bytes_from_ints([104, 111, 108, 97])))  ## igual
+say("adler32:", Z::adler32("hola"))               ## 69861797
+var comp: string = Z::compress("texto repetido texto repetido texto repetido")
+say("zlib comprime:", comp::len() < 30)
+say("zlib roundtrip:", Z::decompress(comp) == "texto repetido texto repetido texto repetido")
+## ── gzip / bz2 / lzma ──
+var g: string = GZ::compress("datos gzip")
+say("gzip roundtrip:", GZ::decompress(g) == "datos gzip")
+say("gzip magic:", GZ::decompress(g) != "")
+var b: string = BZ::compress("datos bz2")
+say("bz2 roundtrip:", BZ::decompress(b) == "datos bz2")
+var x: string = LX::compress("datos lzma")
+say("lzma roundtrip:", LX::decompress(x) == "datos lzma")
+## ── zipfile ──
+require io as IO
+IO::write_file("/tmp/ayce_z1.txt", "contenido uno")
+IO::write_file("/tmp/ayce_z2.txt", "contenido dos")
+ZF::create("/tmp/ayce_test.zip", ["/tmp/ayce_z1.txt", "/tmp/ayce_z2.txt"])
+var zf_list: none = ZF::list_files("/tmp/ayce_test.zip")
+say("zip list:", zf_list::len() >= 2)
+var nombre_z1: string = zf_list[0]
+say("zip read:", ZF::read("/tmp/ayce_test.zip", nombre_z1) == "contenido uno")
+ZF::extract_all("/tmp/ayce_test.zip", "/tmp/ayce_zip_out")
+say("zip extract:", IO::read_file("/tmp/ayce_zip_out/" + nombre_z1) == "contenido uno")
+## ── tarfile ──
+TF::create("/tmp/ayce_test.tar", ["/tmp/ayce_z1.txt", "/tmp/ayce_z2.txt"])
+var tar_list: none = TF::list_files("/tmp/ayce_test.tar")
+say("tar list:", tar_list::len() >= 2)
+var nombre_t1: string = tar_list[0]<"name">
+say("tar read:", TF::read("/tmp/ayce_test.tar", nombre_t1) == "contenido uno")
+TF::create_gz("/tmp/ayce_test.tar.gz", ["/tmp/ayce_z1.txt"])
+say("tar gz list:", TF::list_files("/tmp/ayce_test.tar.gz")::len() >= 1)
+var gz_nombre: string = TF::list_files("/tmp/ayce_test.tar.gz")[0]<"name">
+say("tar gz read:", TF::read("/tmp/ayce_test.tar.gz", gz_nombre) == "contenido uno")
+## ── pickle ──
+var serial: string = PK::dumps(["a", 1, 2.5, <"k": "v">])
+say("pickle dumps:", serial::len() > 0)
+var vuelta: none = PK::loads(serial)
+say("pickle loads:", vuelta[0], vuelta[1], vuelta[3]<"k">)   ## a 1 v
+## ── array ──
+var ar: none[] = AR::make([1, 2, 3])
+say("array make:", ar::len(), ar[2])              ## 3 3
+## ── platform ──
+say("platform system:", PL::system() == "Linux")
+say("platform machine:", PL::machine() != "")
+say("platform release:", PL::release() != "")
+say("platform uname:", PL::uname()::keys()::len() >= 4)
+say("platform py:", PL::python_version()::contains("."))
+## ── locale ──
+say("locale LC_ALL:", LC::LC_ALL)                 ## 6
+say("locale encoding:", LC::getpreferredencoding() != "")
+var loc: none[] = LC::getlocale()
+say("locale get:", loc::len() == 2)
+## ── email ──
+var msg: string = EM::build("Reunión", "ana@ejemplo.com", "beto@ejemplo.com", "Hola equipo")
+say("email build:", msg::starts_with("Subject: Reunión"))
+say("email from:", msg::contains("From: ana@ejemplo.com"))
+say("email to:", msg::contains("To: beto@ejemplo.com"))
+var parc: none<> = EM::parse(msg)
+say("email parse subject:", parc<"subject">)       ## Reunión
+say("email parse body:", parc<"body">)             ## Hola equipo
+say("email parse headers:", parc<"headers">::len() >= 5)
+say("email multipart:", parc<"is_multipart"> == False)
+var dir: string = EM::format_addr("Ana", "ana@ejemplo.com")
+say("email addr:", dir)                             ## Ana <ana@ejemplo.com>
+say("email addr especial:", EM::format_addr("Pérez, Ana", "ana@x.com"))  ## "Pérez, Ana" <ana@x.com>
+## ── gettext ──
+IO::write_file("/tmp/ayce_i18n.json", "{\"hello\": \"hola\", \"bye\": \"adiós\"}")
+var cat: none = GT::install_json("/tmp/ayce_i18n.json")
+say("gettext get:", GT::get(cat, "hello"))          ## hola
+say("gettext fallback:", GT::get(cat, "otra"))      ## otra
+var cat2: none<> = GT::from_dict(<"clave": "valor">)
+say("gettext dict:", GT::get(cat2, "clave"))        ## valor
+## ── unicodedata ──
+say("ud name:", UD::name("A"))                      ## LATIN CAPITAL LETTER A
+say("ud category:", UD::category("A"))              ## Lu
+say("ud decimal:", UD::decimal("7"))                ## 7
+## ── inspect ──
+say("inspect type_of:", IN::type_of(42))            ## int
+say("inspect list:", IN::type_of([1]))              ## list
+say("inspect is_task:", IN::is_task(IN::type_of))   ## true
+say("inspect is_template:", IN::is_template(42) == False)
+## ── traceback ──
+var stack: none[] = TB::format_stack()
+say("traceback stack:", stack::len() >= 0)
+say("OK grupo5")

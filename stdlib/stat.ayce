@@ -1,0 +1,86 @@
+## stat.ayce — metadatos de archivos EN AYCE (v0.6.0).
+## Los metadatos crudos (tamaño, modo, tiempos) vienen del batch
+## privado `_stat` (el módulo C `posix`); la interpretación del modo
+## (cadena de permisos estilo "rwxr-xr-x") está escrita aquí en ayce
+## con operadores bit a bit, como stat.py de CPython hace con su
+## filemode().
+
+require _stat as st
+
+## bits del tipo de archivo (iguales a stat de POSIX)
+const S_IFDIR: int = 16384
+const S_IFREG: int = 32768
+const S_IFLNK: int = 40960
+## bits de permiso del dueño
+const S_IRUSR: int = 256
+const S_IWUSR: int = 128
+const S_IXUSR: int = 64
+
+## dict completo de metadatos del archivo
+task stat(string s) = none<> ;
+{
+    return st::stat(s)
+}
+
+## cadena de permisos estilo ls -l ("rw-r--r--" sin el tipo)
+task mode_str(string s) = string ;
+{
+    var info: none<> = st::stat(s)
+    return _cadena_modo(info<"mode">)
+}
+
+## arma "rwxr-xr-x" desde el modo numérico
+task _cadena_modo(int modo) = string ;
+{
+    var out: string = ""
+    var grupo: int = 2
+    while grupo >= 0 do
+        ## desplazar los 3 bits de este bloque (dueño/grupo/otros)
+        var r: int = (modo >> (grupo * 3 + 2)) & 1
+        var w: int = (modo >> (grupo * 3 + 1)) & 1
+        var x: int = (modo >> (grupo * 3)) & 1
+        if r == 1 then
+            out += "r"
+        else
+            out += "-"
+        end
+        if w == 1 then
+            out += "w"
+        else
+            out += "-"
+        end
+        if x == 1 then
+            out += "x"
+        else
+            out += "-"
+        end
+        grupo -= 1
+    end
+    return out
+}
+
+task is_dir(string s) = bool ;
+{
+    return st::is_dir(s)
+}
+
+task is_file(string s) = bool ;
+{
+    return st::is_file(s)
+}
+
+task is_link(string s) = bool ;
+{
+    return st::is_link(s)
+}
+
+task size(string s) = int ;
+{
+    return st::size(s)
+}
+
+## última modificación como timestamp float
+task mtime(string s) = float ;
+{
+    return st::mtime(s)
+}

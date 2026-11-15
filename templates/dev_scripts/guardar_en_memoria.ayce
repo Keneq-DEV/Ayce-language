@@ -1,0 +1,9 @@
+var x: int[] = [1, 2, 3]
+var z: int[] = x::copy()     ## copia independiente
+
+var y: int[] = x             ## alias: misma lista
+
+y[1] = 4
+
+say(z)    ## [1, 2, 3]
+say(x)    ## [1, 4, 3]

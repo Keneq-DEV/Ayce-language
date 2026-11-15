@@ -1,0 +1,33 @@
+## zipfile.ayce — archivos ZIP EN AYCE (v0.6.0).
+## El formato ZIP usa DEFLATE para comprimir sus entradas: igual que
+## zipfile.py de CPython (que es Python puro pero apoya en zlib.crc32
+## y zlib.compressobj), las operaciones sobre el archivo corren en el
+## batch privado `_zipfile`.
+
+require _zipfile as zf
+
+## lista el contenido del ZIP: entradas con nombre/tamaño
+task list_files(string s) ;
+{
+    return zf::list(s)
+}
+
+## extrae todo el contenido del ZIP en un directorio destino
+task extract_all(string s) | (string s, string s2) ;
+{
+    return zf::extract_all(s)
+    |
+    return zf::extract_all(s, s2)
+}
+
+## crea un ZIP nuevo con la lista de archivos dada
+task create(string s, none[] arg) ;
+{
+    zf::create(s, arg)
+}
+
+## lee un archivo individual de dentro del ZIP
+task read(string s, string s2) ;
+{
+    return zf::read(s, s2)
+}

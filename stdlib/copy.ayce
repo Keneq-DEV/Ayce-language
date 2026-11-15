@@ -1,0 +1,77 @@
+## copy.ayce — copias superficiales y profundas EN AYCE PURO (v0.6.0).
+## Igual que copy.py de CPython: shallow copia un nivel (el contenedor
+## nuevo comparte los elementos) y deep copia en profundidad recursiva.
+## Sin primitivas: el despacho por tipo se hace con sobrecargas de task
+## y los contenedores se reconstruyen con los métodos del lenguaje.
+## Tuplas y escalares son inmutables: se devuelven tal cual, como en
+## copy.py de CPython.
+
+## ── shallow: un solo nivel ──
+task shallow(list x) ;
+{
+    ## list::copy() es la copia superficial del lenguaje
+    return x::copy()
+}
+
+task shallow(dict x) = none<> ;
+{
+    var out: none<> = <>
+    for k in x::keys() do
+        out<k> = x<k>
+    end
+    return out
+}
+
+task shallow(set x) = set ;
+{
+    var out: set = {}
+    for e in x do
+        out::add(e)
+    end
+    return out
+}
+
+## escalares y tuplas: inmutables, la "copia" es el mismo valor
+task shallow(stdlib::Cualquiera x) ;
+{
+    return x
+}
+
+## ── deep: recursivo en todos los niveles ──
+task deep(stdlib::Cualquiera valor) ;
+{
+    return _deep(valor)
+}
+
+task _deep(list x) ;
+{
+    var out: none[] = []
+    for e in x do
+        out::append(_deep(e))
+    end
+    return out
+}
+
+task _deep(dict x) = none<> ;
+{
+    var out: none<> = <>
+    for k in x::keys() do
+        out<k> = _deep(x<k>)
+    end
+    return out
+}
+
+task _deep(set x) = set ;
+{
+    var out: set = {}
+    for e in x do
+        out::add(e)
+    end
+    return out
+}
+
+task _deep(stdlib::Cualquiera x) ;
+{
+    ## tuplas y escalares: inmutables, se devuelven tal cual
+    return x
+}

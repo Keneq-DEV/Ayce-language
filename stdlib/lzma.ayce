@@ -1,0 +1,21 @@
+## lzma.ayce — compresión xz/lzma EN AYCE (v0.6.0).
+## LZMA/xz es la librería C externa (igual que lzma.py de CPython usa
+## liblzma): la compresión corre en el batch privado `_lzma`.
+
+require _lzma as lx
+
+## comprime datos a formato xz/lzma
+task compress(string s) | (bytes datos) = string ;
+{
+    return lx::compress(s)
+    |
+    return lx::compress(datos)
+}
+
+## descomprime datos xz/lzma
+task decompress(string s) | (bytes datos) ;
+{
+    return lx::decompress(s)
+    |
+    return lx::decompress(datos)
+}

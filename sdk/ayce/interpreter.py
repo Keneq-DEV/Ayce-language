@@ -238,6 +238,13 @@ class Interpreter:
     def __init__(self, filename: str = "<stdin>", import_paths: list = None):
         self.filename = filename
         self.global_env = Env()
+        # v0.6.0: builtins globales del lenguaje (ord, chr, urandom,
+        # bytes_from_ints, bytes_to_ints) — como los builtins de CPython:
+        # están en el intérprete, sin `require`, y la stdlib algorítmica
+        # se apoya sólo en ellos para tocar la máquina.
+        from .batches import get_global_builtins
+        for _name, _task_val in get_global_builtins().items():
+            self.global_env.declare(_name, _task_val, TaskType(), is_const=True)
         # Cache de batchs ya cargados: ruta_absoluta → AyceBatch
         self._batch_cache: dict = {}
         # Paths donde buscar batchs por identificador
@@ -253,6 +260,16 @@ class Interpreter:
 
         for stmt in program.stmts:
             if isinstance(stmt, TaskDecl):
+                # v0.6.0: si el task ya fue declarado, las nuevas firmas se
+                # FUNDEN como overloads (igual que la sintaxis `|` dentro de
+                # una sola declaración); antes, la última pisaba a las demás.
+                existing = self.global_env.lookup(stmt.name)
+                if existing is not None:
+                    prev_task = existing[0]
+                    if isinstance(prev_task, AyceTask):
+                        prev_task.decl.signatures.extend(stmt.signatures)
+                        prev_task.decl.bodies.extend(stmt.bodies)
+                        continue
                 task = AyceTask(stmt, self.global_env)
                 self.global_env.declare(stmt.name, task, TaskType(), is_const=True)
             elif isinstance(stmt, TemplateDecl):
@@ -448,6 +465,10 @@ class Interpreter:
             if isinstance(container, AyceTuple):
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "Las tuplas son inmutables: no se puede asignar a una posición")
+            if isinstance(container, str) or isinstance(container, bytes):
+                # v0.6.0: strings y bytes son inmutables en ayce.
+                raise AyceRuntimeError(self.filename, target.line, target.col,
+                    "Los strings y bytes son inmutables: no se puede asignar a s[i]")
             if not isinstance(container, AyceList):
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "La indexación con [] sólo aplica a listas")
@@ -626,7 +647,9 @@ class Interpreter:
             error_name = "TypeErr"
         elif isinstance(e, AyceRuntimeError):
             # Detectar tipos específicos por el mensaje
-            if "División por cero" in msg or "división por cero" in msg:
+            if "JSONDecodeError" in msg:
+                error_name = "JSONDecodeError"
+            elif "División por cero" in msg or "división por cero" in msg:
                 error_name = "Div0"
             elif "Índice" in msg and "fuera de rango" in msg:
                 error_name = "IndexErr"
@@ -682,26 +705,53 @@ class Interpreter:
             return
 
         # 2. Modo batch entero: require M [as A]
-        #    Primero mirar si M es un batch built-in (math, random, string, etc.)
+        #    v0.6.0: la stdlib escrita en ayce (.ayce en disco) tiene PRIORIDAD
+        #    sobre los batches built-in (wrappers de Python). Así el usuario
+        #    puede reemplazar o complementar los builtins con su propio código
+        #    ayce. Si no hay .ayce que coincida, se cae al builtin.
         if stmt.mode == "batch":
             batch_name = stmt.batch_spec
+            # Primero intentar cargar como archivo .ayce
+            batch_path = self._try_resolve_batch_path(batch_name)
+            if batch_path is not None:
+                batch = self._load_batch(batch_path, stmt.line, stmt.col)
+                bind_name = stmt.alias if stmt.alias else batch_name
+                env.declare(bind_name, batch, UserTypeName(name=batch.name), is_const=True)
+                return
+            # No hay .ayce — intentar built-in
             builtin = self._get_builtin_batch(batch_name)
             if builtin is not None:
-                # Es built-in — bind directo, sin cargar archivo
                 bind_name = stmt.alias if stmt.alias else batch_name
                 env.declare(bind_name, builtin, UserTypeName(name=batch_name), is_const=True)
                 return
-            # No es built-in — cargar desde archivo
-            batch_path = self._resolve_batch_path(batch_name)
-            batch = self._load_batch(batch_path, stmt.line, stmt.col)
+            # Tampoco hay builtin — error claro de "no encontrado"
+            raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                f"No se encontró el batch '{batch_name}' (ni como archivo .ayce "
+                f"ni como batch built-in)")
             bind_name = stmt.alias if stmt.alias else stmt.batch_spec
             env.declare(bind_name, batch, UserTypeName(name=batch.name), is_const=True)
             return
 
         # 3. Modo selectivo: require X[, Y as Z] from M
+        #    v0.6.0: igual que el modo batch, prioriza .ayce sobre built-in.
         if stmt.mode == "selective":
             batch_name = stmt.batch_spec
-            # Mirar si es built-in
+            batch_path = self._try_resolve_batch_path(batch_name)
+            if batch_path is not None:
+                batch = self._load_batch(batch_path, stmt.line, stmt.col)
+                for item_name, item_alias in stmt.items:
+                    export = batch.find_export(item_name)
+                    if export is None:
+                        raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                            f"El batch '{batch.name}' no exporta '{item_name}'")
+                    if item_name in batch.exports:
+                        v, t, is_const, init_flag = batch.exports[item_name]
+                    else:
+                        v, t, is_const, init_flag = export, None, True, True
+                    bind_name = item_alias if item_alias else item_name
+                    env.declare(bind_name, v, t, is_const=is_const, initialized=init_flag)
+                return
+            # No hay .ayce — probar built-in
             builtin = self._get_builtin_batch(batch_name)
             if builtin is not None:
                 for item_name, item_alias in stmt.items:
@@ -712,21 +762,9 @@ class Interpreter:
                     bind_name = item_alias if item_alias else item_name
                     env.declare(bind_name, v, t, is_const=is_const, initialized=init_flag)
                 return
-            # No es built-in — cargar desde archivo
-            batch_path = self._resolve_batch_path(batch_name)
-            batch = self._load_batch(batch_path, stmt.line, stmt.col)
-            for item_name, item_alias in stmt.items:
-                export = batch.find_export(item_name)
-                if export is None:
-                    raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
-                        f"El batch '{batch.name}' no exporta '{item_name}'")
-                if item_name in batch.exports:
-                    v, t, is_const, init_flag = batch.exports[item_name]
-                else:
-                    v, t, is_const, init_flag = export, None, True, True
-                bind_name = item_alias if item_alias else item_name
-                env.declare(bind_name, v, t, is_const=is_const, initialized=init_flag)
-            return
+            raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                f"No se encontró el batch '{batch_name}' (ni como archivo .ayce "
+                f"ni como batch built-in)")
 
         raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
             f"Modo de require desconocido: {stmt.mode}")
@@ -832,6 +870,69 @@ class Interpreter:
         raise AyceRuntimeError(self.filename, 0, 0,
             f"No se encontró el batch '{batch.name}'. Buscado en:\n  " +
             "\n  ".join(candidates))
+
+    def _try_resolve_batch_path(self, batch_name: str):
+        """Como _resolve_batch_path pero devuelve None en vez de lanzar
+        si no encuentra el archivo. Útil para priorizar la stdlib ayce
+        sobre los batches built-in: si hay .ayce, lo usamos; si no, caemos
+        al builtin."""
+        import os
+        target = batch_name + ".ayce"
+        searched_dirs = set()
+
+        current_dir = os.path.dirname(os.path.abspath(self.filename))
+        cwd = os.getcwd()
+
+        def check_dir(d):
+            if d in searched_dirs:
+                return None
+            searched_dirs.add(d)
+            c = os.path.join(d, target)
+            if os.path.exists(c):
+                return os.path.abspath(c)
+            return None
+
+        def walk_down(root_dir, max_depth=4):
+            if not os.path.isdir(root_dir):
+                return None
+            for dirpath, dirnames, filenames in os.walk(root_dir):
+                rel = os.path.relpath(dirpath, root_dir)
+                depth = 0 if rel == "." else rel.count(os.sep) + 1
+                if depth > max_depth:
+                    dirnames[:] = []
+                    continue
+                dirnames[:] = [d for d in dirnames
+                              if not d.startswith(".")
+                              and d not in ("__pycache__", "node_modules", ".git",
+                                            ".venv", "venv", "env", "build", "dist",
+                                            ".idea", ".vscode", "site-packages")]
+                r = check_dir(dirpath)
+                if r is not None:
+                    return r
+            return None
+
+        r = check_dir(current_dir)
+        if r is not None:
+            return r
+        r = check_dir(cwd)
+        if r is not None:
+            return r
+        for p in self.import_paths:
+            r = check_dir(os.path.abspath(p))
+            if r is not None:
+                return r
+        roots_to_walk = [current_dir, cwd]
+        parent = current_dir
+        while True:
+            parent = os.path.dirname(parent)
+            if parent == os.path.dirname(parent):
+                break
+            roots_to_walk.append(parent)
+        for root_dir in roots_to_walk:
+            r = walk_down(root_dir, max_depth=4)
+            if r is not None:
+                return r
+        return None
 
     def _load_batch(self, path: str, line: int, col: int) -> AyceBatch:
         """Carga un batch desde un archivo .ayce. Usa caché y detecta ciclos."""
@@ -942,6 +1043,28 @@ class Interpreter:
             if value == 0:
                 raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "Batch por cero")
             new_val = current % value
+        elif op in ("&", "|", "^", "<<", ">>"):
+            # v0.6.0: asignación compuesta bit a bit &=, |=, ^=, <<=, >>=
+            if not (isinstance(current, int) and isinstance(value, int) and
+                    not isinstance(current, bool) and not isinstance(value, bool)):
+                raise AyceTypeError(self.filename, stmt.line, stmt.col,
+                    f"{op}= requiere enteros")
+            if op == "&":
+                new_val = current & value
+            elif op == "|":
+                new_val = current | value
+            elif op == "^":
+                new_val = current ^ value
+            elif op == "<<":
+                if value < 0:
+                    raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                        "Desplazamiento negativo en <<=")
+                new_val = current << value
+            else:  # >>
+                if value < 0:
+                    raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
+                        "Desplazamiento negativo en >>=")
+                new_val = current >> value
         else:
             raise AyceRuntimeError(self.filename, stmt.line, stmt.col,
                 f"Operador compuesto no soportado: {stmt.op}")
@@ -954,6 +1077,10 @@ class Interpreter:
             idx = self.eval(target.index, env)
             if isinstance(container, AyceList):
                 container.elements[idx] = new_val
+            elif isinstance(container, str) or isinstance(container, bytes):
+                # v0.6.0: strings y bytes son inmutables.
+                raise AyceRuntimeError(self.filename, target.line, target.col,
+                    "Los strings y bytes son inmutables: no se puede asignar a s[i]")
             else:
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "No se puede asignar a índice de ese tipo")
@@ -1033,6 +1160,24 @@ class Interpreter:
                     raise AyceRuntimeError(self.filename, expr.line, expr.col,
                         f"Índice {idx} fuera de rango (longitud {len(target.elements)})")
                 return target.elements[idx]
+            if isinstance(target, str):
+                # v0.6.0: indexación de strings — s[i] devuelve un string de 1 char.
+                if not isinstance(idx, int):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "El índice de string debe ser int")
+                if idx < 0 or idx >= len(target):
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        f"Índice {idx} fuera de rango (longitud {len(target)})")
+                return target[idx]
+            if isinstance(target, bytes):
+                # v0.6.0: indexación de bytes — b[i] devuelve el byte como int (0-255).
+                if not isinstance(idx, int):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "El índice de bytes debe ser int")
+                if idx < 0 or idx >= len(target):
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        f"Índice {idx} fuera de rango (longitud {len(target)})")
+                return target[idx]
             raise AyceTypeError(self.filename, expr.line, expr.col,
                 f"No se puede indexar {self._type_name(target)}")
         if isinstance(expr, DictAccessExpr):
@@ -1061,6 +1206,11 @@ class Interpreter:
                     return -operand
                 raise AyceTypeError(self.filename, expr.line, expr.col,
                     f"El operador - unario requiere número, se recibió {self._type_name(operand)}")
+            if expr.op == "~":
+                if not isinstance(operand, int) or isinstance(operand, bool):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        f"El operador ~ bit a bit requiere entero, se recibió {self._type_name(operand)}")
+                return ~operand
         if isinstance(expr, BinaryExpr):
             return self._eval_binary(expr, env)
         if isinstance(expr, RangeExpr):
@@ -1093,12 +1243,18 @@ class Interpreter:
                         return float(raw)
                     except ValueError:
                         say(f"'{raw}' no es un float válido. Intentá de nuevo.")
+                elif expr.target_type == "bytes":
+                    try:
+                        return raw.encode("utf-8")
+                    except Exception:
+                        say(f"'{raw}' no es convertible a bytes. Intentá de nuevo.")
                 elif expr.target_type == "bool":
-                    if raw.lower() in ("true", "t", "1"):
+                    r = raw.strip().lower()
+                    if r in ("true", "t", "1", "yes", "y", "s", "si", "sí", "verdadero"):
                         return True
-                    if raw.lower() in ("false", "f", "0"):
+                    if r in ("false", "f", "0", "no", "n", "falso"):
                         return False
-                    say(f"'{raw}' no es un bool válido. Usá True o False.")
+                    say(f"'{raw}' no es un bool válido. Usá s/n, true/false, 1/0.")
                 else:
                     return raw
         if isinstance(expr, TernaryExpr):
@@ -1300,6 +1456,25 @@ class Interpreter:
             # Suma de bytes
             if expr.op == "+" and isinstance(left, bytes) and isinstance(right, bytes):
                 return left + right
+            # Concatenación de listas (v0.6.0): [1,2] + [3,4] = [1,2,3,4]
+            if expr.op == "+" and isinstance(left, AyceList) and isinstance(right, AyceList):
+                new_elems = list(left.elements) + list(right.elements)
+                # El tipo resultante: si alguno es flexible, queda flexible.
+                # Si ambos tienen elem_type y coinciden, conserva ese elem_type.
+                lt = left.type_node
+                rt = right.type_node
+                if lt.flexible or rt.flexible:
+                    new_type = ListType(elem=None, flexible=True,
+                                        line=expr.line, col=expr.col)
+                elif (lt.elem is not None and rt.elem is not None and
+                      self._type_signature(lt.elem) == self._type_signature(rt.elem)):
+                    new_type = ListType(elem=lt.elem, flexible=False,
+                                        line=expr.line, col=expr.col)
+                else:
+                    # tipos heterogéneos -> lista flexible
+                    new_type = ListType(elem=None, flexible=True,
+                                        line=expr.line, col=expr.col)
+                return AyceList(new_elems, new_type)
             # División entera // (v0.4): requiere ints, devuelve int
             if expr.op == "//":
                 if not (isinstance(left, int) and isinstance(right, int) and
@@ -1330,8 +1505,33 @@ class Interpreter:
             if expr.op == "**":
                 return left ** right
 
+        # Operadores bit a bit (v0.6.0): & | ^ << >> — solo enteros (no bool)
+        if expr.op in ("&", "|", "^", "<<", ">>"):
+            for side in (left, right):
+                if not isinstance(side, int) or isinstance(side, bool):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        f"El operador {expr.op} bit a bit requiere enteros, "
+                        f"se recibió {self._type_name(side)}")
+            if expr.op == "&": return left & right
+            if expr.op == "|": return left | right
+            if expr.op == "^": return left ^ right
+            if expr.op == "<<":
+                if right < 0:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "Desplazamiento negativo en <<")
+                return left << right
+            if expr.op == ">>":
+                if right < 0:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "Desplazamiento negativo en >>")
+                return left >> right
+
         # Comparaciones
         if expr.op in ("==", "!="):
+            # v0.6.0: comparar con none es siempre válido (estilo Python `x is None`).
+            # Cualquier valor puede preguntarse si es none o no es none.
+            if left is None or right is None:
+                return (left == right) if expr.op == "==" else (left != right)
             # Igualdad de tipos compatibles
             if type(left) != type(right):
                 # int y float se permiten
@@ -1492,6 +1692,84 @@ class Interpreter:
             if method == "clear":
                 target.elements.clear()
                 return None
+            if method == "copy":
+                # Devuelve una copia superficial (shallow) de la lista.
+                if len(args) != 0:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "copy no toma argumentos")
+                return AyceList(list(target.elements),
+                                ListType(flexible=True, line=expr.line, col=expr.col))
+            if method == "extend":
+                if len(args) != 1 or not isinstance(args[0], AyceList):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "extend requiere 1 lista")
+                target.elements.extend(args[0].elements)
+                return None
+            if method == "pop":
+                if len(args) == 0:
+                    if not target.elements:
+                        raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                            "pop: lista vacía")
+                    return target.elements.pop()
+                if len(args) == 1 and isinstance(args[0], int):
+                    idx = args[0]
+                    if idx < 0 or idx >= len(target.elements):
+                        raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                            f"pop: índice {idx} fuera de rango")
+                    return target.elements.pop(idx)
+                raise AyceTypeError(self.filename, expr.line, expr.col,
+                    "pop requiere 0 args o 1 int")
+            if method == "index":
+                if len(args) != 1:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "index requiere 1 argumento")
+                try:
+                    return target.elements.index(args[0])
+                except ValueError:
+                    return -1
+            if method == "count":
+                if len(args) != 1:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "count requiere 1 argumento")
+                return target.elements.count(args[0])
+            if method == "reverse":
+                target.elements.reverse()
+                return None
+            if method == "sort":
+                # sort solo para listas comparables (int, float, string)
+                if len(args) != 0:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "sort no toma argumentos")
+                try:
+                    target.elements.sort()
+                except TypeError:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "sort: los elementos no son comparables entre sí")
+                return None
+            if method == "first":
+                if not target.elements:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "first: lista vacía")
+                return target.elements[0]
+            if method == "last":
+                if not target.elements:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "last: lista vacía")
+                return target.elements[-1]
+            if method == "is_empty":
+                return len(target.elements) == 0
+            if method == "join":
+                # Convierte lista de strings a un solo string con separador.
+                if len(args) != 1 or not isinstance(args[0], str):
+                    raise AyceTypeError(self.filename, expr.line, expr.col,
+                        "join requiere 1 string (separador)")
+                parts = []
+                for e in target.elements:
+                    if not isinstance(e, str):
+                        raise AyceTypeError(self.filename, expr.line, expr.col,
+                            "join: todos los elementos deben ser string")
+                    parts.append(e)
+                return args[0].join(parts)
             raise AyceRuntimeError(self.filename, expr.line, expr.col,
                 f"Las listas no tienen el método '{method}'")
 
@@ -1686,6 +1964,18 @@ class Interpreter:
         if isinstance(target_val, AyceTask):
             return self._call_task(target_val, [self.eval(a, env) for a in expr.args],
                                     expr.line, expr.col)
+        # v0.6.0: tarea nativa retenida en una variable (p.ej. `var f: task =
+        # primitives::math_sqrt` o require selectivo de un batch built-in).
+        from .batches import AyceNativeTask
+        if isinstance(target_val, AyceNativeTask):
+            args = [self.eval(a, env) for a in expr.args]
+            try:
+                return target_val.func(self, args, expr.line, expr.col)
+            except (AyceRuntimeError, AyceTypeError):
+                raise
+            except Exception as e:
+                raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                    f"Error en tarea nativa '{name}': {e}")
         raise AyceRuntimeError(self.filename, expr.line, expr.col,
             f"'{name}' no es una tarea ni un Template")
 
@@ -1787,6 +2077,36 @@ class Interpreter:
     # ──────────────────────────────────────────────────────────────────
     #  Verificación de tipos
     # ──────────────────────────────────────────────────────────────────
+    def _type_signature(self, type_node) -> str:
+        """Devuelve un string canónico para un TypeNode, ignorando line/col.
+        Útil para comparar si dos tipos son estructuralmente iguales."""
+        if type_node is None:
+            return "?"
+        if isinstance(type_node, PrimitiveType):
+            return type_node.name
+        if isinstance(type_node, UserTypeName):
+            return type_node.name
+        if isinstance(type_node, ListType):
+            if type_node.flexible or type_node.elem is None:
+                return "list"
+            return f"list[{self._type_signature(type_node.elem)}]"
+        if isinstance(type_node, DictType):
+            if type_node.flexible:
+                return "dict"
+            k = self._type_signature(type_node.key_type) if type_node.key_type else "?"
+            vs = ",".join(self._type_signature(v) for v in type_node.value_types)
+            return f"dict<{k}:{vs}>"
+        if isinstance(type_node, TupleType):
+            if type_node.flexible:
+                return "tuple"
+            es = ",".join(self._type_signature(e) for e in type_node.elem_types)
+            return f"tuple({es})"
+        if isinstance(type_node, SetType):
+            if type_node.flexible:
+                return "set"
+            return f"set[{self._type_signature(type_node.elem)}]"
+        return "?"
+
     def _check_value_matches_type(self, value, type_node, line, col, env):
         """Verifica que el valor sea compatible con el tipo declarado."""
         if type_node is None:
@@ -1843,7 +2163,10 @@ class Interpreter:
                     f"Se esperaba set, se recibió {self._type_name(value)}")
             return
         if isinstance(type_node, TaskType):
-            if not isinstance(value, AyceTask):
+            # v0.6.0: también acepta tareas nativas (AyceNativeTask de los
+            # batches built-in), necesarias para las librerías stdlib en ayce.
+            from .batches import AyceNativeTask
+            if not isinstance(value, (AyceTask, AyceNativeTask)):
                 raise AyceTypeError(self.filename, line, col,
                     f"Se esperaba task, se recibió {self._type_name(value)}")
             return
@@ -1928,7 +2251,8 @@ class Interpreter:
         if isinstance(type_node, SetType):
             return isinstance(value, AyceSet)
         if isinstance(type_node, TaskType):
-            return isinstance(value, AyceTask)
+            from .batches import AyceNativeTask
+            return isinstance(value, (AyceTask, AyceNativeTask))
         if isinstance(type_node, UserTypeName):
             type_name = type_node.name
             if isinstance(value, AyceInstance) and value.template.is_subclass_of(type_name):
@@ -2059,6 +2383,13 @@ class Interpreter:
         if isinstance(value, int):  return str(value)
         if isinstance(value, float):
             # Formatear float: si es entero, añadir .0
+            # (v0.6.0: inf/nan no admiten comparación con int() — proteger)
+            if value != value:
+                return "nan"
+            if value == float("inf"):
+                return "inf"
+            if value == float("-inf"):
+                return "-inf"
             if value == int(value) and abs(value) < 1e16:
                 return f"{value:.1f}"
             return str(value)

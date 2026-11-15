@@ -1,0 +1,53 @@
+## pruebas de csv, pprint, codecs
+require csv as CSV
+require pprint as PP
+require codecs as CD
+require _io as fio
+
+## ── csv: escribir y releer ──
+var filas: none[] = [["nombre", "edad", "ciudad"], ["Ana", "30", "CDMX"], ["Beto", "25", "Monterrey"], ["Cara \"C\" ", "40", "con, coma"]]
+CSV::write("/tmp/test_csv.csv", filas)
+var leidas: none[] = CSV::read("/tmp/test_csv.csv")
+say("csv filas:", leidas::len())                       ## 4
+say("csv r2:", leidas[1][0], leidas[1][2])              ## Ana CDMX
+say("csv coma:", leidas[3][2])                          ## con, coma
+say("csv comilla:", leidas[3][0])                       ## Cara "C" 
+var dictos: none[] = CSV::read_dict("/tmp/test_csv.csv")
+say("dict keys:", dictos[0]::keys())                    ## ["nombre", "edad", "ciudad"]
+say("dict val:", dictos[2]<"edad">)                     ## 40
+## delim ; 
+var filas2: none[] = [["a", "b"], ["1", "2"]]
+CSV::write("/tmp/test_csv2.csv", filas2, ";")
+say("csv2:", CSV::read("/tmp/test_csv2.csv", ";")[1][1])  ## 2
+## ── pprint ──
+var d: none<> = <"nombre": "Ana", "edad": 30, "hijos": ["x", "y"]>
+var linea: string = PP::format(d)
+say("pprint cabe:", linea::len() <= 80)                 ## True
+var grande: none[] = []
+var i: int = 0
+while i < 12 do
+    grande::append(i * 111111)
+    i += 1
+end
+var roto: string = PP::format(grande, 20)
+say("pprint roto tiene saltos:", roto::contains("\n"))  ## True
+say("pprint lista vacía:", PP::format([]))              ## []
+say("pprint tuple:", PP::format((1, "a")))              ## (1, "a")
+## ── codecs ──
+var enc: string = CD::encode("hola", "utf-8")
+say("utf8 bytes:", enc::len())                          ## 4
+say("utf8 roundtrip:", CD::decode(enc, "utf-8"))        ## hola
+var acento: string = CD::encode("á", "utf-8")
+say("á bytes:", acento::len())                          ## 2
+say("á roundtrip:", CD::decode(acento, "utf-8"))        ## á
+var emoji: string = CD::encode("ñ😀", "utf-8")
+say("emoji bytes:", emoji::len())                       ## 6
+say("emoji rt:", CD::decode(emoji, "utf-8"))            ## ñ😀
+say("latin1:", CD::decode(CD::encode("Ñandú", "latin-1"), "latin-1"))  ## Ñandú
+say("hex:", CD::encode("AB", "hex"))                    ## 4142
+say("hex rt:", CD::decode("4142", "hex"))               ## AB
+say("b64:", CD::encode("hola", "base64"))               ## aG9sYQ==
+say("b64 rt:", CD::decode("aG9sYQ==", "base64"))        ## hola
+say("rot13:", CD::encode("Hola", "rot13"))              ## Ubyn
+say("ascii estricto falla:", CD::encode("á", "ascii", "replace"))  ## ? (0x3F)
+say("OK grupo2")

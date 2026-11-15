@@ -1,0 +1,511 @@
+## random.ayce — generación pseudoaleatoria EN AYCE PURO (v0.6.0).
+## El generador es el mismo de CPython: MT19937 de Matsumoto & Nishimura,
+## implementado aquí con los operadores bit a bit del lenguaje.
+## Con la misma semilla produce EXACTAMENTE la misma secuencia que
+## random.Random(seed) de CPython (verificado con harness).
+##
+## La única llamada a la máquina es el builtin global urandom() para la
+## semilla automática — igual que random.py de CPython, que importa
+## `from os import urandom as _urandom` y hace int.from_bytes(_urandom(32)).
+
+require math as m
+
+## ── Estado del generador (a nivel de módulo, como el objeto Random) ──
+var _mt: list = []
+var _mti: int = 625
+var _seeded: bool = False
+var _gauss_next: float = 0.0
+var _gauss_has: bool = False
+
+task _mask32(int x) = int ;
+{
+    ## recorta a 32 bits, como la aritmética uint32_t de C
+    return x & 0xFFFFFFFF
+}
+
+task _init_genrand(int s) ;
+{
+    ## fase 1 de MT19937: siembra simple
+    _mt = []
+    var i: int = 0
+    while i < 624 do
+        _mt::append(0)
+        i += 1
+    end
+    _mt[0] = _mask32(s)
+    i = 1
+    while i < 624 do
+        var prev: int = _mt[i - 1]
+        _mt[i] = _mask32(1812433253 * (prev ^ (prev >> 30)) + i)
+        i += 1
+    end
+    _mti = 624
+}
+
+task _init_by_array(list key) ;
+{
+    ## fase 2 de MT19937: siembra por arreglo de palabras de 32 bits
+    ## (inicia con init_genrand(19650218), como mt19937ar.c y CPython)
+    _init_genrand(19650218)
+    var i: int = 1
+    var j: int = 0
+    var n: int = key::len()
+    var k: int = 624
+    if n > k then
+        k = n
+    end
+    while k > 0 do
+        var prev: int = _mt[i - 1]
+        var mixed: int = _mask32(prev ^ (prev >> 30))
+        _mt[i] = _mask32(_mask32(_mt[i] ^ (mixed * 1664525)) + key[j] + j)
+        i += 1
+        j += 1
+        if i >= 624 then
+            _mt[0] = _mt[623]
+            i = 1
+        end
+        if j >= n then
+            j = 0
+        end
+        k -= 1
+    end
+    k = 623
+    while k > 0 do
+        var prev: int = _mt[i - 1]
+        var mixed: int = _mask32(prev ^ (prev >> 30))
+        _mt[i] = _mask32(_mask32(_mt[i] ^ (mixed * 1566083941)) - i)
+        i += 1
+        if i >= 624 then
+            _mt[0] = _mt[623]
+            i = 1
+        end
+        k -= 1
+    end
+    _mt[0] = 0x80000000
+}
+
+task _entropy_int() = int ;
+{
+    ## int.from_bytes(urandom(32), "big") — la semilla de random.py
+    var ent: bytes = urandom(32)
+    var n: int = 0
+    var i: int = 0
+    while i < 32 do
+        n = (n << 8) | ent[i]
+        i += 1
+    end
+    return n
+}
+
+task _seed_int(int semilla) ;
+{
+    ## random.seed(int) de CPython: palabras little-endian de |semilla|
+    var n: int = semilla
+    if n < 0 then
+        n = -n
+    end
+    var key: list = []
+    if n == 0 then
+        key::append(0)
+    else
+        while n > 0 do
+            key::append(_mask32(n))
+            n = n >> 32
+        end
+    end
+    _init_by_array(key)
+    _gauss_has = False
+}
+
+task _auto_seed() ;
+{
+    _seed_int(_entropy_int())
+    _seeded = True
+}
+
+task seed(int semilla) ;
+{
+    _seed_int(semilla)
+    _seeded = True
+}
+
+task _twist() ;
+{
+    ## el "twist": regenera el bloque de 624 palabras
+    var i: int = 0
+    while i < 624 do
+        var y: int = (_mt[i] & 0x80000000) | (_mt[(i + 1) % 624] & 0x7FFFFFFF)
+        var nxt: int = _mt[(i + 397) % 624] ^ (y >> 1)
+        if y & 1 == 1 then
+            nxt = nxt ^ 0x9908B0DF
+        end
+        _mt[i] = nxt
+        i += 1
+    end
+}
+
+task _genrand() = int ;
+{
+    ## genrand_uint32: palabra de 32 bits con el "tempering"
+    if not _seeded then
+        _auto_seed()
+    end
+    if _mti >= 624 then
+        _twist()
+        _mti = 0
+    end
+    var y: int = _mt[_mti]
+    _mti += 1
+    y = y ^ (y >> 11)
+    y = y ^ ((y << 7) & 0x9D2C5680)
+    y = y ^ ((y << 15) & 0xEFC60000)
+    y = y ^ (y >> 18)
+    return _mask32(y)
+}
+
+task _random01() = float ;
+{
+    ## random() de CPython: 53 bits de precisión
+    ## a = genrand>>5, b = genrand>>6 → (a·2^26 + b)/2^53
+    var a: int = _genrand() >> 5
+    var b: int = _genrand() >> 6
+    return (float(a) * 67108864.0 + float(b)) / 9007199254740992.0
+}
+
+task _getrandbits(int k) = int ;
+{
+    ## getrandbits de CPython: palabras de 32 bits de menor a mayor peso;
+    ## a la ÚLTIMA palabra se le recortan los bits menos significativos
+    ## (r >>= 32 − k_restantes), no un desplazamiento del acumulado.
+    if k < 0 then
+        raise Error("random: getrandbits con bits negativos", 1)
+    end
+    if k == 0 then
+        return 0
+    end
+    if k <= 32 then
+        return _genrand() >> (32 - k)
+    end
+    var words: int = (k - 1) // 32 + 1
+    var r: int = 0
+    var rest: int = k
+    var i: int = 0
+    while i < words do
+        var w: int = _genrand()
+        rest -= 32
+        if rest < 0 then
+            w = w >> (-rest)
+        end
+        r = r | (w << (32 * i))
+        i += 1
+    end
+    return r
+}
+
+task _bit_length(int n) = int ;
+{
+    var c: int = 0
+    while n > 0 do
+        n = n >> 1
+        c += 1
+    end
+    return c
+}
+
+task _randbelow(int n) = int ;
+{
+    ## _randbelow_with_getrandbits de random.py
+    if n <= 0 then
+        raise Error("random: randbelow con n <= 0", 1)
+    end
+    var k: int = _bit_length(n)
+    var r: int = _getrandbits(k)
+    while r >= n do
+        r = _getrandbits(k)
+    end
+    return r
+}
+
+task rand_int(int min, int max) = int ;
+{
+    ## randint(min, max): inclusive en ambos extremos (como random.randint)
+    if min > max then
+        raise Error("random::rand_int: min > max", 1)
+    end
+    var width: int = max - min + 1
+    return min + _randbelow(width)
+}
+
+task rand_float() | (int a, int b) | (int a, float b) | (float a, int b) | (float a, float b) = float ;
+{
+    return _random01()
+    |
+    return uniform(float(a), float(b))
+    |
+    return uniform(float(a), b)
+    |
+    return uniform(a, float(b))
+    |
+    return uniform(a, b)
+}
+
+task rand_bool() = bool ;
+{
+    ## como random::bool nativo: choice([True, False]) → un _randbelow(2)
+    if _randbelow(2) == 0 then
+        return True
+    end
+    return False
+}
+
+task choice(string lista) | (none[] lista) | (none() lista) | (none{} lista) ;
+{
+    if lista::len() == 0 then
+        raise Error("random::choice: secuencia vacía", 1)
+    end
+    return lista[_randbelow(lista::len())]
+    |
+    if lista::len() == 0 then
+        raise Error("random::choice: lista vacía", 1)
+    end
+    return lista[_randbelow(lista::len())]
+    |
+    if lista::len() == 0 then
+        raise Error("random::choice: tupla vacía", 1)
+    end
+    return lista[_randbelow(lista::len())]
+    |
+    ## set: copiar elementos a lista y elegir (como el nativo con seq.elements)
+    var elems: list = []
+    for e in lista do
+        elems::append(e)
+    end
+    if elems::len() == 0 then
+        raise Error("random::choice: set vacío", 1)
+    end
+    return elems[_randbelow(elems::len())]
+}
+
+task shuffle(none[] lista) = list ;
+{
+    ## Fisher-Yates, como random.shuffle de CPython; devuelve una COPIA
+    ## barajada (el original no se muta), igual que la versión nativa.
+    var n: int = lista::len()
+    var copia: none[] = []
+    var i: int = 0
+    while i < n do
+        copia::append(lista[i])
+        i += 1
+    end
+    i = n - 1
+    while i >= 1 do
+        var j: int = _randbelow(i + 1)
+        var tmp: none = copia[i]
+        copia[i] = copia[j]
+        copia[j] = tmp
+        i -= 1
+    end
+    return copia
+}
+
+task sample(none[] lista, int k) = list ;
+{
+    ## selección sin reemplazo, mismo algoritmo y mismo orden de llamadas
+    ## que random.sample de CPython (camino de pool + camino de set)
+    var n: int = lista::len()
+    if k < 0 || k > n then
+        raise Error("random::sample: k fuera de rango (0..n)", 1)
+    end
+    var result: none[] = []
+    var i: int = 0
+    while i < k do
+        result::append(none)
+        i += 1
+    end
+    ## setsize = 21; si k > 5: setsize += 4^ceil(log(k*3, 4))
+    ## el techo se calcula con enteros: 4^p >= m ⟺ 2p >= bitlen(m-1)
+    var setsize: int = 21
+    if k > 5 then
+        var mm: int = k * 3
+        var bl: int = _bit_length(mm - 1)
+        var p: int = (bl + 1) // 2
+        setsize += _ipow4(p)
+    end
+    if n <= setsize then
+        ## camino de pool (n chico): copia y agujeros al final
+        var pool: none[] = []
+        i = 0
+        while i < n do
+            pool::append(lista[i])
+            i += 1
+        end
+        i = 0
+        while i < k do
+            var j: int = _randbelow(n - i)
+            result[i] = pool[j]
+            pool[j] = pool[n - i - 1]
+            i += 1
+        end
+    else
+        ## camino de set: rechaza repetidos (lista de índices elegidos)
+        var selected: list = []
+        i = 0
+        while i < k do
+            var j: int = _randbelow(n)
+            while selected::contains(j) do
+                j = _randbelow(n)
+            end
+            result[i] = lista[j]
+            selected::append(j)
+            i += 1
+        end
+    end
+    return result
+}
+
+task _ipow4(int p) = int ;
+{
+    ## 4^p por cuadrados (p chico)
+    var r: int = 1
+    var b: int = 4
+    while p > 0 do
+        if p % 2 == 1 then
+            r *= b
+        end
+        b *= b
+        p = p // 2
+    end
+    return r
+}
+
+task randrange(int inicio) | (int inicio, int fin) | (int inicio, int fin, int n) = int ;
+{
+    ## como random.randrange de CPython (extremo superior excluido)
+    if inicio <= 0 then
+        raise Error("random::randrange: rango vacío", 1)
+    end
+    return _randbelow(inicio)
+    |
+    var width: int = fin - inicio
+    if width <= 0 then
+        raise Error("random::randrange: rango vacío", 1)
+    end
+    return inicio + _randbelow(width)
+    |
+    if n == 0 then
+        raise Error("random::randrange: paso cero", 1)
+    end
+    var width: int = 0
+    if n > 0 then
+        width = (fin - inicio + n - 1) // n
+        if fin <= inicio then
+            raise Error("random::randrange: rango vacío", 1)
+        end
+    else
+        width = (fin - inicio + n) // n
+        if fin >= inicio then
+            raise Error("random::randrange: rango vacío", 1)
+        end
+    end
+    if width <= 0 then
+        raise Error("random::randrange: rango vacío", 1)
+    end
+    return inicio + n * _randbelow(width)
+}
+
+task uniform(int a, int b) | (int a, float b) | (float a, int b) | (float a, float b) = float ;
+{
+    return _uniform_f(float(a), float(b))
+    |
+    return _uniform_f(float(a), b)
+    |
+    return _uniform_f(a, float(b))
+    |
+    return _uniform_f(a, b)
+}
+
+task _uniform_f(float a, float b) = float ;
+{
+    ## como random.uniform: a + (b−a)·random()
+    return a + (b - a) * _random01()
+}
+
+task gauss() | (int media) | (float media) | (int media, int desvio) | (int media, float desvio) | (float media, int desvio) | (float media, float desvio) = float ;
+{
+    return _gauss_f(0.0, 1.0)
+    |
+    return _gauss_f(float(media), 1.0)
+    |
+    return _gauss_f(float(media), 1.0)
+    |
+    return _gauss_f(float(media), float(desvio))
+    |
+    return _gauss_f(float(media), desvio)
+    |
+    return _gauss_f(media, float(desvio))
+    |
+    return _gauss_f(media, desvio)
+}
+
+task _gauss_f(float mu, float sigma) = float ;
+{
+    ## Box-Muller con caché del segundo valor, MISMO orden de llamadas
+    ## que random.gauss de CPython (random() para el ángulo, luego
+    ## random() dentro del log) para reproducir la secuencia exacta.
+    var z: float = 0.0
+    if _gauss_has then
+        z = _gauss_next
+        _gauss_has = False
+    else
+        var x2pi: float = _random01() * 2.0 * m::pi
+        var g2sqrt: float = m::sqrt(-2.0 * m::ln(1.0 - _random01()))
+        z = m::cos(x2pi) * g2sqrt
+        _gauss_next = m::sin(x2pi) * g2sqrt
+        _gauss_has = True
+    end
+    return mu + z * sigma
+}
+
+task random_bytes(int n) = bytes ;
+{
+    ## como Random.randbytes: getrandbits(n·8) en little-endian
+    if n < 0 || n > 1048576 then
+        raise Error("random::random_bytes: n fuera de rango (0..1048576)", 1)
+    end
+    var r: int = _getrandbits(n * 8)
+    var out: list = []
+    var i: int = 0
+    while i < n do
+        out::append((r >> (8 * i)) & 0xFF)
+        i += 1
+    end
+    return bytes_from_ints(out)
+}
+
+task choices(none[] lista) | (none[] lista, int k) = list ;
+{
+    ## con reemplazo, como random.choices: floor(random()·n) por elemento
+    var out: none[] = []
+    var n: int = lista::len()
+    if n == 0 then
+        raise Error("random::choices: lista vacía", 1)
+    end
+    var i: int = 0
+    while i < 1 do
+        out::append(lista[int(_random01() * float(n))])
+        i += 1
+    end
+    return out
+    |
+    var out: none[] = []
+    var n: int = lista::len()
+    if n == 0 then
+        raise Error("random::choices: lista vacía", 1)
+    end
+    var i: int = 0
+    while i < k do
+        out::append(lista[int(_random01() * float(n))])
+        i += 1
+    end
+    return out
+}

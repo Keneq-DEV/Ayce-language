@@ -1,0 +1,46 @@
+## warnings.ayce — advertencias EN AYCE PURO (v0.6.0).
+## Como warnings.py de CPython: warn(msg) imprime la advertencia a
+## stderr con su categoría ("UserWarning" por defecto) y no repite el
+## mismo aviso en la misma ejecución, igual que __warningregistry__.
+
+require _sys as _sysmod
+
+## categoría por defecto (como UserWarning de CPython)
+const _default_category: string = "UserWarning"
+
+## advertencias ya emitidas en esta ejecución
+var _registry: string[] = []
+
+task warn(string s) | (string s, stdlib::Cualquiera arg) ;
+{
+    return _warn_simple(s)
+    |
+    return _warn_cat(s, arg)
+}
+
+task _warn_simple(string s) ;
+{
+    _emit(_default_category, s)
+}
+
+task _warn_cat(string s, stdlib::Cualquiera categoria) ;
+{
+    ## la categoría llega como string (nombre de la clase de aviso);
+    ## si el llamante pasa otro valor se convierte con string()
+    _emit(string(categoria), s)
+}
+
+task _emit(string categoria, string mensaje) ;
+{
+    var clave: string = categoria + "|" + mensaje
+    if !_registry::contains(clave) then
+        _registry::append(clave)
+        _sysmod::stderr(categoria + ": " + mensaje)
+    end
+}
+
+## reinicia el registro (útil en tests)
+task reset() ;
+{
+    _registry = []
+}

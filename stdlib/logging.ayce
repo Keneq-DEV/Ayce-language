@@ -1,0 +1,79 @@
+## logging.ayce — registro de eventos EN AYCE PURO (v0.6.0).
+## Como logging.py de CPython: cinco niveles con umbral configurable,
+## formato "NIVEL:nombre:mensaje" y salida por stderr. El registro del
+## módulo es una lista de líneas (getrecords) y el nivel por defecto
+## es INFO, como basicConfig(level=INFO) que hacía el batch nativo.
+
+require _sys as _sysmod
+
+## niveles (los mismos números de CPython)
+const DEBUG: int = 10
+const INFO: int = 20
+const WARNING: int = 30
+const ERROR: int = 40
+const CRITICAL: int = 50
+
+## nombre del registrador raíz y umbral del módulo
+var _nivel_actual: int = INFO
+var _nombre: string = "root"
+var _records: string[] = []
+
+## cambia el umbral: set_level(logging::DEBUG), etc.
+task set_level(int nivel) ;
+{
+    _nivel_actual = nivel
+}
+
+task get_level() = int ;
+{
+    return _nivel_actual
+}
+
+## emite si el nivel alcanza el umbral; devuelve la línea o ""
+task _emit(int nivel, string nombre_nivel, string s) = string ;
+{
+    if nivel < _nivel_actual then
+        return ""
+    end
+    var linea: string = nombre_nivel + ":" + _nombre + ":" + s
+    _records::append(linea)
+    _sysmod::stderr(linea)
+    return linea
+}
+
+task debug(string s) ;
+{
+    _emit(DEBUG, "DEBUG", s)
+}
+
+task info(string s) ;
+{
+    _emit(INFO, "INFO", s)
+}
+
+task warning(string s) ;
+{
+    _emit(WARNING, "WARNING", s)
+}
+
+task error(string s) ;
+{
+    _emit(ERROR, "ERROR", s)
+}
+
+task critical(string s) ;
+{
+    _emit(CRITICAL, "CRITICAL", s)
+}
+
+## las últimas líneas emitidas (para inspección en tests)
+task getrecords() = string[] ;
+{
+    return _records::copy()
+}
+
+task basic_config(int nivel = INFO) ;
+{
+    _nivel_actual = nivel
+    _records = []
+}

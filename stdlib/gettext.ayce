@@ -1,0 +1,44 @@
+## gettext.ayce — traducción de mensajes EN AYCE (v0.6.0).
+## Los catálogos de traducción se manejan aquí: from_dict y get son
+## puro ayce (búsqueda con retorno a la clave original, como
+## gettext.NullTranslations); install_json carga el catálogo con la
+## stdlib propia (io.ayce + json.ayce). Los catálogos binarios .mo
+## (formato GNU con tabla de hash) los abre el batch privado
+## `_gettext`, igual que gettext.py de CPython apoya en C.
+
+require _io as fio
+require json as js
+require _gettext as gt
+
+## dict → catálogo de traducciones (por ahora identidad, como
+## gettext.translation devuelve el objeto con .gettext)
+task from_dict(none<> arg) = none<> ;
+{
+    return arg
+}
+
+## carga un catálogo .mo binario (manejado por el batch nativo)
+task load_mo(string s, string s2) | (string s, string s2, string s3) ;
+{
+    return gt::load_mo(s, s2)
+    |
+    return gt::load_mo(s, s2, s3)
+}
+
+## carga un catálogo JSON con la stdlib ayce (io + json propios)
+task install_json(string s) = none<> ;
+{
+    var texto: string = fio::read_file(s)
+    var catalogo: none = js::parse(texto)
+    return catalogo
+}
+
+## traduce una clave: si el catálogo no la tiene, devuelve la clave
+## (comportamiento de gettext.gettext con catálogo parcial)
+task get(none<> arg, string s) = string ;
+{
+    if arg::has(s) then
+        return arg<s>
+    end
+    return s
+}

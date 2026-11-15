@@ -337,6 +337,26 @@ class Lexer:
     def _lex_number(self):
         line, col = self.line, self.col
         is_float = False
+
+        # Literales enteros con base (v0.6.0): 0x hex, 0o octal, 0b binario
+        if self._peek() == "0" and self._peek(1) in ("x", "X", "o", "O", "b", "B"):
+            base_char = self._peek(1).lower()
+            base = {"x": 16, "o": 8, "b": 2}[base_char]
+            self._advance()  # '0'
+            self._advance()  # 'x' / 'o' / 'b'
+            dig = []
+            valid = {"x": "0123456789abcdefABCDEF_",
+                     "o": "01234567_",
+                     "b": "01_"}[base_char]
+            while self.pos < len(self.source) and self._peek() in valid:
+                dig.append(self._advance())
+            if not dig:
+                self._error("Literal con base vacío: se esperaban dígitos tras "
+                            f"'0{base_char}'")
+            body = "".join(dig).replace("_", "")
+            self.tokens.append(Token(TokenType.INT, int(body, base), line, col))
+            return
+
         digits = []
 
         while self.pos < len(self.source) and self._peek().isdigit():
@@ -400,6 +420,13 @@ class Lexer:
         if three == "//=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.DSLASH_ASSIGN, "//=", line, col)); return
+        # Desplazamientos con asignación (v0.6.0): <<= y >>=
+        if three == "<<=":
+            self._advance(); self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.LSHIFT_ASSIGN, "<<=", line, col)); return
+        if three == ">>=":
+            self._advance(); self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.RSHIFT_ASSIGN, ">>=", line, col)); return
         # ... (varargs en parámetros) — v0.5: token único
         if three == "..." and self._peek(3) != ".":
             self._advance(); self._advance(); self._advance()
@@ -455,22 +482,41 @@ class Lexer:
         if two == "%=":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.PERCENT_ASSIGN, "%=", line, col)); return
+        # Operadores bit a bit de 2 caracteres (v0.6.0)
+        if two == "<<":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.LSHIFT, "<<", line, col)); return
+        if two == ">>":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.RSHIFT, ">>", line, col)); return
+        if two == "&=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.AMP_ASSIGN, "&=", line, col)); return
+        if two == "|=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.OR_ASSIGN, "|=", line, col)); return
+        if two == "^=":
+            self._advance(); self._advance()
+            self.tokens.append(Token(TokenType.XOR_ASSIGN, "^=", line, col)); return
 
         # Operador ? (ternario v0.4)
         if c == "?":
             self._advance()
             self.tokens.append(Token(TokenType.QUESTION, "?", line, col)); return
 
-        # Modificadores &in &out &inout
+        # Modificadores &in &out &inout (v0.6.0: inout primero, para que '&in'
+        # no se coma el prefijo de '&inout' — bug de orden corregido aquí)
+        # '& ' a secas ahora es el operador AND bit a bit.
         if c == "&":
-            for kw, tt in [("in", TokenType.AMP_IN),
-                          ("out", TokenType.AMP_OUT),
-                          ("inout", TokenType.AMP_INOUT)]:
+            for kw, tt in [("inout", TokenType.AMP_INOUT),
+                          ("in", TokenType.AMP_IN),
+                          ("out", TokenType.AMP_OUT)]:
                 if self.source[self.pos:self.pos + len(kw) + 1] == "&" + kw:
                     for _ in range(len(kw) + 1):
                         self._advance()
                     self.tokens.append(Token(tt, "&" + kw, line, col)); return
-            self._error(f"Modificador '&' inválido. Se esperaba &in, &out o &inout")
+            self._advance()
+            self.tokens.append(Token(TokenType.AMP, "&", line, col)); return
 
         # Operadores de 1 carácter
         single = {
@@ -479,6 +525,7 @@ class Lexer:
             "%": TokenType.PERCENT,
             "<": TokenType.LT,        ">": TokenType.GT,
             "!": TokenType.NOT,        "=": TokenType.ASSIGN,
+            "^": TokenType.BIT_XOR,   "~": TokenType.BIT_NOT,
             "(": TokenType.LPAREN,    ")": TokenType.RPAREN,
             "[": TokenType.LBRACKET,  "]": TokenType.RBRACKET,
             "{": TokenType.LBRACE,    "}": TokenType.RBRACE,

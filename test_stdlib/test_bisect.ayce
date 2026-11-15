@@ -1,0 +1,29 @@
+## test_bisect.ayce — pruebas de bisect (ayce puro)
+require bisect as B
+
+var xs: int[] = [1, 3, 5, 7]
+say("left(4): " + string(B::left(xs, 4)) + " (2)")
+say("right(4): " + string(B::right(xs, 4)) + " (2)")
+say("left(5): " + string(B::left(xs, 5)) + " (2)")
+say("right(5): " + string(B::right(xs, 5)) + " (3)")
+say("left(0): " + string(B::left(xs, 0)) + " (0)")
+say("right(9): " + string(B::right(xs, 9)) + " (4)")
+
+B::insert(xs, 4)
+say("tras insert(4): " + string(xs) + " ([1, 3, 4, 5, 7])")
+B::insert_right(xs, 5)
+say("tras insert_right(5): " + string(xs) + " ([1, 3, 4, 5, 5, 7])")
+say("index(5): " + string(B::index(xs, 5)) + " (3)")
+say("index(6): " + string(B::index(xs, 6)) + " (-1)")
+say("find_le(6): " + string(B::find_le(xs, 6)) + " (5)")
+say("find_ge(6): " + string(B::find_ge(xs, 6)) + " (7)")
+say("find_le(0): " + string(B::find_le(xs, 0)) + " (none)")
+say("find_ge(8): " + string(B::find_ge(xs, 8)) + " (none)")
+
+## insertar en orden una serie desordenada
+var ordenada: int[] = []
+for x in [9, 2, 7, 1, 5, 3] do
+    B::insert(ordenada, x)
+end
+say("serie ordenada: " + string(ordenada) + " ([1, 2, 3, 5, 7, 9])")
+say("FIN test_bisect")

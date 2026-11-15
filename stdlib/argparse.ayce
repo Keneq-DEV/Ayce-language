@@ -1,0 +1,197 @@
+## argparse.ayce — parser de argumentos de línea de comandos (ayce puro)
+##
+## Template Parser para definir y parsear argumentos tipo CLI:
+##   - flags booleanos:      --verbose, -v   (True si presentes)
+##   - opciones con valor:   --archivo datos.txt, --nivel=3
+##   - posicionales:         por orden, obligatorios
+##
+## Uso típico:
+##   var p: A::Parser = A::Parser("miapp", "hace algo")
+##   p::add_flag("v", "verbose")
+##   p::add_option("archivo", "config.txt")
+##   p::add_positional("entrada")
+##   var res = p::parse(sys::args())
+##   res<"verbose"> / res<"archivo"> / res<"posicional_entrada">
+##   say(p::help())
+##
+## Errores: argumento desconocido o posicional faltante → raise Error.
+
+Template Parser {
+    prog: string
+    description: string
+    flags_map: none
+    options_map: none
+    option_defaults: none
+    positionals: string[]
+    flag_short: none
+
+    task build(string nombre, string desc) ;
+    {
+        self::prog = nombre
+        self::description = desc
+        self::flags_map = <>
+        self::options_map = <>
+        self::option_defaults = <>
+        self::positionals = []
+        self::flag_short = <>
+    }
+
+    ## Registrar un flag booleano. `alias` opcional corto (ej. "v").
+    task add_flag(string nombre, string alias) ;
+    {
+        var fm: none = self::flags_map
+        fm<nombre> = False
+        if alias != "" then
+            var fs: none = self::flag_short
+            fs<alias> = nombre
+        end
+    }
+
+    ## Registrar una opción con valor y default
+    task add_option(string nombre, none default) ;
+    {
+        var om: none = self::options_map
+        var od: none = self::option_defaults
+        om<nombre> = default
+        od<nombre> = default
+    }
+
+    ## Registrar un argumento posicional (en orden)
+    task add_positional(string nombre) ;
+    {
+        self::positionals::append(nombre)
+    }
+
+    ## Texto de ayuda
+    task help() = string ;
+    {
+        var out: string = "uso: " + self::prog
+        for p in self::positionals do
+            out += " <" + p + ">"
+        end
+        out += " [opciones]"
+        out += "\n" + self::description
+        out += "\n\nposicionales:"
+        for p2 in self::positionals do
+            out += "\n  " + p2
+        end
+        out += "\n\nflags:"
+        var fm: none = self::flags_map
+        for f in fm::keys() do
+            var fname: string = f
+            out += "\n  --" + fname + "  (bool)"
+        end
+        out += "\n\nopciones:"
+        var om: none = self::options_map
+        for o in om::keys() do
+            var oname: string = o
+            var od: none = self::option_defaults
+            out += "\n  --" + oname + " <valor>  (default: " + string(od<oname>) + ")"
+        end
+        return out
+    }
+
+    ## Parsear una lista de argumentos. Devuelve dict flexible con:
+    ##   flag por nombre (bool), opción por nombre, posicionales como
+    ##   "posicional_<nombre>" en orden declarado.
+    task parse(string[] args) = none ;
+    {
+        var fm: none = self::flags_map
+        var om: none = self::options_map
+        var fs: none = self::flag_short
+        ## resultado con defaults (los flags empiezan en False)
+        for f in fm::keys() do
+            var fname: string = f
+            fm<fname> = False
+        end
+        var od0: none = self::option_defaults
+        for o in od0::keys() do
+            var oname: string = o
+            om<oname> = od0<oname>
+        end
+        ## dict de resultado final
+        var resultado: none = <>
+        for f2 in fm::keys() do
+            var f2name: string = f2
+            resultado<f2name> = fm<f2name>
+        end
+        for o2 in om::keys() do
+            var o2name: string = o2
+            resultado<o2name> = om<o2name>
+        end
+        var pos_idx: int = 0
+        var i: int = 0
+        while i < args::len() do
+            var arg: string = args[i]
+            if arg::starts_with("--") then
+                var nombre: string = arg::slice(2, arg::len())
+                ## ¿forma --clave=valor?
+                var eq_idx: int = nombre::find("=")
+                var valor_separado: bool = False
+                var valor_eq: string = ""
+                if eq_idx >= 0 then
+                    valor_eq = nombre::slice(eq_idx + 1, nombre::len())
+                    nombre = nombre::slice(0, eq_idx)
+                    valor_separado = True
+                end
+                if fm::has(nombre) then
+                    fm<nombre> = True
+                    if valor_separado then
+                        raise Error("argparse: el flag --" + nombre + " no acepta valor", 27)
+                    end
+                else
+                    if om::has(nombre) then
+                        var valor: string = valor_eq
+                        if not valor_separado then
+                            i += 1
+                            if i >= args::len() then
+                                raise Error("argparse: --" + nombre + " espera un valor", 27)
+                            end
+                            valor = args[i]
+                        end
+                        om<nombre> = valor
+                    else
+                        raise Error("argparse: opción desconocida: --" + nombre, 27)
+                    end
+                end
+            else
+                if arg::starts_with("-") && arg::len() > 1 then
+                    var corto: string = arg::slice(1, arg::len())
+                    if fs::has(corto) then
+                        var largo: string = fs<corto>
+                        fm<largo> = True
+                    else
+                        raise Error("argparse: opción desconocida: " + arg, 27)
+                    end
+                else
+                    if pos_idx < self::positionals::len() then
+                        var pname: string = self::positionals[pos_idx]
+                        var clave: string = "posicional_"
+                        clave += pname
+                        om<clave> = arg
+                        pos_idx += 1
+                    else
+                        raise Error("argparse: argumento inesperado: " + arg, 27)
+                    end
+                end
+            end
+            i += 1
+        end
+        ## verificar posicionales obligatorios
+        var j: int = pos_idx
+        while j < self::positionals::len() do
+            var faltante: string = self::positionals[j]
+            raise Error("argparse: falta el argumento posicional: " + faltante, 27)
+        end
+        ## copiar los valores parseados al resultado
+        for f3 in fm::keys() do
+            var f3name: string = f3
+            resultado<f3name> = fm<f3name>
+        end
+        for o3 in om::keys() do
+            var o3name: string = o3
+            resultado<o3name> = om<o3name>
+        end
+        return resultado
+    }
+}

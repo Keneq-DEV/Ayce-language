@@ -1,0 +1,28 @@
+## sqlite3.ayce — base de datos SQL embebida EN AYCE (v0.6.0).
+## SQLite es una biblioteca C completa (un motor de base de datos
+## entero): igual que sqlite3.py de CPython delega en el módulo C
+## `_sqlite3`, aquí el motor vive en el batch privado `_sqlite3` y
+## el módulo aporta la conexión, la ejecución con parámetros y el
+## cierre.
+
+require _sqlite3 as db
+
+## abre (o crea) la base de datos en la ruta dada
+task connect(string s) = Connection ;
+{
+    return db::connect(s)
+}
+
+## ejecuta SQL, con parámetros ? opcionales; devuelve dict
+## {filas, columnas, cambios} o el cursor según el batch
+task execute(stdlib::Cualquiera arg, string s) | (stdlib::Cualquiera arg, string s, stdlib::Cualquiera arg3) ;
+{
+    return db::execute(arg, s)
+    |
+    return db::execute(arg, s, arg3)
+}
+
+task close(stdlib::Cualquiera arg) ;
+{
+    db::close(arg)
+}

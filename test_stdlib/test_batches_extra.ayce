@@ -1,0 +1,193 @@
+## Tests de los batches extra v0.6.0
+
+require copy
+require re
+require datetime
+require path
+require hashlib
+require base64
+require hmac
+require secrets
+require csv
+require collections
+require itertools
+require functools
+require heapq
+require bisect
+require statistics
+require textwrap
+require difflib
+require unicodedata
+require uuid
+require calendar
+require decimal
+require fractions
+require struct
+require glob
+require tempfile
+require shutil
+require pprint
+require traceback
+require warnings
+require platform
+require codecs
+require locale
+require subprocess
+require logging
+require threading
+require queue
+require types
+require zipfile
+require gzip
+require zlib
+require bz2
+require lzma
+require pickle
+require sqlite3
+require urllib
+require array
+
+## copy
+var a: int[] = [1, 2, 3]
+var b: int[] = copy::shallow(a)
+say(b)
+
+## re
+say(re::find_all("\\d+", "a1 b22 c333"))
+say(re::replace("a", "X", "banana"))
+
+## datetime
+say(datetime::now()<"str">)
+say(datetime::today()<"iso">)
+
+## path
+say(path::basename("/home/z/file.ayce"))
+say(path::dirname("/home/z/file.ayce"))
+say(path::splitext("archivo.tar.gz"))
+
+## hashlib
+say(hashlib::md5("hola"))
+say(hashlib::sha256("hola"))
+
+## base64
+var encoded: string = base64::encode("hola mundo")
+say(encoded)
+say(base64::decode(encoded))
+
+## hmac
+say(hmac::digest("clave", "mensaje"))
+
+## secrets
+say(secrets::token_hex(8))
+say(secrets::rand_below(100))
+
+## collections
+## Nota: `require collections` carga stdlib/collections.ayce (ayce puro):
+## Stack, Queue, LinkedList, Counter, deque, OrderedDict, defaultdict.
+## Ver stdlib/test_collections.ayce para las pruebas completas.
+
+## itertools
+say(itertools::combinations([1, 2, 3], 2))
+say(itertools::permutations([1, 2], 2))
+say(itertools::product([1, 2], [3, 4]))
+
+## functools
+task sumar(int a, int b) ; { return a + b }
+say(functools::reduce(sumar, [1, 2, 3, 4], 0))
+
+## heapq
+var h: int[] = [5, 3, 1, 4, 2]
+heapq::heapify(h)
+say(heapq::pop(h))
+say(heapq::pop(h))
+
+## bisect
+var sorted_list: int[] = [1, 3, 5, 7]
+bisect::insert(sorted_list, 4)
+say(sorted_list)
+
+## statistics
+say(statistics::mean([1, 2, 3, 4, 5]))
+say(statistics::median([1, 2, 3, 4, 5]))
+say(statistics::stdev([1, 2, 3, 4, 5]))
+
+## textwrap
+say(textwrap::fill("Hola mundo esto es un texto muy largo que deberia ser envuelto", 20))
+
+## difflib
+say(difflib::ratio("hola", "hola"))
+say(difflib::ratio("hola", "adios"))
+
+## unicodedata
+say(unicodedata::name("A"))
+say(unicodedata::name("ñ"))
+
+## uuid
+say(uuid::uuid4())
+
+## calendar
+say(calendar::weekday(2026, 11, 14))
+say(calendar::isleap(2024))
+say(calendar::isleap(2025))
+say(calendar::month_name(5))
+say(calendar::month_days(2026, 2))
+
+## decimal
+say(decimal::decimal("0.1"))
+say(decimal::add("0.1", "0.2"))
+say(decimal::mul("3", "0.5"))
+
+## fractions
+say(fractions::fraction(1, 3))
+say(fractions::fraction("0.25"))
+say(fractions::numerator("1/3"))
+say(fractions::denominator("1/3"))
+
+## struct
+var packed: bytes = struct::pack(">i", 42)
+say(packed)
+var unpacked: none[] = struct::unpack(">i", packed)
+say(unpacked)
+
+## tempfile
+say(tempfile::gettempdir())
+
+## shutil
+say(shutil::which("ls"))
+
+## pprint
+say(pprint::format([1, 2, [3, 4, [5, 6]]], 30))
+
+## traceback
+say(traceback::format_exc())
+
+## platform
+say(platform::system())
+say(platform::python_version())
+
+## codecs
+say(codecs::encode("hola", "rot13"))
+
+## locale
+say(locale::getpreferredencoding())
+
+## subprocess
+say(subprocess::run("echo hola"))
+
+## threading
+say(threading::current_thread())
+say(threading::active_count())
+
+## types
+say(types::is_int(5))
+say(types::is_int("5"))
+say(types::is_list([1, 2, 3]))
+say(types::is_none(none))
+
+## urllib
+say(urllib::parse("https://user:pass@example.com/path?x=1#frag"))
+say(urllib::urlencode(<"x": "1", "y": "2 hola">))
+say(urllib::quote("a b/c"))
+
+## array
+say(array::make([1, 2, 3]))

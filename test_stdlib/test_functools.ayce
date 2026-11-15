@@ -1,0 +1,46 @@
+## test_functools.ayce — pruebas de functools (ayce puro)
+require functools as F
+
+task sumar(int a, int b) = int => a + b
+task doble(int x) = int => x * 2
+task inc(int x) = int => x + 1
+task cuadrado(int x) = int => x * x
+
+say("reduce: " + string(F::reduce(sumar, [1, 2, 3, 4], 0)) + " (10)")
+say("identity: " + string(F::identity(42)) + " (42)")
+say("apply: " + string(F::apply(doble, 5)) + " (10)")
+say("flip: " + string(F::flip(sumar, 1, 2)) + " (3)")
+say("compose2: " + string(F::compose2(cuadrado, doble, 3)) + " (36)")
+say("compose3: " + string(F::compose3(cuadrado, doble, inc, 2)) + " (36)")
+say("pipe2: " + string(F::pipe2(doble, inc, 5)) + " (11)")
+say("pipe3: " + string(F::pipe3(doble, inc, cuadrado, 3)) + " (49)")
+say("sum_list: " + string(F::sum_list([1, 2, 3])) + " (6)")
+say("product_list: " + string(F::product_list([2, 3, 4])) + " (24)")
+
+## Memoizer
+task fib(int n) = int ;
+{
+    if n <= 1 then
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+}
+
+task fib_lento(int n) = int ;
+{
+    if n <= 1 then
+        return n
+    end
+    return fib_lento(n - 1) + fib_lento(n - 2)
+}
+
+var memo: F::Memoizer = F::memoize(fib_lento)
+say("fib_lento(20): " + string(memo::call(20)) + " (6765)")
+say("hits: " + string(memo::hits()) + " misses: " + string(memo::misses()))
+say("call(20) otra vez (desde caché): " + string(memo::call(20)))
+say("hits ahora: " + string(memo::hits()) + " (1)")
+say("cache_size: " + string(memo::cache_size()))
+memo::clear()
+say("tras clear, cache_size: " + string(memo::cache_size()) + " (0)")
+
+say("FIN test_functools")

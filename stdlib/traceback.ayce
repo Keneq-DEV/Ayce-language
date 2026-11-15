@@ -1,0 +1,18 @@
+## traceback.ayce — volcados de pila EN AYCE (v0.6.0).
+## La pila de llamadas es un estado interno del intérprete: como
+## traceback.py de CPython recorre los frames del runtime, aquí las
+## consultas van al batch privado `_traceback`.
+
+require _traceback as tb
+
+## texto del error activo dentro de un bloque de captura
+task format_exc() = string ;
+{
+    return tb::format_exc()
+}
+
+## pila de llamadas actual como lista de líneas
+task format_stack() = none[] ;
+{
+    return tb::format_stack()
+}

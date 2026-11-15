@@ -1,0 +1,172 @@
+## dataclasses.ayce — registros de datos mutables (stdlib ayce puro)
+require json
+##
+## Template Dataclass: un registro con campos dinámicos, valores por
+## defecto, comparación, copia y exportación a JSON.
+## Nota: para registros INMUTABLES ayce ya tiene `Shape` como constructo
+## del lenguaje; Dataclass es la versión mutable con utilidades.
+##
+## Tareas libres:
+##   define(nombres, valores)      crea un Dataclass con campos
+##   from_dict(d)                  crea un Dataclass desde un dict
+##
+## Métodos de Dataclass:
+##   put(nombre, valor)            asigna un campo (crea si no existe)
+##   get(nombre, default)          lee un campo
+##   has(nombre)                   ¿tiene el campo?
+##   remove(nombre)                elimina el campo
+##   field_names()                 lista de campos en orden
+##   as_dict()                     dict con todos los campos
+##   size()                        cantidad de campos
+##   eq(other)                     igualdad campo a campo
+##   copy_dc()                     copia profunda superficial
+##   to_json()                     serialización JSON (require json)
+##   clear()                       vacía el registro
+
+Template Dataclass {
+    data: none
+    order: string[]
+
+    task build() ;
+    {
+        self::data = <>
+        self::order = []
+    }
+
+    ## asignar un campo (lo crea al final si es nuevo)
+    task put(string nombre, none valor) ;
+    {
+        var d: none = self::data
+        if not d::has(nombre) then
+            self::order::append(nombre)
+        end
+        d<nombre> = valor
+    }
+
+    ## leer un campo (default si no existe)
+    task get(string nombre, none default) = none ;
+    {
+        var d: none = self::data
+        if d::has(nombre) then
+            return d<nombre>
+        end
+        return default
+    }
+
+    task has(string nombre) = bool ;
+    {
+        return self::data::has(nombre)
+    }
+
+    task remove(string nombre) = bool ;
+    {
+        var d: none = self::data
+        if d::has(nombre) then
+            d::remove(nombre)
+            var idx: int = self::order::index(nombre)
+            if idx >= 0 then
+                self::order::delete(idx)
+            end
+            return True
+        end
+        return False
+    }
+
+    task field_names() = string[] ;
+    {
+        return self::order
+    }
+
+    task as_dict() = none ;
+    {
+        var out: none = <>
+        var d: none = self::data
+        for n in self::order do
+            var nombre: string = n
+            out<nombre> = d<nombre>
+        end
+        return out
+    }
+
+    task size() = int ;
+    {
+        return self::order::len()
+    }
+
+    task clear() ;
+    {
+        self::data = <>
+        self::order = []
+    }
+
+    ## igualdad campo a campo (campos y valores)
+    task eq(Dataclass other) = bool ;
+    {
+        if self::size() != other::size() then
+            return False
+        end
+        for n in self::order do
+            var nombre: string = n
+            if not other::has(nombre) then
+                return False
+            end
+            var a: none = self::get(nombre, none)
+            var b: none = other::get(nombre, none)
+            ## comparación por representación textual (funciona con
+            ## números, strings, bools, listas y dicts)
+            if string(a) != string(b) then
+                return False
+            end
+        end
+        return True
+    }
+
+    ## copia superficial (los campos contenedores se comparten)
+    task copy_dc() = Dataclass ;
+    {
+        var out: Dataclass = Dataclass()
+        for n in self::order do
+            var nombre: string = n
+            out::put(nombre, self::get(nombre, none))
+        end
+        return out
+    }
+
+    ## serializar a JSON (usa el batch json nativo)
+    task to_json() = string ;
+    {
+        return json::stringify(self::as_dict())
+    }
+
+    ## fusionar otro registro en este (los valores de other ganan)
+    task update(Dataclass other) ;
+    {
+        for n in other::field_names() do
+            var nombre: string = n
+            self::put(nombre, other::get(nombre, none))
+        end
+    }
+}
+
+## ── crear un Dataclass con campos y valores paralelos ──
+task define(string[] nombres, none[] valores) = Dataclass ;
+{
+    var dc: Dataclass = Dataclass()
+    var i: int = 0
+    while i < nombres::len() && i < valores::len() do
+        dc::put(nombres[i], valores[i])
+        i += 1
+    end
+    return dc
+}
+
+## ── crear desde un dict flexible ──
+task from_dict(<string, none> d) = Dataclass ;
+{
+    var dc: Dataclass = Dataclass()
+    for k in d::keys() do
+        var nombre: string = k
+        dc::put(nombre, d<nombre>)
+    end
+    return dc
+}

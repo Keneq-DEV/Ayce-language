@@ -1,0 +1,147 @@
+## enum.ayce — enumeraciones (stdlib ayce puro)
+##
+## Template Enum: nombres → valores enteros automáticos (0..n-1) o
+## personalizados. Nota: para tipos unión con variantes, ayce ya tiene
+## `Variant` como constructo del lenguaje; Enum sirve para enumeraciones
+## de datos (días, estados, colores con valor numérico).
+##
+## Tareas libres:
+##   make(nombres)            crea un Enum con valores 0..n-1
+##   from_pairs(dict)         crea un Enum con valores personalizados
+##   set_value(enum, nom, v)  cambia el valor de un miembro
+##
+## Métodos de Enum:
+##   value_of(nombre)         valor del miembro (-1 si no existe)
+##   name_of(valor)           nombre del miembro ("" si no existe)
+##   names() / values()       listas de nombres / valores
+##   has_name(n) / has_value(v)
+##   size()                   cantidad de miembros
+##   to_dict()                dict nombre → valor
+##   next_value(nombre)       valor del siguiente miembro (cíclico)
+
+Template Enum {
+    items: none
+    ordered: string[]
+
+    task build() ;
+    {
+        self::items = <>
+        self::ordered = []
+    }
+
+    ## registrar un miembro con valor
+    task _add(string nombre, int valor) ;
+    {
+        var it: none = self::items
+        if not it::has(nombre) then
+            self::ordered::append(nombre)
+        end
+        it<nombre> = valor
+    }
+
+    ## valor del miembro (-1 si no existe)
+    task value_of(string nombre) = int ;
+    {
+        var it: none = self::items
+        if it::has(nombre) then
+            return int(it<nombre>)
+        end
+        return -1
+    }
+
+    ## nombre del miembro con ese valor ("" si no existe)
+    task name_of(int valor) = string ;
+    {
+        for n in self::ordered do
+            var nombre: string = n
+            if self::value_of(nombre) == valor then
+                return nombre
+            end
+        end
+        return ""
+    }
+
+    task names() = string[] ;
+    {
+        return self::ordered
+    }
+
+    task values() = int[] ;
+    {
+        var out: int[] = []
+        for n in self::ordered do
+            out::append(self::value_of(n))
+        end
+        return out
+    }
+
+    task has_name(string nombre) = bool ;
+    {
+        return self::items::has(nombre)
+    }
+
+    task has_value(int valor) = bool ;
+    {
+        return self::name_of(valor) != ""
+    }
+
+    task size() = int ;
+    {
+        return self::ordered::len()
+    }
+
+    task to_dict() = none ;
+    {
+        var out: none = <>
+        var it: none = self::items
+        for n in self::ordered do
+            var nombre: string = n
+            out<nombre> = it<nombre>
+        end
+        return out
+    }
+
+    ## valor del siguiente miembro en el orden (cíclico)
+    task next_value(string nombre) = int ;
+    {
+        var idx: int = self::ordered::index(nombre)
+        if idx < 0 then
+            return -1
+        end
+        var sig: int = (idx + 1) % self::ordered::len()
+        return self::value_of(self::ordered[sig])
+    }
+}
+
+## ── crear un Enum con valores automáticos 0..n-1 ──
+task make(string[] nombres) = Enum ;
+{
+    var e: Enum = Enum()
+    var i: int = 0
+    for n in nombres do
+        var nombre: string = n
+        e::_add(nombre, i)
+        i += 1
+    end
+    return e
+}
+
+## ── crear un Enum con valores personalizados desde un dict ──
+task from_pairs(<string, none> dict_valores) = Enum ;
+{
+    var e: Enum = Enum()
+    for k in dict_valores::keys() do
+        var nombre: string = k
+        e::_add(nombre, int(dict_valores<nombre>))
+    end
+    return e
+}
+
+## ── cambiar el valor de un miembro existente ──
+task set_value(Enum e, string nombre, int valor) ;
+{
+    if not e::has_name(nombre) then
+        raise Error("enum::set_value: miembro inexistente: " + nombre, 26)
+    end
+    e::_add(nombre, valor)
+}

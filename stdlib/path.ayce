@@ -1,0 +1,193 @@
+## path.ayce — manipulación de rutas EN AYCE PURO (v0.6.0).
+## La lógica de rutas es la de posixpath.py de CPython: join, basename,
+## dirname, splitext y normpath son puro tratamiento de cadenas, escrito
+## aquí en ayce. Sólo las comprobaciones que necesitan tocar el disco
+## (exists, isfile, isdir, size, y el cwd para abspath) usan el batch
+## privado `_os` — el mismo reparto que os.path de CPython: lógica en
+## Python puro y syscalls en el módulo C `posix`.
+
+require _os as posix
+require _io as fio
+
+## búsqueda hacia atrás (el lenguaje no trae rfind)
+task _rfind(string s, string sub) = int ;
+{
+    var i: int = s::len() - sub::len()
+    while i >= 0 do
+        if s::slice(i, i + sub::len()) == sub then
+            return i
+        end
+        i -= 1
+    end
+    return -1
+}
+
+## join(rutas...) — une componentes con "/" (el separador de POSIX),
+## ignorando los vacíos y empezando de cero si una componente es absoluta.
+task join(stdlib::Cualquiera a) | (stdlib::Cualquiera a, stdlib::Cualquiera b) | (stdlib::Cualquiera a, stdlib::Cualquiera b, stdlib::Cualquiera arg) | (stdlib::Cualquiera a, stdlib::Cualquiera b, stdlib::Cualquiera arg, stdlib::Cualquiera arg4) = string ;
+{
+    return _join_args([a])
+    |
+    return _join_args([a, b])
+    |
+    return _join_args([a, b, arg])
+    |
+    return _join_args([a, b, arg, arg4])
+}
+
+## une componentes: ignora los None, "/" arranca desde cero
+task _join_args(string[] partes) = string ;
+{
+    if partes::len() == 0 then
+        return ""
+    end
+    var out: string = partes[0]
+    var i: int = 1
+    while i < partes::len() do
+        var p: string = partes[i]
+        if p::starts_with("/") then
+            ## componente absoluta: se descarta lo anterior
+            out = p
+        else if out == "" then
+            out = p
+        else if out::ends_with("/") then
+            out += p
+        else
+            out += "/" + p
+        end
+        i += 1
+    end
+    return out
+}
+
+## basename — lo que va después de la última "/"
+task basename(string ruta) = string ;
+{
+    if ruta == "" then
+        return ""
+    end
+    ## sin recortar barras: basename("/tmp/") == "" igual que posixpath
+    var pos: int = _rfind(ruta, "/")
+    if pos == -1 then
+        return ruta
+    end
+    return ruta::slice(pos + 1, ruta::len())
+}
+
+## dirname — todo lo anterior a la última "/"
+task dirname(string ruta) = string ;
+{
+    var pos: int = _rfind(ruta, "/")
+    if pos == -1 then
+        return ""
+    end
+    if pos == 0 then
+        return "/"
+    end
+    return ruta::slice(0, pos)
+}
+
+## splitext — separa nombre y extensión (".tar.gz" → ext ".gz")
+task splitext(string ruta) = none[] ;
+{
+    var base: string = basename(ruta)
+    var i: int = base::len() - 1
+    var punto: int = -1
+    while i >= 0 do
+        var ch: string = base[i]
+        if ch == "." then
+            punto = i
+            break
+        end
+        ## una "/" corta la búsqueda (la extensión vive en el basename)
+        if ch == "/" then
+            break
+        end
+        i -= 1
+    end
+    ## sin punto, punto inicial (".bashrc") o punto final → ext vacía
+    if punto <= 0 then
+        return [ruta, ""]
+    end
+    var offset: int = ruta::len() - base::len()
+    return [ruta::slice(0, offset + punto), base::slice(punto, base::len())]
+}
+
+## abspath — ruta absoluta: une con el directorio actual y normaliza
+task abspath(string ruta) = string ;
+{
+    var p: string = ruta
+    if !p::starts_with("/") then
+        p = join(posix::cwd(), p)
+    end
+    return normpath(p)
+}
+
+## comprobaciones contra el disco (syscalls del batch privado _os)
+task exists(string ruta) = bool ;
+{
+    return posix::exists(ruta)
+}
+
+task isfile(string ruta) = bool ;
+{
+    return posix::isfile(ruta)
+}
+
+task isdir(string ruta) = bool ;
+{
+    return posix::isdir(ruta)
+}
+
+task size(string ruta) = int ;
+{
+    return fio::file_size(ruta)
+}
+
+## normpath — colapsa "//", "a/./b" y "a/b/../c" sin tocar el disco
+task normpath(string ruta) = string ;
+{
+    if ruta == "" then
+        return "."
+    end
+    var absoluta: bool = ruta::starts_with("/")
+    var barras_dobles: bool = ruta::starts_with("//")
+    var partes: string[] = []
+    var segmentos: none[] = ruta::split("/")
+    var i: int = 0
+    while i < segmentos::len() do
+        var seg: string = segmentos[i]
+        if seg == "" || seg == "." then
+            ## vacíos y "." se descartan
+        else if seg == ".." then
+            if partes::len() > 0 && partes::last() != ".." then
+                partes::delete(partes::len() - 1)
+            else if !absoluta then
+                partes::append("..")
+            end
+            ## en una ruta absoluta, ".." sobre la raíz se descarta
+        else
+            partes::append(seg)
+        end
+        i += 1
+    end
+    var out: string = ""
+    if absoluta then
+        out = "/"
+        if barras_dobles && partes::len() > 0 then
+            out = "//"
+        end
+    end
+    var j: int = 0
+    while j < partes::len() do
+        if j > 0 then
+            out += "/"
+        end
+        out += partes[j]
+        j += 1
+    end
+    if out == "" then
+        return "."
+    end
+    return out
+}

@@ -1,0 +1,76 @@
+## test_functional.ayce — pruebas de functional.ayce
+require functional as F
+
+say("=== functional.ayce ===")
+
+task square(int x) = int => x * x
+task inc(int x) = int => x + 1
+task double(int x) = int => x * 2
+task is_even(int x) = bool => x % 2 == 0
+task is_pos(int x) = bool => x > 0
+task add(int a, int b) = int => a + b
+task mul(int a, int b) = int => a * b
+
+## map
+say("map square [1..5]:", F::map_fn(square, [1, 2, 3, 4, 5]))   ## [1,4,9,16,25]
+say("map inc [1..3]:", F::map_fn(inc, [1, 2, 3]))               ## [2,3,4]
+
+## filter
+say("filter even [1..10]:", F::filter_fn(is_even, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))  ## [2,4,6,8,10]
+
+## reduce
+say("reduce add [1..5] init 0:", F::reduce_fn(add, [1, 2, 3, 4, 5], 0))  ## 15
+say("reduce mul [1..5] init 1:", F::reduce_fn(mul, [1, 2, 3, 4, 5], 1))  ## 120
+
+## any / all
+say("any even in [1,3,5]:", F::any(is_even, [1, 3, 5]))        ## False
+say("any even in [1,2,3]:", F::any(is_even, [1, 2, 3]))        ## True
+say("all pos in [1,2,3]:", F::all(is_pos, [1, 2, 3]))          ## True
+say("all pos in [1,-2,3]:", F::all(is_pos, [1, -2, 3]))        ## False
+say("all pos in []:", F::all(is_pos, []))                      ## True (vacío)
+
+## count_if
+say("count even [1..10]:", F::count_if(is_even, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))  ## 5
+
+## find_first
+task gt5(int x) = bool => x > 5
+say("find_first gt5 [1..10]:", F::find_first(gt5, [1, 2, 3, 4, 5, 6, 7]))  ## 6
+say("find_first gt5 [1..3]:", F::find_first(gt5, [1, 2, 3]))              ## -1
+
+## take / drop
+say("take 3 [1..10]:", F::take(3, [1, 2, 3, 4, 5]))     ## [1,2,3]
+say("take 100 [1..5]:", F::take(100, [1, 2, 3, 4, 5])) ## [1,2,3,4,5]
+say("take 0 [1..5]:", F::take(0, [1, 2, 3, 4, 5]))     ## []
+say("drop 2 [1..5]:", F::drop(2, [1, 2, 3, 4, 5]))      ## [3,4,5]
+say("drop 100 [1..5]:", F::drop(100, [1, 2, 3, 4, 5])) ## []
+
+## zip_sum
+say("zip_sum [1,2,3] [4,5,6]:", F::zip_sum([1, 2, 3], [4, 5, 6]))  ## 1*4+2*5+3*6=32
+
+## range_list
+say("range_list 1 5:", F::range_list(1, 5))   ## [1,2,3,4]
+say("range_list 0 0:", F::range_list(0, 0))   ## []
+
+## reverse_list
+say("reverse [1,2,3]:", F::reverse_list([1, 2, 3]))  ## [3,2,1]
+
+## contains
+say("contains 3 [1,2,3]:", F::contains_value([1, 2, 3], 3))   ## True
+say("contains 99 [1,2,3]:", F::contains_value([1, 2, 3], 99)) ## False
+
+## min/max/sum
+say("min [3,1,4,1,5]:", F::min_of([3, 1, 4, 1, 5]))   ## 1
+say("max [3,1,4,1,5]:", F::max_of([3, 1, 4, 1, 5]))   ## 5
+say("sum [1..10]:", F::sum_of([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))  ## 55
+
+try
+    var bad: int = F::min_of([])
+    say("no debería llegar:", bad)
+rescue(err)
+    say("min vacío:", err::mensaje)
+end
+
+## pipe (composición)
+say("pipe2(2, inc, double):", F::pipe2(2, inc, double))  ## double(inc(2))=double(3)=6
+say("pipe3(1, inc, square, double):", F::pipe3(1, inc, square, double))  ## double(square(2))=double(4)=8
+say("pipe4(0, inc, inc, inc, double):", F::pipe4(0, inc, inc, inc, double))  ## double(3)=6

@@ -1,0 +1,180 @@
+## heapq.ayce — cola de prioridad min-heap (stdlib ayce puro)
+##
+## Implementa un min-heap sobre listas de enteros. Las listas se
+## modifican in-place (igual que heapq de Python).
+##
+## Tareas:
+##   heapify(h)                convierte una lista en heap (in-place)
+##   push(h, x)                inserta x manteniendo el heap
+##   pop(h)                    saca y devuelve el mínimo (error si vacía)
+##   peek(h)                   mínimo sin sacar (error si vacía)
+##   heapreplace(h, x)         saca el mínimo e inserta x en un paso
+##   nlargest(n, xs)           los n mayores, ordenados descendente
+##   nsmallest(n, xs)          los n menores, ordenados ascendente
+##   heapsort(xs)              devuelve xs ordenada (sin mutar xs)
+##   is_heap(h)                True si h es un heap válido
+
+## ── hundir el elemento en la posición i (para pop/heapify) ──
+task _sift_down(int[] h, int i, int n) ;
+{
+    while True do
+        var left: int = 2 * i + 1
+        var right: int = 2 * i + 2
+        var smallest: int = i
+        if left < n then
+            if h[left] < h[smallest] then
+                smallest = left
+            end
+        end
+        if right < n then
+            if h[right] < h[smallest] then
+                smallest = right
+            end
+        end
+        if smallest == i then
+            break
+        end
+        var tmp: int = h[i]
+        h[i] = h[smallest]
+        h[smallest] = tmp
+        i = smallest
+    end
+}
+
+## ── hacer subir el elemento en la posición i (para push) ──
+task _sift_up(int[] h, int i) ;
+{
+    while i > 0 do
+        var parent: int = (i - 1) // 2
+        if h[i] < h[parent] then
+            var tmp: int = h[i]
+            h[i] = h[parent]
+            h[parent] = tmp
+            i = parent
+        else
+            break
+        end
+    end
+}
+
+## Convierte una lista en un min-heap (in-place, O(n))
+task heapify(int[] h) ;
+{
+    var n: int = h::len()
+    var i: int = n // 2 - 1
+    while i >= 0 do
+        _sift_down(h, i, n)
+        i = i - 1
+    end
+}
+
+## Inserta x en el heap (in-place)
+task push(int[] h, int x) ;
+{
+    h::append(x)
+    _sift_up(h, h::len() - 1)
+}
+
+## Saca el mínimo del heap (in-place). Error si está vacía.
+task pop(int[] h) = int ;
+{
+    var n: int = h::len()
+    if n == 0 then
+        raise Error("heapq::pop de heap vacío", 21)
+    end
+    var minimo: int = h[0]
+    ## mover el último elemento a la raíz y hundirlo
+    h[0] = h[n - 1]
+    h::delete(n - 1)
+    if h::len() > 0 then
+        _sift_down(h, 0, h::len())
+    end
+    return minimo
+}
+
+## El mínimo sin sacar. Error si está vacía.
+task peek(int[] h) = int ;
+{
+    if h::len() == 0 then
+        raise Error("heapq::peek de heap vacío", 21)
+    end
+    return h[0]
+}
+
+## Saca el mínimo e inserta x (más eficiente que pop + push). Error si vacía.
+task heapreplace(int[] h, int x) = int ;
+{
+    var n: int = h::len()
+    if n == 0 then
+        raise Error("heapq::heapreplace de heap vacío", 21)
+    end
+    var viejo: int = h[0]
+    h[0] = x
+    _sift_down(h, 0, n)
+    return viejo
+}
+
+## Los n elementos mayores de xs, ordenados descendente
+task nlargest(int n, int[] xs) = int[] ;
+{
+    var copia: int[] = xs::copy()
+    copia::sort()
+    var out: int[] = []
+    var total: int = copia::len()
+    var limit: int = n
+    if limit > total then
+        limit = total
+    end
+    var i: int = total - 1
+    while i >= total - limit do
+        out::append(copia[i])
+        i = i - 1
+    end
+    return out
+}
+
+## Los n elementos menores de xs, ordenados ascendente
+task nsmallest(int n, int[] xs) = int[] ;
+{
+    var copia: int[] = xs::copy()
+    copia::sort()
+    var total: int = copia::len()
+    var limit: int = n
+    if limit > total then
+        limit = total
+    end
+    var out: int[] = []
+    var i: int = 0
+    while i < limit do
+        out::append(copia[i])
+        i = i + 1
+    end
+    return out
+}
+
+## Devuelve xs ordenada ascendente (sin mutar xs)
+task heapsort(int[] xs) = int[] ;
+{
+    var h: int[] = xs::copy()
+    heapify(h)
+    var out: int[] = []
+    while h::len() > 0 do
+        out::append(pop(h))
+    end
+    return out
+}
+
+## ¿La lista cumple la invariante de min-heap?
+task is_heap(int[] h) = bool ;
+{
+    var n: int = h::len()
+    var i: int = 1
+    while i < n do
+        var parent: int = (i - 1) // 2
+        if h[parent] > h[i] then
+            return False
+        end
+        i = i + 1
+    end
+    return True
+}

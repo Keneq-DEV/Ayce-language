@@ -1,0 +1,45 @@
+## test_dataclasses.ayce — pruebas de dataclasses (ayce puro)
+require dataclasses as D
+
+var dc: D::Dataclass = D::define(["nombre", "edad", "activo"], ["Ana", 30, True])
+say("nombre: " + string(dc::get("nombre", "")) + " (Ana)")
+say("edad: " + string(dc::get("edad", 0)) + " (30)")
+say("activo: " + string(dc::get("activo", False)) + " (True)")
+say("inexistente: " + string(dc::get("altura", -1)) + " (-1)")
+say("fields: " + string(dc::field_names()))
+say("size: " + string(dc::size()) + " (3)")
+say("has(edad): " + string(dc::has("edad")) + " (True)")
+
+dc::put("edad", 31)
+say("tras put edad=31: " + string(dc::get("edad", 0)) + " (31)")
+dc::put("ciudad", "Madrid")
+say("nuevo campo: " + string(dc::get("ciudad", "")) + " (Madrid)")
+say("fields ahora: " + string(dc::field_names()))
+dc::remove("activo")
+say("tras remove: " + string(dc::field_names()))
+
+## eq y copy
+var otro: D::Dataclass = D::define(["nombre", "edad", "ciudad"], ["Ana", 31, "Madrid"])
+say("eq: " + string(dc::eq(otro)) + " (True)")
+otro::put("ciudad", "Barcelona")
+say("eq tras cambio: " + string(dc::eq(otro)) + " (False)")
+
+var copia: D::Dataclass = dc::copy_dc()
+copia::put("edad", 99)
+say("copia independiente: " + string(dc::get("edad", 0)) + " (31) / " + string(copia::get("edad", 0)) + " (99)")
+
+## update
+var extra: D::Dataclass = D::define(["ciudad", "zip"], ["Madrid", "28001"])
+dc::update(extra)
+say("tras update: " + string(dc::get("ciudad", "")) + " / " + string(dc::get("zip", "")))
+
+## from_dict + to_json
+var d2: D::Dataclass = D::from_dict(<"x": 1, "y": "dos">)
+say("from_dict x: " + string(d2::get("x", 0)) + " (1)")
+say("to_json: " + d2::to_json())
+
+## clear
+d2::clear()
+say("tras clear: " + string(d2::size()) + " (0)")
+
+say("FIN test_dataclasses")

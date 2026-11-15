@@ -1,0 +1,121 @@
+## sys.ayce — sistema EN AYCE (v0.6.0).
+## Argumentos de línea de comandos, versión del intérprete, streams
+## de salida y error. Los streams y el entorno vienen del batch
+## privado `_sys`; el formateo de los valores (join con espacios,
+## conversión a texto) vive aquí, como sys.stdout.write en CPython.
+
+require _sys as sysm
+
+## argumentos del programa: python script.py a b → ["a", "b"]
+task args() = none[] ;
+{
+    return sysm::args()
+}
+
+## termina el proceso con un código de salida (0 = éxito)
+task exit(int codigo = 0) ;
+{
+    sysm::exit(codigo)
+}
+
+## versión del intérprete ayce
+task version() = string ;
+{
+    return sysm::version()
+}
+
+## versión del Python en que corre el intérprete de referencia
+task python_version() = string ;
+{
+    return sysm::python_version()
+}
+
+task platform() = string ;
+{
+    return sysm::platform()
+}
+
+## stdout: imprime valores separados por espacio SIN salto final
+task stdout(stdlib::Cualquiera texto) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3, stdlib::Cualquiera arg4) ;
+{
+    return _escribir([texto])
+    |
+    return _escribir([texto, arg])
+    |
+    return _escribir([texto, arg, arg3])
+    |
+    return _escribir([texto, arg, arg3, arg4])
+}
+
+## stderr: igual que stdout pero al flujo de error, CON salto final
+task stderr(stdlib::Cualquiera texto) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3, stdlib::Cualquiera arg4) ;
+{
+    return _error([texto])
+    |
+    return _error([texto, arg])
+    |
+    return _error([texto, arg, arg3])
+    |
+    return _error([texto, arg, arg3, arg4])
+}
+
+## stderr sin salto final (para construcciones a mano)
+task stderr_raw(stdlib::Cualquiera texto) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3) | (stdlib::Cualquiera texto, stdlib::Cualquiera arg, stdlib::Cualquiera arg3, stdlib::Cualquiera arg4) ;
+{
+    return _error_crudo([texto])
+    |
+    return _error_crudo([texto, arg])
+    |
+    return _error_crudo([texto, arg, arg3])
+    |
+    return _error_crudo([texto, arg, arg3, arg4])
+}
+
+task _escribir(none[] valores) ;
+{
+    sysm::stdout(_juntar(valores))
+}
+
+task _error(none[] valores) ;
+{
+    sysm::stderr(_juntar(valores))
+}
+
+task _error_crudo(none[] valores) ;
+{
+    sysm::stderr_raw(_juntar(valores))
+}
+
+## join con espacios y conversión de valores no-string
+task _juntar(none[] valores) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < valores::len() do
+        if i > 0 then
+            out += " "
+        end
+        if !is_str(valores[i]) then
+            out += string(valores[i])
+        else
+            out += valores[i]
+        end
+        i += 1
+    end
+    return out
+}
+
+## lee una línea del teclado (sin el \n final)
+task stdin_line() = string ;
+{
+    return sysm::stdin_line()
+}
+
+task is_str(string x) = bool ;
+{
+    return True
+}
+task is_str(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}

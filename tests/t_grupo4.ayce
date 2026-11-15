@@ -1,0 +1,74 @@
+## t_grupo4.ayce — http, socket, ssl, sqlite3, subprocess, threading, multiprocessing, signal
+require http as H
+require socket as SK
+require ssl as SL
+require sqlite3 as DB
+require subprocess as SP
+require threading as TH
+require multiprocessing as MP
+require signal as SG
+
+## ── subprocess ──
+var r: none<> = SP::run("echo hola_proceso")
+say("run code:", r<"returncode">)                 ## 0
+say("run stdout:", r<"stdout">::trim())           ## hola_proceso
+var rl: none[] = ["echo", "hola_lista"]
+var r2: none<> = SP::run(rl)
+say("run lista:", r2<"returncode">, r2<"stdout">::trim())   ## 0 hola_lista
+say("output:", SP::output("echo salida_directa")::trim())   ## salida_directa
+var rf: none<> = SP::run("false")
+say("run false:", rf<"returncode"> != 0)          ## true
+
+## ── threading / multiprocessing ──
+say("threading actual:", TH::current_thread() == "MainThread")
+say("threading activos:", TH::active_count() >= 1)
+say("threading enum:", TH::enumerate()::len() >= 1)
+say("mp cpu:", MP::cpu_count() >= 1)
+say("mp pid:", MP::current_pid() > 0)
+say("mp parent:", MP::parent_pid() > 0)
+say("mp children:", MP::active_children()::len())   ## 0
+say("mp info:", MP::info()::keys()::len() >= 3)
+
+## ── signal ──
+say("signal pid:", SG::pid() == MP::current_pid())
+say("signal name 2:", SG::name(SG::SIGINT))          ## SIGINT
+say("signal name 9:", SG::name(SG::SIGKILL))         ## SIGKILL
+say("signal name 15:", SG::name(SG::SIGTERM))        ## SIGTERM
+say("signal valor:", SG::SIGTERM)                     ## 15
+
+## ── sqlite3 ──
+var conn: none = DB::connect("/tmp/ayce_test.db")
+DB::execute(conn, "CREATE TABLE IF NOT EXISTS gente (id INTEGER PRIMARY KEY, nombre TEXT, edad INT)")
+DB::execute(conn, "DELETE FROM gente")
+DB::execute(conn, "INSERT INTO gente (nombre, edad) VALUES (?, ?)", ["Ana", 30])
+DB::execute(conn, "INSERT INTO gente (nombre, edad) VALUES (?, ?)", ["Beto", 25])
+var sel: none = DB::execute(conn, "SELECT nombre, edad FROM gente ORDER BY edad")
+say("db filas:", sel::len())                       ## 2
+say("db primera:", sel[0][0], sel[0][1])           ## Beto 25
+DB::close(conn)
+
+## ── socket/ssl/http: probar contra un servidor local ──
+## (no hay red externa garantizada; el socket nativo se prueba con
+##  el propio intérprete vía TCP si el batch lo permite)
+say("ssl const:", SL::PROTOCOL_TLS_CLIENT)         ## 16
+## curl local no aplica: probamos http::status_ok con dicts inventados
+var resp_ok: none<> = <"status": 200, "body": "x">
+var resp_404: none<> = <"status": 404, "body": "x">
+say("http 2xx:", H::status_ok(resp_ok))            ## true
+say("http 404:", H::status_ok(resp_404) == False)  ## true
+say("http sin status:", H::status_ok(<"body": "x">) == False)  ## true
+## HTTP real contra example.com (si hay red)
+var web: none<> = H::get("http://example.com/")
+say("http red status:", web<"status">)             ## 200 si hay red
+say("http red body:", web<"body">::contains("example"))
+## socket TCP real
+var s: none = SK::tcp_connect("example.com", 80)
+SK::send_line(s, "GET / HTTP/1.0")
+SK::send_line(s, "Host: example.com")
+SK::send_line(s, "")
+var primer_bloque: string = SK::recv(s)
+say("socket HTTP:", primer_bloque::contains("200") || primer_bloque::contains("301"))
+var par: none<> = SK::peer_addr(s)
+say("socket peer:", par::keys()::len() >= 1)
+SK::close(s)
+say("OK grupo4")

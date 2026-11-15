@@ -1,0 +1,37 @@
+## test_heapq.ayce — pruebas de heapq (ayce puro)
+require heapq as H
+
+var h: int[] = [5, 3, 1, 4, 2]
+H::heapify(h)
+say("heapify: " + string(h) + " (es heap: " + string(H::is_heap(h)) + ")")
+say("peek: " + string(H::peek(h)) + " (1)")
+say("pop: " + string(H::pop(h)) + " (1)")
+say("pop: " + string(H::pop(h)) + " (2)")
+H::push(h, 0)
+say("tras push(0), peek: " + string(H::peek(h)) + " (0)")
+var reemplazado: int = H::heapreplace(h, 10)
+say("heapreplace: sacó " + string(reemplazado) + " (0), peek ahora " + string(H::peek(h)) + " (3)")
+
+say("nlargest(3): " + string(H::nlargest(3, [7, 1, 9, 3, 5])) + " ([9, 7, 5])")
+say("nsmallest(2): " + string(H::nsmallest(2, [7, 1, 9, 3, 5])) + " ([1, 3])")
+say("heapsort: " + string(H::heapsort([4, 2, 8, 1])) + " ([1, 2, 4, 8])")
+say("is_heap([1,3,2]): " + string(H::is_heap([1, 3, 2])) + " (True)")
+say("is_heap([3,1,2]): " + string(H::is_heap([3, 1, 2])) + " (False)")
+
+## heap usada como cola de prioridad
+var pq: int[] = []
+H::push(pq, 30)
+H::push(pq, 10)
+H::push(pq, 20)
+say("pq orden: " + string(H::pop(pq)) + " " + string(H::pop(pq)) + " " + string(H::pop(pq)) + " (10 20 30)")
+
+## error en heap vacía
+try
+    var vacia: int[] = []
+    H::pop(vacia)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_heapq")

@@ -1,0 +1,106 @@
+## hmac.ayce — HMAC (RFC 2104) EN AYCE PURO (v0.6.0).
+## El algoritmo HMAC corre aquí (bloques ipad/opad, hash doble) y se apoya
+## en hashlib.ayce — que también es ayce puro — igual que hmac.py en
+## CPython es Python puro sobre hashlib.
+## digest(key, msg) usa SHA-256 por defecto; el tercer argumento opcional
+## elige el algoritmo: "md5", "sha1", "sha224", "sha256", "sha384", "sha512".
+
+require hashlib as h
+
+task digest(stdlib::Cualquiera key, stdlib::Cualquiera msg) | (stdlib::Cualquiera key, stdlib::Cualquiera msg, stdlib::Cualquiera algoritmo) = string ;
+{
+    return _hmac_hex(key, msg, "sha256")
+    |
+    return _hmac_hex(key, msg, algoritmo)
+}
+
+task compare(stdlib::Cualquiera a, stdlib::Cualquiera b) = bool ;
+{
+    ## comparación en tiempo constante sobre los bytes (como hmac.compare_digest)
+    var la: list = h::_to_bytes_list(a)
+    var lb: list = h::_to_bytes_list(b)
+    if la::len() != lb::len() then
+        return False
+    end
+    var dif: int = 0
+    var i: int = 0
+    while i < la::len() do
+        dif = dif | (la[i] ^ lb[i])
+        i += 1
+    end
+    return dif == 0
+}
+
+task _hash_bytes(string nombre, list msg) = list ;
+{
+    ## hash del algoritmo indicado, en bytes (lista de ints)
+    var data: bytes = bytes_from_ints(msg)
+    if nombre == "md5" then
+        return h::_md5_bytes(data)
+    end
+    if nombre == "sha1" then
+        return h::_sha1_bytes(data)
+    end
+    if nombre == "sha224" then
+        return h::_sha224_bytes(data)
+    end
+    if nombre == "sha256" then
+        return h::_sha256_bytes(data)
+    end
+    if nombre == "sha384" then
+        return h::_sha384_bytes(data)
+    end
+    if nombre == "sha512" then
+        return h::_sha512_bytes(data)
+    end
+    raise Error("hmac: algoritmo desconocido '" + nombre + "'", 1)
+}
+
+task _block_size(string nombre) = int ;
+{
+    ## tamaño de bloque de la función hash (bytes)
+    if nombre == "sha384" then
+        return 128
+    end
+    if nombre == "sha512" then
+        return 128
+    end
+    return 64
+}
+
+task _hmac_hex(stdlib::Cualquiera key, stdlib::Cualquiera msg, string nombre) = string ;
+{
+    ## HMAC estándar: K' ajustada al bloque; hash(opad | hash(ipad | msg))
+    var kb: list = h::_to_bytes_list(key)
+    var mb: list = h::_to_bytes_list(msg)
+    var blk: int = _block_size(nombre)
+    if kb::len() > blk then
+        kb = _hash_bytes(nombre, kb)
+    end
+    while kb::len() < blk do
+        kb::append(0)
+    end
+    var ipad: list = []
+    var opad: list = []
+    var i: int = 0
+    while i < blk do
+        ipad::append(kb[i] ^ 0x36)
+        opad::append(kb[i] ^ 0x5C)
+        i += 1
+    end
+    var inner: list = ipad
+    i = 0
+    while i < mb::len() do
+        inner::append(mb[i])
+        i += 1
+    end
+    var ih: list = _hash_bytes(nombre, inner)
+    var outer: list = opad
+    i = 0
+    while i < ih::len() do
+        outer::append(ih[i])
+        i += 1
+    end
+    var oh: list = _hash_bytes(nombre, outer)
+    return h::_bytes_to_hex(oh)
+}

@@ -1,0 +1,318 @@
+## urllib.ayce — URLs EN AYCE PURO (v0.6.0) + petición HTTP por red.
+## Igual que urllib.parse de CPython — que es Python puro — todas las
+## operaciones de URL corren aquí escritas en ayce:
+##   - quote/unquote: codificación porcentual con bytes UTF-8
+##   - parse: desarmado de scheme://netloc/path?query#fragment
+##   - urlencode / parse_qs: parejas clave-valor de formularios
+##   - join: resolución de rutas relativas sobre una URL base
+## La única llamada a la máquina es urlopen(), que abre la conexión
+## con el batch privado `_urllib` (el http.client de CPython).
+
+require _urllib as red
+
+## ── quote: codificación porcentual ──
+## caracteres sin codificar: A-Za-z0-9 _ . - ~ (y "/" por defecto)
+task quote(string s) = string ;
+{
+    var no_seguros: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~/"
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        var ch: string = s[i]
+        if no_seguros::contains(ch) then
+            out += ch
+        else
+            ## codificar cada byte del carácter en UTF-8 como %XX
+            var bytes_ch: none[] = _utf8_bytes(ch)
+            var k: int = 0
+            while k < bytes_ch::len() do
+                out += "%" + _hex2(bytes_ch[k])
+                k += 1
+            end
+        end
+        i += 1
+    end
+    return out
+}
+
+## bytes UTF-8 de un carácter (algoritmo estándar, como codecs)
+task _utf8_bytes(string ch) = none[] ;
+{
+    var cp: int = ord(ch)
+    var out: none[] = []
+    if cp < 0x80 then
+        out::append(cp)
+    else if cp < 0x800 then
+        out::append(0xC0 | (cp >> 6))
+        out::append(0x80 | (cp & 0x3F))
+    else if cp < 0x10000 then
+        out::append(0xE0 | (cp >> 12))
+        out::append(0x80 | ((cp >> 6) & 0x3F))
+        out::append(0x80 | (cp & 0x3F))
+    else
+        out::append(0xF0 | (cp >> 18))
+        out::append(0x80 | ((cp >> 12) & 0x3F))
+        out::append(0x80 | ((cp >> 6) & 0x3F))
+        out::append(0x80 | (cp & 0x3F))
+    end
+    return out
+}
+
+task _hex2(int v) = string ;
+{
+    var digitos: string = "0123456789ABCDEF"
+    return string(digitos[(v >> 4) & 0xF]) + string(digitos[v & 0xF])
+}
+
+task _valor_hex(string ch) = int ;
+{
+    var digitos: string = "0123456789abcdef"
+    var pos: int = digitos::find(ch::lower())
+    if pos == -1 then
+        return 0
+    end
+    return pos
+}
+
+## ── unquote: decodificación porcentual con UTF-8 ──
+task unquote(string s) = string ;
+{
+    ## 1) convertir los %XX y caracteres sueltos a lista de bytes
+    var bs: none[] = []
+    var i: int = 0
+    var n: int = s::len()
+    while i < n do
+        var ch: string = s[i]
+        if ch == "%" && i + 2 < n then
+            bs::append(_valor_hex(s[i + 1]) * 16 + _valor_hex(s[i + 2]))
+            i += 3
+        else
+            bs::append(ord(ch))
+            i += 1
+        end
+    end
+    ## 2) decodificar la secuencia completa como UTF-8
+    var out: string = ""
+    var k: int = 0
+    var m: int = bs::len()
+    while k < m do
+        var b: int = bs[k]
+        var cp: int = 0
+        var necesita: int = 0
+        if b < 0x80 then
+            cp = b
+        else if (b & 0xE0) == 0xC0 then
+            cp = b & 0x1F
+            necesita = 1
+        else if (b & 0xF0) == 0xE0 then
+            cp = b & 0x0F
+            necesita = 2
+        else if (b & 0xF8) == 0xF0 then
+            cp = b & 0x07
+            necesita = 3
+        else
+            ## byte de continuación suelto: U+FFFD
+            out += chr(0xFFFD)
+            k += 1
+            continue
+        end
+        var valido: bool = True
+        var j: int = 0
+        while j < necesita do
+            if k + 1 + j < m && (bs[k + 1 + j] & 0xC0) == 0x80 then
+                cp = (cp << 6) | (bs[k + 1 + j] & 0x3F)
+                j += 1
+            else
+                valido = False
+                break
+            end
+        end
+        if valido then
+            out += chr(cp)
+            k += 1 + necesita
+        else
+            out += chr(0xFFFD)
+            k += 1
+        end
+    end
+    return out
+}
+
+## ── parse: desarmado de URL ──
+task parse(string url) = none<> ;
+{
+    var out: none<> = <>
+    var resto: string = url
+    ## fragmento (#)
+    var frag: string = ""
+    var p: int = resto::find("#")
+    if p != -1 then
+        frag = resto::slice(p + 1, resto::len())
+        resto = resto::slice(0, p)
+    end
+    ## query (?)
+    var query: string = ""
+    p = resto::find("?")
+    if p != -1 then
+        query = resto::slice(p + 1, resto::len())
+        resto = resto::slice(0, p)
+    end
+    ## scheme (://)
+    var scheme: string = ""
+    var netloc: string = ""
+    p = resto::find("://")
+    if p != -1 then
+        scheme = resto::slice(0, p)
+        resto = resto::slice(p + 3, resto::len())
+        ## netloc: hasta la primera /
+        p = resto::find("/")
+        if p != -1 then
+            netloc = resto::slice(0, p)
+            resto = resto::slice(p, resto::len())
+        else
+            netloc = resto
+            resto = ""
+        end
+    end
+    out<"scheme"> = scheme
+    out<"netloc"> = netloc
+    out<"path"> = resto
+    out<"params"> = ""
+    out<"query"> = query
+    out<"fragment"> = frag
+    return out
+}
+
+## ── urlencode: dict → "a=1&b=2" (con espacios como +, como CPython) ──
+task urlencode(none<> valores) = string ;
+{
+    var claves: none[] = valores::keys()
+    var out: string = ""
+    var i: int = 0
+    while i < claves::len() do
+        var k: none = claves[i]
+        if i > 0 then
+            out += "&"
+        end
+        out += _quote_plus(string(k)) + "=" + _quote_plus(string(valores<k>))
+        i += 1
+    end
+    return out
+}
+
+## quote_plus: igual a quote pero el espacio va como +
+task _quote_plus(string s) = string ;
+{
+    var q: string = quote(s)
+    return q::replace("%20", "+")
+}
+
+## ── parse_qs: "a=1&b=2&b=3" → dict de listas ──
+task parse_qs(string query) = none<> ;
+{
+    var out: none<> = <>
+    if query == "" then
+        return out
+    end
+    var parejas: none[] = query::split("&")
+    var i: int = 0
+    while i < parejas::len() do
+        var pareja: string = parejas[i]
+        if pareja != "" then
+            var eq: int = pareja::find("=")
+            var clave: string = pareja
+            var valor: string = ""
+            if eq != -1 then
+                clave = pareja::slice(0, eq)
+                valor = pareja::slice(eq + 1, pareja::len())
+            end
+            var clave_real: string = unquote(clave::replace("+", " "))
+            var valor_real: string = unquote(valor::replace("+", " "))
+            if out::has(clave_real) then
+                out<clave_real>::append(valor_real)
+            else
+                out<clave_real> = [valor_real]
+            end
+        end
+        i += 1
+    end
+    return out
+}
+
+## ── join: URL base + ruta relativa ──
+task join(string base, string ruta) = string ;
+{
+    if ruta::contains("://") then
+        return ruta
+    end
+    var p: none<> = parse(base)
+    var scheme: string = p<"scheme">
+    var netloc: string = p<"netloc">
+    var camino: string = p<"path">
+    if ruta::starts_with("/") then
+        return scheme + "://" + netloc + ruta
+    end
+    ## quitar el archivo de la base y pegar la ruta relativa
+    var dir: string = camino
+    var slash: int = _rfind(dir, "/")
+    if slash != -1 then
+        dir = dir::slice(0, slash + 1)
+    else
+        dir = "/"
+    end
+    ## resolver "./" y "../" en la ruta
+    var partes: none[] = (dir + ruta)::split("/")
+    var pila: string[] = []
+    var i: int = 0
+    while i < partes::len() do
+        var seg: string = partes[i]
+        if seg == "." || seg == "" then
+        else if seg == ".." then
+            if pila::len() > 0 then
+                pila::delete(pila::len() - 1)
+            end
+        else
+            pila::append(seg)
+        end
+        i += 1
+    end
+    var nuevo_camino: string = ""
+    var j: int = 0
+    while j < pila::len() do
+        nuevo_camino += "/" + pila[j]
+        j += 1
+    end
+    if nuevo_camino == "" then
+        nuevo_camino = "/"
+    end
+    return scheme + "://" + netloc + nuevo_camino
+}
+
+## ── urlopen: GET HTTP/HTTPS (usa la red nativa) ──
+task urlopen(string url) | (string url, none<> headers) = none<> ;
+{
+    return red::urlopen(url)
+    |
+    return red::urlopen(url, headers)
+}
+
+task _rfind(string s, string sub) = int ;
+{
+    var i: int = s::len() - sub::len()
+    while i >= 0 do
+        if s::slice(i, i + sub::len()) == sub then
+            return i
+        end
+        i -= 1
+    end
+    return -1
+}
+
+task is_str(string x) = bool ;
+{
+    return True
+}
+task is_str(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}

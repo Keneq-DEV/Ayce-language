@@ -1,0 +1,219 @@
+## sorting.ayce — algoritmos de ordenamiento y búsqueda (stdlib ayce puro)
+##
+## Todas las tareas operan sobre int[] y devuelven una NUEVA lista ordenada
+## (no mutan la entrada). Para ordenar in-place usá list::sort().
+##
+## Tareas:
+##   bubble_sort(int[] xs)     = int[]   O(n^2), estable
+##   insertion_sort(int[] xs)  = int[]   O(n^2), estable, bueno en casi-ordenados
+##   selection_sort(int[] xs) = int[]   O(n^2), no estable
+##   quicksort(int[] xs)       = int[]   O(n log n) promedio, no estable
+##   merge_sort(int[] xs)      = int[]   O(n log n), estable
+##   binary_search(int[] xs, int target) = int   índice o -1
+##   is_sorted(int[] xs)        = bool
+
+## — Util: copiar una lista (shallow) —
+task _copy(int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < xs::len() do
+        out::append(xs[i])
+        i = i + 1
+    end
+    return out
+}
+
+## — Util: concatenar dos listas —
+task _concat(int[] a, int[] b) = int[] ;
+{
+    var out: int[] = _copy(a)
+    out::extend(b)
+    return out
+}
+
+## — Bubble sort —
+task bubble_sort(int[] xs) = int[] ;
+{
+    var a: int[] = _copy(xs)
+    var n: int = a::len()
+    if n <= 1 then
+        return a
+    end
+    var i: int = 0
+    while i < n - 1 do
+        var j: int = 0
+        while j < n - 1 - i do
+            if a[j] > a[j + 1] then
+                var t: int = a[j]
+                a[j] = a[j + 1]
+                a[j + 1] = t
+            end
+            j = j + 1
+        end
+        i = i + 1
+    end
+    return a
+}
+
+## — Insertion sort —
+task insertion_sort(int[] xs) = int[] ;
+{
+    var a: int[] = _copy(xs)
+    var n: int = a::len()
+    var i: int = 1
+    while i < n do
+        var key: int = a[i]
+        var j: int = i - 1
+        while j >= 0 && a[j] > key do
+            a[j + 1] = a[j]
+            j = j - 1
+        end
+        a[j + 1] = key
+        i = i + 1
+    end
+    return a
+}
+
+## — Selection sort —
+task selection_sort(int[] xs) = int[] ;
+{
+    var a: int[] = _copy(xs)
+    var n: int = a::len()
+    var i: int = 0
+    while i < n - 1 do
+        var mn: int = i
+        var j: int = i + 1
+        while j < n do
+            if a[j] < a[mn] then
+                mn = j
+            end
+            j = j + 1
+        end
+        if mn != i then
+            var t: int = a[i]
+            a[i] = a[mn]
+            a[mn] = t
+        end
+        i = i + 1
+    end
+    return a
+}
+
+## — Quicksort (copia + partición con último elemento como pivote) —
+task quicksort(int[] xs) = int[] ;
+{
+    var a: int[] = _copy(xs)
+    _quicksort_range(a, 0, a::len() - 1)
+    return a
+}
+
+task _quicksort_range(int[] a, int lo, int hi) ;
+{
+    if lo >= hi then
+        return
+    end
+    var p: int = _partition(a, lo, hi)
+    _quicksort_range(a, lo, p - 1)
+    _quicksort_range(a, p + 1, hi)
+}
+
+task _partition(int[] a, int lo, int hi) = int ;
+{
+    var pivot: int = a[hi]
+    var i: int = lo - 1
+    var j: int = lo
+    while j < hi do
+        if a[j] <= pivot then
+            i = i + 1
+            var t: int = a[i]
+            a[i] = a[j]
+            a[j] = t
+        end
+        j = j + 1
+    end
+    var t2: int = a[i + 1]
+    a[i + 1] = a[hi]
+    a[hi] = t2
+    return i + 1
+}
+
+## — Merge sort (estable, top-down recursivo) —
+task merge_sort(int[] xs) = int[] ;
+{
+    return _merge_sort_rec(xs, 0, xs::len())
+}
+
+task _merge_sort_rec(int[] xs, int lo, int hi) = int[] ;
+{
+    var n: int = hi - lo
+    if n <= 1 then
+        var single: int[] = []
+        if n == 1 then
+            single::append(xs[lo])
+        end
+        return single
+    end
+    var mid: int = lo + n // 2
+    var left: int[] = _merge_sort_rec(xs, lo, mid)
+    var right: int[] = _merge_sort_rec(xs, mid, hi)
+    return _merge(left, right)
+}
+
+task _merge(int[] a, int[] b) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    var j: int = 0
+    while i < a::len() && j < b::len() do
+        if a[i] <= b[j] then
+            out::append(a[i])
+            i = i + 1
+        else
+            out::append(b[j])
+            j = j + 1
+        end
+    end
+    while i < a::len() do
+        out::append(a[i])
+        i = i + 1
+    end
+    while j < b::len() do
+        out::append(b[j])
+        j = j + 1
+    end
+    return out
+}
+
+## — Búsqueda binaria. Devuelve índice o -1. Asume xs ordenado. —
+task binary_search(int[] xs, int target) = int ;
+{
+    var lo: int = 0
+    var hi: int = xs::len() - 1
+    while lo <= hi do
+        var mid: int = lo + (hi - lo) // 2
+        if xs[mid] == target then
+            return mid
+        end
+        if xs[mid] < target then
+            lo = mid + 1
+        else
+            hi = mid - 1
+        end
+    end
+    return -1
+}
+
+## — ¿Está ordenado ascendentemente? —
+task is_sorted(int[] xs) = bool ;
+{
+    var n: int = xs::len()
+    var i: int = 1
+    while i < n do
+        if xs[i] < xs[i - 1] then
+            return False
+        end
+        i = i + 1
+    end
+    return True
+}

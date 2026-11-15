@@ -1,0 +1,31 @@
+## locale.ayce — configuración regional EN AYCE (v0.6.0).
+## El locale lo administra la biblioteca C del sistema: como
+## locale.py de CPython envuelve a la librería C, las consultas van
+## al batch privado `_locale`. Las constantes LC_* son las de POSIX.
+
+require _locale as lc
+
+## categorías de locale (valores de glibc/POSIX)
+const LC_ALL: int = 6
+const LC_TIME: int = 2
+const LC_NUMERIC: int = 1
+
+## locale actual como par (lenguaje, codificación)
+task getlocale() = none[] ;
+{
+    return lc::getlocale()
+}
+
+## codificación preferida del sistema ("UTF-8", ...)
+task getpreferredencoding() = string ;
+{
+    return lc::getpreferredencoding()
+}
+
+## cambia el locale (categoría y nombre; "" = del entorno)
+task setlocale(stdlib::Cualquiera arg) | (stdlib::Cualquiera arg, stdlib::Cualquiera arg2) ;
+{
+    return lc::setlocale(arg)
+    |
+    return lc::setlocale(arg, arg2)
+}

@@ -1,0 +1,44 @@
+## subprocess.ayce — ejecución de procesos externos EN AYCE (v0.6.0).
+## Lanzar un proceso es una llamada del sistema operativo: como
+## subprocess.py de CPython usa el módulo C `posix`, aquí el spawn
+## viene del batch privado `_subprocess` y el módulo normaliza el
+## resultado (código de salida, stdout, stderr).
+
+require _subprocess as sp
+
+## ejecuta un comando (string con sh o lista de argv) y devuelve
+## dict {returncode, stdout, stderr}, como subprocess.run
+task run(string comando) | (none[] comando) = none<> ;
+{
+    return sp::run(comando)
+    |
+    return _argv_a_run(comando)
+}
+
+## la lista de argv se pasa como cadena al batch nativo
+task _argv_a_run(none[] comando) = none<> ;
+{
+    var partes: string[] = []
+    var i: int = 0
+    while i < comando::len() do
+        partes::append(string(comando[i]))
+        i += 1
+    end
+    return sp::run(partes)
+}
+
+## ejecuta y devuelve sólo la salida estándar (como check_output)
+task output(string comando) | (none[] comando) = string ;
+{
+    return _sacar_salida(sp::run(comando))
+    |
+    return _sacar_salida(_argv_a_run(comando))
+}
+
+task _sacar_salida(none<> resultado) = string ;
+{
+    if resultado::has("stdout") then
+        return resultado<"stdout">
+    end
+    return ""
+}

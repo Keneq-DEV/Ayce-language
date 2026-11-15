@@ -1,0 +1,34 @@
+## test_difflib.ayce — pruebas de difflib (ayce puro)
+require difflib as D
+
+say("ratio(hola, hola): " + string(D::ratio("hola", "hola")) + " (1.0)")
+say("ratio(hola, hola2): " + string(D::ratio("hola", "hola2")))
+say("ratio(abc, xyz): " + string(D::ratio("abc", "xyz")) + " (0.0)")
+say("levenshtein(kitten, sitting): " + string(D::levenshtein("kitten", "sitting")) + " (3)")
+say("levenshtein(flan, flan): " + string(D::levenshtein("flan", "flan")) + " (0)")
+say("similarity(hola, bola): " + string(D::similarity("hola", "bola")))
+say("is_fuzzy(hola, hola2, 0.6): " + string(D::is_fuzzy("hola", "hola2", 0.6)) + " (True)")
+say("is_fuzzy(abc, xyz, 0.5): " + string(D::is_fuzzy("abc", "xyz", 0.5)) + " (False)")
+
+var palabras: string[] = ["set", "sat", "mat", "cat", "map"]
+say("get_close_matches(cat): " + string(D::get_close_matches("cat", palabras, 2, 0.5)))
+say("get_close_matches(mset): " + string(D::get_close_matches("mset", palabras, 3, 0.5)))
+
+## diff de líneas
+var viejo: string[] = ["linea 1", "linea 2", "linea 3"]
+var nuevo: string[] = ["linea 1", "linea 2 cambiada", "linea 3", "linea 4"]
+var diff: string[] = D::unified_diff(viejo, nuevo, 3)
+for ln in diff do
+    say("|" + ln + "|")
+end
+
+## diff idéntico
+var d2: string[] = D::unified_diff(viejo, viejo, 3)
+say("diff idéntico (3 líneas iguales): " + string(d2::len()) + " (3)")
+
+## levenshtein_lines
+var l1: string[] = ["a", "b", "c"]
+var l2: string[] = ["a", "x", "c"]
+say("lev_lines: " + string(D::levenshtein_lines(l1, l2)) + " (1)")
+
+say("FIN test_difflib")

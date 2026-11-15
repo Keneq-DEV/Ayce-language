@@ -1,0 +1,239 @@
+## struct.ayce — empaquetado de datos binarios EN AYCE PURO (v0.6.0).
+## Formatos soportados (subconjunto compatible con struct de CPython):
+##   '<' little-endian (por defecto), '>' big-endian, '=' little-endian
+##   b/B (1 byte con/sin signo), h/H (2), i/I (4), q/Q (8), con contador
+##   de repeticiones (p.ej. "3i"), y 'x' (relleno de N bytes).
+## Sin primitivas: sólo builtins del lenguaje.
+
+task _code_info(string code) = list ;
+{
+    ## [bytes, con_signo(1/0)] o [] si el código no es válido
+    if code == "b" then
+        return [1, 1]
+    end
+    if code == "B" then
+        return [1, 0]
+    end
+    if code == "h" then
+        return [2, 1]
+    end
+    if code == "H" then
+        return [2, 0]
+    end
+    if code == "i" then
+        return [4, 1]
+    end
+    if code == "I" then
+        return [4, 0]
+    end
+    if code == "q" then
+        return [8, 1]
+    end
+    if code == "Q" then
+        return [8, 0]
+    end
+    return []
+}
+
+task _skip_endian(string fmt) = int ;
+{
+    ## devuelve la posición inicial tras el prefijo de endianess
+    if fmt::len() > 0 then
+        if fmt[0] == ">" then
+            return 1
+        end
+        if fmt[0] == "<" then
+            return 1
+        end
+        if fmt[0] == "=" then
+            return 1
+        end
+    end
+    return 0
+}
+
+task _is_big(string fmt) = int ;
+{
+    if fmt::len() > 0 then
+        if fmt[0] == ">" then
+            return 1
+        end
+    end
+    return 0
+}
+
+task _parse_count(string fmt, int i) = list ;
+{
+    ## lee el contador decimal en la posición i → [cuenta, nueva_pos]
+    var cuenta: int = 0
+    while i < fmt::len() do
+        var ch: string = fmt[i]
+        if ch >= "0" && ch <= "9" then
+            cuenta = cuenta * 10 + (ord(ch) - 48)
+            i += 1
+        else
+            break
+        end
+    end
+    return [cuenta, i]
+}
+
+task _limits(string code, int nb, int con_signo) = list ;
+{
+    ## [min, max] permitidos para el código
+    if con_signo == 1 then
+        return [-(1 << (nb * 8 - 1)), (1 << (nb * 8 - 1)) - 1]
+    end
+    return [0, (1 << (nb * 8)) - 1]
+}
+
+task pack(string fmt, int valor) | (string fmt, none[] valores) = bytes ;
+{
+    ## modo 1: el mismo entero para todas las unidades del formato
+    return _pack_core(fmt, [valor], 1)
+    |
+    ## modo 0: se consume un valor por unidad
+    return _pack_core(fmt, valores, 0)
+}
+
+task _pack_core(string fmt, list vals, int modo) = bytes ;
+{
+    var endian_big: int = _is_big(fmt)
+    var i: int = _skip_endian(fmt)
+    var n: int = fmt::len()
+    var out: list = []
+    var vi: int = 0
+    while i < n do
+        var pc: list = _parse_count(fmt, i)
+        var cuenta: int = pc[0]
+        i = pc[1]
+        if cuenta == 0 then
+            cuenta = 1
+        end
+        if i >= n then
+            raise Error("struct::pack: formato incompleto tras el contador", 1)
+        end
+        var code: string = fmt[i]
+        i += 1
+        if code == "x" then
+            var k: int = 0
+            while k < cuenta do
+                out::append(0)
+                k += 1
+            end
+        else
+            var info: list = _code_info(code)
+            if info::len() == 0 then
+                raise Error("struct::pack: código desconocido '" + code + "'", 1)
+            end
+            var nb: int = info[0]
+            var lims: list = _limits(code, nb, info[1])
+            var minv: int = lims[0]
+            var maxv: int = lims[1]
+            var k: int = 0
+            while k < cuenta do
+                var v: int = 0
+                if modo == 0 then
+                    if vi >= vals::len() then
+                        raise Error("struct::pack: faltan valores para el formato", 1)
+                    end
+                    v = vals[vi]
+                    vi += 1
+                else
+                    v = vals[0]
+                end
+                if v < minv || v > maxv then
+                    raise Error("struct::pack: valor fuera de rango para '" + code + "'", 1)
+                end
+                var j: int = 0
+                while j < nb do
+                    if endian_big == 0 then
+                        out::append((v >> (8 * j)) & 0xFF)
+                    else
+                        out::append((v >> (8 * (nb - 1 - j))) & 0xFF)
+                    end
+                    j += 1
+                end
+                k += 1
+            end
+        end
+    end
+    return bytes_from_ints(out)
+}
+
+task unpack(string fmt, bytes datos) | (string fmt, string s) = list ;
+{
+    return _unpack_core(fmt, _to_list(datos))
+    |
+    return _unpack_core(fmt, _to_list(bytes(s)))
+}
+
+task _to_list(bytes b) = list ;
+{
+    var out: list = []
+    var i: int = 0
+    while i < b::len() do
+        out::append(b[i])
+        i += 1
+    end
+    return out
+}
+
+task _unpack_core(string fmt, list data) = list ;
+{
+    var endian_big: int = _is_big(fmt)
+    var i: int = _skip_endian(fmt)
+    var n: int = fmt::len()
+    var pos: int = 0
+    var out: list = []
+    while i < n do
+        var pc: list = _parse_count(fmt, i)
+        var cuenta: int = pc[0]
+        i = pc[1]
+        if cuenta == 0 then
+            cuenta = 1
+        end
+        if i >= n then
+            raise Error("struct::unpack: formato incompleto tras el contador", 1)
+        end
+        var code: string = fmt[i]
+        i += 1
+        if code == "x" then
+            pos += cuenta
+        else
+            var info: list = _code_info(code)
+            if info::len() == 0 then
+                raise Error("struct::unpack: código desconocido '" + code + "'", 1)
+            end
+            var nb: int = info[0]
+            var con_signo: int = info[1]
+            var bits: int = nb * 8
+            var k: int = 0
+            while k < cuenta do
+                if pos + nb > data::len() then
+                    raise Error("struct::unpack: buffer más corto que el formato", 1)
+                end
+                var v: int = 0
+                var j: int = 0
+                while j < nb do
+                    if endian_big == 0 then
+                        v = v | (data[pos + j] << (8 * j))
+                    else
+                        v = v | (data[pos + j] << (8 * (nb - 1 - j)))
+                    end
+                    j += 1
+                end
+                pos += nb
+                if con_signo == 1 && v >= (1 << (bits - 1)) then
+                    v -= 1 << bits
+                end
+                out::append(v)
+                k += 1
+            end
+        end
+    end
+    if pos != data::len() then
+        raise Error("struct::unpack: buffer más largo que el formato", 1)
+    end
+    return out
+}

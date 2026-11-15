@@ -1,0 +1,194 @@
+## glob.ayce — búsqueda de archivos por patrón EN AYCE PURO (v0.6.0).
+## La lógica de patrones está escrita aquí: igual que glob.py de
+## CPython, el patrón se divide en componentes por "/" y cada una se
+## traduce a una comparación de comodines sobre los nombres del
+## directorio correspondiente:
+##   *    cualquier secuencia (no cruza "/")
+##   ?    un solo carácter
+##   [abc] / [a-z] / [!abc]  clase de caracteres
+## Sólo toca el disco para listar directorios, con el batch privado
+## `_os` (como glob.py usa os.scandir).
+
+require _os as posix
+
+task glob(string s) | (string s, stdlib::Cualquiera arg) = none[] ;
+{
+    return _glob(s)
+    |
+    return _glob(s)
+}
+
+task iglob(string s) | (string s, stdlib::Cualquiera arg) = none[] ;
+{
+    return _glob(s)
+    |
+    return _glob(s)
+}
+
+task _glob(string patron) = none[] ;
+{
+    var componentes: none[] = patron::split("/")
+    var resultados: none[] = [""]
+    var i: int = 0
+    while i < componentes::len() do
+        var comp: string = componentes[i]
+        var nuevo: none[] = []
+        var k: int = 0
+        while k < resultados::len() do
+            var base: string = resultados[k]
+            if comp::contains("*") || comp::contains("?") || comp::contains("[") then
+                ## componente con comodines: listar y filtrar
+                var dir: string = base
+                var entradas: none[] = []
+                if dir == "" then
+                    dir = "."
+                end
+                if posix::isdir(dir) then
+                    entradas = posix::list_dir(dir)
+                end
+                var e: int = 0
+                entradas::sort()
+                while e < entradas::len() do
+                    var nombre: string = entradas[e]
+                    if _coincide(comp, nombre) then
+                        if base == "" then
+                            nuevo::append(nombre)
+                        else if base::ends_with("/") then
+                            nuevo::append(base + nombre)
+                        else
+                            nuevo::append(base + "/" + nombre)
+                        end
+                    end
+                    e += 1
+                end
+            else if comp == "" then
+                ## barra inicial o doble: la base es la raíz
+                if base == "" then
+                    nuevo::append("/")
+                else
+                    nuevo::append(base)
+                end
+            else
+                ## componente literal: verificar que exista
+                var ruta: string = comp
+                if base != "" then
+                    ruta = base + "/" + comp
+                end
+                if posix::exists(ruta) then
+                    nuevo::append(ruta)
+                end
+            end
+            k += 1
+        end
+        resultados = nuevo
+        i += 1
+    end
+    ## sólo rutas que existen realmente (los literales ya se filtraron)
+    var out: none[] = []
+    var j: int = 0
+    while j < resultados::len() do
+        var r: string = resultados[j]
+        if posix::exists(r) then
+            out::append(r)
+        end
+        j += 1
+    end
+    out::sort()
+    return out
+}
+
+## ¿coincide el nombre con el componente del patrón (comodines)?
+task _coincide(string patron, string nombre) = bool ;
+{
+    var p: int = 0
+    var t: int = 0
+    var estrella: int = -1
+    var marca: int = 0
+    var np: int = patron::len()
+    var nt: int = nombre::len()
+    ## comparación con backtracking estilo fnmatch
+    while t < nt do
+        if p < np && _clase_ok(patron, p, nombre[t]) then
+            var paso: int = _largo_clase(patron, p)
+            p += paso
+            t += 1
+        else if p < np && patron[p] == "*" then
+            estrella = p
+            marca = t
+            p += 1
+        else if estrella != -1 then
+            p = estrella + 1
+            marca += 1
+            t = marca
+        else
+            return False
+        end
+    end
+    while p < np && patron[p] == "*" do
+        p += 1
+    end
+    return p == np
+}
+
+## ¿el carácter coincide con el patrón en la posición p?
+## devuelve el tamaño del "átomo" (1, o la clase [..])
+task _clase_ok(string patron, int p, string ch) = bool ;
+{
+    if patron[p] == "?" then
+        return ch != ""
+    end
+    if patron[p] == "[" then
+        var cierre: int = patron::find("]", p + 1)
+        if cierre == -1 then
+            return patron[p] == ch
+        end
+        var cuerpo: string = patron::slice(p + 1, cierre)
+        var negar: bool = False
+        if cuerpo::starts_with("!") then
+            negar = True
+            cuerpo = cuerpo::slice(1, cuerpo::len())
+        end
+        var dentro: bool = _en_conjunto(cuerpo, ch)
+        if negar then
+            return !dentro
+        end
+        return dentro
+    end
+    return patron[p] == ch
+}
+
+## tamaño del átomo en la posición p (clase [..] o carácter suelto)
+task _largo_clase(string patron, int p) = int ;
+{
+    if patron[p] == "[" then
+        var cierre: int = patron::find("]", p + 1)
+        if cierre == -1 then
+            return 1
+        end
+        return cierre - p + 1
+    end
+    return 1
+}
+
+## ¿está el carácter en el cuerpo de la clase (con rangos a-z)?
+task _en_conjunto(string cuerpo, string ch) = bool ;
+{
+    var code: int = ord(ch)
+    var i: int = 0
+    while i < cuerpo::len() do
+        if i + 2 < cuerpo::len() && cuerpo[i + 1] == "-" then
+            var lo: int = ord(cuerpo[i])
+            var hi: int = ord(cuerpo[i + 2])
+            if code >= lo && code <= hi then
+                return True
+            end
+            i += 3
+        else
+            if cuerpo[i] == ch then
+                return True
+            end
+            i += 1
+        end
+    end
+    return False
+}

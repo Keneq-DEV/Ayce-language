@@ -1,0 +1,38 @@
+## test_textwrap.ayce — pruebas de textwrap (ayce puro)
+require textwrap as T
+
+var texto: string = "ayce es un lenguaje con identidad propia y reglas claras"
+
+say("wrap(20):")
+var lineas: string[] = T::wrap(texto, 20)
+for ln in lineas do
+    say("  |" + ln + "|")
+end
+say("fill(15):")
+say(T::fill(texto, 15))
+say("líneas fill(15): " + string(T::wrap(texto, 15)::len()))
+
+## dedent
+var con_sangria: string = "    línea uno\n    línea dos\n    línea tres"
+say("dedent: [" + T::dedent(con_sangria) + "]")
+
+## indent
+say("indent: [" + T::indent("a\nb", "> ") + "]")
+say("indent_first: [" + T::indent_first("a\nb", "> ") + "]")
+
+## shorten
+say("shorten(20): [" + T::shorten(texto, 20, "...") + "]")
+say("shorten(60): [" + T::shorten(texto, 60, "...") + "]")
+
+## initial_width
+say("initial_width: " + string(T::initial_width("  hola\nmundo")) + " (2)")
+
+## error de ancho inválido
+try
+    T::wrap(texto, 0)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_textwrap")

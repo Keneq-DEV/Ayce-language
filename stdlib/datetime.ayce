@@ -1,0 +1,689 @@
+## datetime.ayce — fechas y horas EN AYCE PURO (v0.6.0).
+## Toda la aritmética de calendario corre aquí, escrita en ayce con los
+## mismos algoritmos de CPython/Calendario Gregoriano proléptico:
+##   - días de época con el algoritmo de Howard Hinnant
+##     (days_from_civil / civil_from_days), exacto para fechas lejanas
+##   - bisiesto: divisible por 4, salvo los centenarios no divisibles
+##     entre 400 — sin reglas aproximadas de "año de 365.25 días"
+##   - weekday derivado de la época (lunes = 0, como datetime.weekday())
+##   - add_months/add_years son operaciones de calendario con ajuste
+##     de día (29 feb → 28 feb; día 31 en meses de 30 → 30)
+## La única llamada a la máquina es el reloj y la zona horaria del batch
+## privado `_time` — igual que datetime.py de CPython, que delega al
+## módulo C la hora del sistema y hace el formateo en Python.
+
+require _time as _tm
+
+const _seg_dia: int = 86400
+const _meses_largos: string[] = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+const _meses_cortos: string[] = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+const _dias_largos: string[] = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+const _dias_cortos: string[] = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+## ── calendario: días de época ⇄ fecha civil ──
+task _es_bisiesto(int y) = bool ;
+{
+    return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+}
+
+task _dias_del_mes(int y, int m) = int ;
+{
+    if m == 2 then
+        if _es_bisiesto(y) then
+            return 29
+        end
+        return 28
+    end
+    if m == 4 || m == 6 || m == 9 || m == 11 then
+        return 30
+    end
+    return 31
+}
+
+## días desde 1970-01-01 (algoritmo days_from_civil de Hinnant)
+task _civil_a_dias(int y, int m, int d) = int ;
+{
+    var yy: int = y
+    if m <= 2 then
+        yy = yy - 1
+    end
+    var era: int = 0
+    if yy >= 0 then
+        era = yy // 400
+    else
+        era = (yy - 399) // 400
+    end
+    var yoe: int = yy - era * 400
+    var mp: int = m + 9
+    if mp >= 12 then
+        mp = mp - 12
+    end
+    var doy: int = (153 * mp + 2) // 5 + d - 1
+    var doe: int = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+## inversa: días de época → (año, mes, día)
+task _dias_a_civil(int z) = none[] ;
+{
+    var z2: int = z + 719468
+    var era: int = 0
+    if z2 >= 0 then
+        era = z2 // 146097
+    else
+        era = (z2 - 146096) // 146097
+    end
+    var doe: int = z2 - era * 146097
+    var yoe: int = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+    var yy: int = yoe + era * 400
+    var doy: int = doe - (365 * yoe + yoe // 4 - yoe // 100)
+    var mp: int = (5 * doy + 2) // 153
+    var d: int = doy - (153 * mp + 2) // 5 + 1
+    var m: int = mp + 3
+    if mp >= 10 then
+        m = m - 12
+    end
+    if m <= 2 then
+        yy = yy + 1
+    end
+    return [yy, m, d]
+}
+
+## ── conversión dict ⇄ componentes ──
+## acepta un dict de datetime o un string ISO (como _dt_from_dict nativo)
+task _componentes(stdlib::Cualquiera valor) = none[] ;
+{
+    if is_str(valor) then
+        return _parse_iso(valor)
+    end
+    var y: int = 1970
+    var mo: int = 1
+    var d: int = 1
+    var h: int = 0
+    var mi: int = 0
+    var s: int = 0
+    if valor::has("year") then
+        y = valor<"year">
+    end
+    if valor::has("month") then
+        mo = valor<"month">
+    end
+    if valor::has("day") then
+        d = valor<"day">
+    end
+    if valor::has("hour") then
+        h = valor<"hour">
+    end
+    if valor::has("minute") then
+        mi = valor<"minute">
+    end
+    if valor::has("second") then
+        s = valor<"second">
+    end
+    return [y, mo, d, h, mi, s]
+}
+
+## parsea "YYYY-MM-DD", "YYYY-MM-DDTHH:MM[:SS]"
+task _parse_iso(string s) = none[] ;
+{
+    var sep: int = s::find("T")
+    if sep == -1 then
+        sep = s::find(" ")
+    end
+    var parte_dia: string = s
+    var parte_hora: string = ""
+    if sep != -1 then
+        parte_dia = s::slice(0, sep)
+        parte_hora = s::slice(sep + 1, s::len())
+    end
+    var guiones: none[] = parte_dia::split("-")
+    var y: int = int(guiones[0])
+    var mo: int = int(guiones[1])
+    var d: int = int(guiones[2])
+    var h: int = 0
+    var mi: int = 0
+    var sec: int = 0
+    if parte_hora != "" then
+        var dos: none[] = parte_hora::split(":")
+        h = int(dos[0])
+        if dos::len() > 1 then
+            mi = int(dos[1])
+        end
+        if dos::len() > 2 then
+            sec = int(dos[2])
+        end
+    end
+    return [y, mo, d, h, mi, sec]
+}
+
+## armar el dict canónico de datetime (con iso y str)
+task _dict_de(int y, int mo, int d, int h, int mi, int sec) = none<> ;
+{
+    var out: none<> = <>
+    out<"year"> = y
+    out<"month"> = mo
+    out<"day"> = d
+    out<"hour"> = h
+    out<"minute"> = mi
+    out<"second"> = sec
+    out<"weekday"> = _weekday_de(y, mo, d)
+    out<"iso"> = _iso_de(y, mo, d, h, mi, sec)
+    out<"str"> = _pad4(y) + "-" + _pad2(mo) + "-" + _pad2(d) + " " + _pad2(h) + ":" + _pad2(mi) + ":" + _pad2(sec)
+    return out
+}
+
+task _weekday_de(int y, int mo, int d) = int ;
+{
+    var z: int = _civil_a_dias(y, mo, d)
+    ## 1970-01-01 fue jueves (3): lunes = 0
+    return (z + 3) % 7
+}
+
+task _iso_de(int y, int mo, int d, int h, int mi, int sec) = string ;
+{
+    var fecha: string = _pad4(y) + "-" + _pad2(mo) + "-" + _pad2(d)
+    if h == 0 && mi == 0 && sec == 0 then
+        ## datetime(2020,1,1).isoformat() == "2020-01-01"
+        return fecha
+    end
+    return fecha + "T" + _pad2(h) + ":" + _pad2(mi) + ":" + _pad2(sec)
+}
+
+task _pad2(int n) = string ;
+{
+    if n < 10 then
+        return "0" + string(n)
+    end
+    return string(n)
+}
+
+task _pad4(int n) = string ;
+{
+    var s: string = string(n)
+    while s::len() < 4 do
+        s = "0" + s
+    end
+    return s
+}
+
+## ── API del módulo ──
+task now() = none<> ;
+{
+    ## hora local del sistema: reloj del batch privado _time
+    var loc: none<> = _tm::localtime()
+    var micro: int = 0
+    var fraccion: float = _tm::now() % 1.0
+    micro = int(fraccion * 1000000.0)
+    var out: none<> = <>
+    out<"year"> = loc<"year">
+    out<"month"> = loc<"month">
+    out<"day"> = loc<"day">
+    out<"hour"> = loc<"hour">
+    out<"minute"> = loc<"minute">
+    out<"second"> = loc<"second">
+    out<"microsecond"> = micro
+    out<"weekday"> = loc<"weekday">
+    var iso: string = loc<"iso">
+    if micro != 0 then
+        iso += "." + _pad6(micro)
+    end
+    out<"iso"> = iso
+    out<"str"> = _pad4(loc<"year">) + "-" + _pad2(loc<"month">) + "-" + _pad2(loc<"day">) + " " + _pad2(loc<"hour">) + ":" + _pad2(loc<"minute">) + ":" + _pad2(loc<"second">)
+    return out
+}
+
+task _pad6(int n) = string ;
+{
+    var s: string = string(n)
+    while s::len() < 6 do
+        s = "0" + s
+    end
+    return s
+}
+
+task today() = none<> ;
+{
+    var loc: none<> = _tm::localtime()
+    var out: none<> = <>
+    out<"year"> = loc<"year">
+    out<"month"> = loc<"month">
+    out<"day"> = loc<"day">
+    out<"weekday"> = loc<"weekday">
+    out<"iso"> = _pad4(loc<"year">) + "-" + _pad2(loc<"month">) + "-" + _pad2(loc<"day">)
+    out<"str"> = out<"iso">
+    return out
+}
+
+task date(int y, int mo, int d) = none<> ;
+{
+    var out: none<> = <>
+    out<"year"> = y
+    out<"month"> = mo
+    out<"day"> = d
+    out<"weekday"> = _weekday_de(y, mo, d)
+    out<"iso"> = _pad4(y) + "-" + _pad2(mo) + "-" + _pad2(d)
+    return out
+}
+
+task datetime(int y, int mo, int d) | (int y, int mo, int d, int h) | (int y, int mo, int d, int h, int mi) | (int y, int mo, int d, int h, int mi, int sec) = none<> ;
+{
+    return _dict_sin_str(y, mo, d, 0, 0, 0)
+    |
+    return _dict_sin_str(y, mo, d, h, 0, 0)
+    |
+    return _dict_sin_str(y, mo, d, h, mi, 0)
+    |
+    return _dict_sin_str(y, mo, d, h, mi, sec)
+}
+
+## el dict de datetime() no lleva la clave "str" (como el batch nativo)
+task _dict_sin_str(int y, int mo, int d, int h, int mi, int sec) = none<> ;
+{
+    var out: none<> = _dict_de(y, mo, d, h, mi, sec)
+    out::remove("str")
+    return out
+}
+
+## ── aritmética por segundos (época exacta) ──
+task _agregar_segundos(stdlib::Cualquiera valor, int n) = none<> ;
+{
+    var c: none[] = _componentes(valor)
+    var z: int = _civil_a_dias(c[0], c[1], c[2])
+    var total: int = z * _seg_dia + c[3] * 3600 + c[4] * 60 + c[5] + n
+    var dias: int = total // _seg_dia
+    var resto: int = total % _seg_dia
+    ## módulo estilo piso para días negativos
+    if resto < 0 then
+        resto += _seg_dia
+        dias -= 1
+    end
+    var civil: none[] = _dias_a_civil(dias)
+    return _dict_de(civil[0], civil[1], civil[2], resto // 3600, (resto % 3600) // 60, resto % 60)
+}
+
+task add_days(stdlib::Cualquiera dt, stdlib::Cualquiera n) | (none<> dt, stdlib::Cualquiera n) ;
+{
+    return _agregar_segundos(dt, int(n) * _seg_dia)
+    |
+    return _agregar_segundos(dt, int(n) * _seg_dia)
+}
+
+task add_hours(stdlib::Cualquiera s, stdlib::Cualquiera arg) | (none<> arg, stdlib::Cualquiera arg2) ;
+{
+    return _agregar_segundos(s, int(arg) * 3600)
+    |
+    return _agregar_segundos(arg, int(arg2) * 3600)
+}
+
+task add_minutes(stdlib::Cualquiera s, stdlib::Cualquiera arg) | (none<> arg, stdlib::Cualquiera arg2) ;
+{
+    return _agregar_segundos(s, int(arg) * 60)
+    |
+    return _agregar_segundos(arg, int(arg2) * 60)
+}
+
+task add_seconds(stdlib::Cualquiera s, stdlib::Cualquiera arg) | (none<> arg, stdlib::Cualquiera arg2) ;
+{
+    return _agregar_segundos(s, int(arg))
+    |
+    return _agregar_segundos(arg, int(arg2))
+}
+
+task add_months(stdlib::Cualquiera dt, stdlib::Cualquiera n) | (none<> dt, stdlib::Cualquiera n) ;
+{
+    return _sumar_meses(dt, int(n))
+    |
+    return _sumar_meses(dt, int(n))
+}
+
+task _sumar_meses(stdlib::Cualquiera valor, int n) = none<> ;
+{
+    var c: none[] = _componentes(valor)
+    var total: int = c[0] * 12 + (c[1] - 1) + n
+    var y: int = total // 12
+    var mo: int = (total % 12) + 1
+    ## ajustar el día si el mes destino es más corto
+    var d: int = c[2]
+    var dias: int = _dias_del_mes(y, mo)
+    if d > dias then
+        d = dias
+    end
+    return _dict_de(y, mo, d, c[3], c[4], c[5])
+}
+
+task add_years(stdlib::Cualquiera dt, stdlib::Cualquiera n) | (none<> dt, stdlib::Cualquiera n) ;
+{
+    return _sumar_anios(dt, int(n))
+    |
+    return _sumar_anios(dt, int(n))
+}
+
+task _sumar_anios(stdlib::Cualquiera valor, int n) = none<> ;
+{
+    var c: none[] = _componentes(valor)
+    var y: int = c[0] + n
+    var d: int = c[2]
+    ## 29 de febrero en año no bisiesto → 28 de febrero
+    if d == 29 && c[1] == 2 && !_es_bisiesto(y) then
+        d = 28
+    end
+    return _dict_de(y, c[1], d, c[3], c[4], c[5])
+}
+
+## ── diferencias ──
+task _epoch_de(stdlib::Cualquiera valor) = int ;
+{
+    var c: none[] = _componentes(valor)
+    return _civil_a_dias(c[0], c[1], c[2]) * _seg_dia + c[3] * 3600 + c[4] * 60 + c[5]
+}
+
+task diff_days(stdlib::Cualquiera s, stdlib::Cualquiera arg) | (none<> arg, stdlib::Cualquiera arg2) ;
+{
+    return _diff_dias(s, arg)
+    |
+    return _diff_dias(arg, arg2)
+}
+
+task _diff_dias(stdlib::Cualquiera a, stdlib::Cualquiera b) = float ;
+{
+    return float(_epoch_de(b) - _epoch_de(a)) / 86400.0
+}
+
+task diff_seconds(stdlib::Cualquiera s, stdlib::Cualquiera arg) | (none<> arg, stdlib::Cualquiera arg2) ;
+{
+    return _diff_seg(s, arg)
+    |
+    return _diff_seg(arg, arg2)
+}
+
+task _diff_seg(stdlib::Cualquiera a, stdlib::Cualquiera b) = int ;
+{
+    return _epoch_de(b) - _epoch_de(a)
+}
+
+## ── nombres y día del año ──
+task weekday_name(stdlib::Cualquiera s) | (none<> arg) = string ;
+{
+    return _nombre_dia(s)
+    |
+    return _nombre_dia(arg)
+}
+
+task _nombre_dia(stdlib::Cualquiera valor) = string ;
+{
+    var c: none[] = _componentes(valor)
+    return _dias_largos[_weekday_de(c[0], c[1], c[2])]
+}
+
+task day_of_year(stdlib::Cualquiera s) | (none<> arg) = int ;
+{
+    return _dia_del_anio(s)
+    |
+    return _dia_del_anio(arg)
+}
+
+task _dia_del_anio(stdlib::Cualquiera valor) = int ;
+{
+    var c: none[] = _componentes(valor)
+    return _dia_del_anio_componentes(c[0], c[1], c[2])
+}
+
+task _dia_del_anio_componentes(int y, int mo, int d) = int ;
+{
+    var z: int = _civil_a_dias(y, mo, d)
+    var z1: int = _civil_a_dias(y, 1, 1)
+    return z - z1 + 1
+}
+
+## ── strftime sobre un timestamp (hora local) ──
+## directivas: %Y %m %d %H %M %S %j %A %a %B %b %p %I %y %%
+task strftime(int n, string s) | (float x, string s) = string ;
+{
+    return _formatear_ts(n, s)
+    |
+    return _formatear_ts(x, s)
+}
+
+task _formatear_ts(stdlib::Cualquiera ts, string fmt) = string ;
+{
+    var loc: none<> = _tm::localtime(ts)
+    var partes: none[] = [loc<"year">, loc<"month">, loc<"day">, loc<"hour">, loc<"minute">, loc<"second">]
+    return _formatear(partes, fmt)
+}
+
+task _formatear(none[] partes, string fmt) = string ;
+{
+    var y: int = partes[0]
+    var mo: int = partes[1]
+    var d: int = partes[2]
+    var h: int = partes[3]
+    var mi: int = partes[4]
+    var sec: int = partes[5]
+    var out: string = ""
+    var i: int = 0
+    var n: int = fmt::len()
+    while i < n do
+        var ch: string = fmt[i]
+        if ch == "%" && i + 1 < n then
+            var sig: string = fmt[i + 1]
+            if sig == "Y" then
+                out += _pad4(y)
+            else if sig == "m" then
+                out += _pad2(mo)
+            else if sig == "d" then
+                out += _pad2(d)
+            else if sig == "H" then
+                out += _pad2(h)
+            else if sig == "M" then
+                out += _pad2(mi)
+            else if sig == "S" then
+                out += _pad2(sec)
+            else if sig == "j" then
+                var doy: int = _dia_del_anio_componentes(y, mo, d)
+                var s3: string = string(doy)
+                if s3::len() < 3 then
+                    s3 = _zeros(3 - s3::len()) + s3
+                end
+                out += s3
+            else if sig == "A" then
+                out += _dias_largos[_weekday_de(y, mo, d)]
+            else if sig == "a" then
+                out += _dias_cortos[_weekday_de(y, mo, d)]
+            else if sig == "B" then
+                out += _meses_largos[mo - 1]
+            else if sig == "b" then
+                out += _meses_cortos[mo - 1]
+            else if sig == "p" then
+                if h < 12 then
+                    out += "AM"
+                else
+                    out += "PM"
+                end
+            else if sig == "I" then
+                var h12: int = h % 12
+                if h12 == 0 then
+                    h12 = 12
+                end
+                out += _pad2(h12)
+            else if sig == "y" then
+                out += _pad2(y % 100)
+            else if sig == "%" then
+                out += "%"
+            else
+                out += "%" + sig
+            end
+            i += 2
+        else
+            out += ch
+            i += 1
+        end
+    end
+    return out
+}
+
+task _zeros(int n) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < n do
+        out += "0"
+        i += 1
+    end
+    return out
+}
+
+## ── strptime: parsea según el formato ──
+task strptime(string s, string s2) = none<> ;
+{
+    var c: none[] = _parsear_con_fmt(s, s2)
+    var out: none<> = <>
+    out<"year"> = c[0]
+    out<"month"> = c[1]
+    out<"day"> = c[2]
+    out<"hour"> = c[3]
+    out<"minute"> = c[4]
+    out<"second"> = c[5]
+    out<"iso"> = _iso_de(c[0], c[1], c[2], c[3], c[4], c[5])
+    return out
+}
+
+task _parsear_con_fmt(string texto, string fmt) = none[] ;
+{
+    var y: int = 1900
+    var mo: int = 1
+    var d: int = 1
+    var h: int = 0
+    var mi: int = 0
+    var sec: int = 0
+    var pos: int = 0
+    var i: int = 0
+    var n: int = fmt::len()
+    var pm: bool = False
+    var h12: int = -1
+    while i < n do
+        var ch: string = fmt[i]
+        if ch == "%" && i + 1 < n then
+            var sig: string = fmt[i + 1]
+            if sig == "Y" then
+                y = int(texto::slice(pos, pos + 4))
+                pos += 4
+            else if sig == "m" then
+                mo = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "d" then
+                d = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "H" then
+                h = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "M" then
+                mi = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "S" then
+                sec = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "I" then
+                h12 = int(texto::slice(pos, pos + 2))
+                pos += 2
+            else if sig == "p" then
+                if texto::slice(pos, pos + 2)::upper() == "PM" then
+                    pm = True
+                end
+                pos += 2
+            else if sig == "b" then
+                mo = _mes_de(texto, pos, _meses_cortos)
+                pos += 3
+            else if sig == "B" then
+                mo = _mes_largo_de(texto, pos)
+                pos += _meses_largos[mo - 1]::len()
+            else if sig == "a" then
+                pos += 3
+            else if sig == "A" then
+                pos += _dias_largos[_buscar_dia(texto, pos)]::len()
+            else if sig == "%" then
+                pos += 1
+            end
+            i += 2
+        else
+            ## texto literal del formato: saltar un carácter de la entrada
+            pos += 1
+            i += 1
+        end
+    end
+    if h12 >= 0 then
+        h = h12 % 12
+        if pm then
+            h += 12
+        end
+    end
+    return [y, mo, d, h, mi, sec]
+}
+
+task _mes_de(string texto, int pos, string[] tabla) = int ;
+{
+    var i: int = 0
+    while i < tabla::len() do
+        if texto::slice(pos, pos + tabla[i]::len()) == tabla[i] then
+            return i + 1
+        end
+        i += 1
+    end
+    return 1
+}
+
+task _mes_largo_de(string texto, int pos) = int ;
+{
+    var i: int = 0
+    while i < _meses_largos::len() do
+        var nombre: string = _meses_largos[i]
+        if texto::slice(pos, pos + nombre::len()) == nombre then
+            return i + 1
+        end
+        i += 1
+    end
+    return 1
+}
+
+task _buscar_dia(string texto, int pos) = int ;
+{
+    var i: int = 0
+    while i < _dias_largos::len() do
+        var nombre: string = _dias_largos[i]
+        if texto::slice(pos, pos + nombre::len()) == nombre then
+            return i
+        end
+        i += 1
+    end
+    return 0
+}
+
+## ── timestamp actual (float, como _time.time()) ──
+task timestamp() = float ;
+{
+    return _tm::now()
+}
+
+## ── from_iso: dict desde cadena ISO ──
+task from_iso(string s) = none<> ;
+{
+    var c: none[] = _parse_iso(s)
+    var out: none<> = <>
+    out<"year"> = c[0]
+    out<"month"> = c[1]
+    out<"day"> = c[2]
+    out<"hour"> = c[3]
+    out<"minute"> = c[4]
+    out<"second"> = c[5]
+    out<"iso"> = _iso_de(c[0], c[1], c[2], c[3], c[4], c[5])
+    return out
+}
+
+## predicados locales por sobrecarga (sin depender de types)
+task is_str(string x) = bool ;
+{
+    return True
+}
+task is_str(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}

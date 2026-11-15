@@ -1,0 +1,425 @@
+## strings.ayce — utilidades de strings (stdlib ayce puro)
+##
+## Reescrito en v0.6.0 para usar las nuevas features del lenguaje:
+##   - not  (negación booleana)
+##   - s[i] (indexación de string → char)
+##   - a + b (concatenación de listas)
+##
+## Tareas:
+##   reverse_str(string s)          = string  invierte el string
+##   repeat_str(string s, int n)    = string  repite n veces (n>=0)
+##   title_case(string s)           = string  primera letra de cada palabra en mayúscula
+##   count_words(string s)          = int     número de palabras (separadas por espacios)
+##   reverse_words(string s)        = string  invierte el orden de las palabras
+##   slugify(string s)              = string  normaliza para URL (minúsculas, sin acentos, "-" como separador)
+##   camel_case(string s)           = string  "hola mundo" -> "holaMundo"
+##   pascal_case(string s)          = string  "hola mundo" -> "HolaMundo"
+##   snake_case(string s)           = string  "Hola Mundo" -> "hola_mundo"
+##   kebab_case(string s)           = string  "Hola Mundo" -> "hola-mundo"
+##   levenshtein(string a, string b) = int    distancia de edición
+##   count_substr(string s, string sub) = int cuántas veces aparece sub (no solapadas)
+##   center_str(string s, int w)     = string centra s en w chars con espacios
+##   pad_left(string s, int w, string ch) = string  rellena a la izquierda con ch
+##   pad_right(string s, int w, string ch) = string  rellena a la derecha con ch
+
+## — Util: ¿es letra A-Z o a-z (ASCII)? —
+task _is_alpha(string ch) = bool ;
+{
+    var c: string = ch::lower()
+    if c[0] >= "a" && c[0] <= "z" then
+        return True
+    end
+    return False
+}
+
+## — Util: ¿es dígito 0-9? —
+task _is_digit(string ch) = bool ;
+{
+    if ch >= "0" && ch <= "9" then
+        return True
+    end
+    return False
+}
+
+## — Util: ¿es carácter alfanumérico? —
+task _is_alnum(string ch) = bool ;
+{
+    if _is_alpha(ch) then
+        return True
+    end
+    return _is_digit(ch)
+}
+
+## — Util: ¿es espacio (space, tab)? —
+task _is_space(string ch) = bool ;
+{
+    if ch == " " then
+        return True
+    end
+    if ch == "\t" then
+        return True
+    end
+    return False
+}
+
+## — Invertir un string —
+task reverse_str(string s) = string ;
+{
+    return s::reverse()
+}
+
+## — Repetir un string —
+task repeat_str(string s, int n) = string ;
+{
+    if n <= 0 then
+        return ""
+    end
+    return s::repeat(n)
+}
+
+## — Title case: "hola mundo" -> "Hola Mundo" —
+task title_case(string s) = string ;
+{
+    var out: string = ""
+    var n: int = s::len()
+    var i: int = 0
+    var capitalize_next: bool = True
+    while i < n do
+        var ch: string = s[i]
+        if _is_space(ch) then
+            out = out + ch
+            capitalize_next = True
+        else
+            if capitalize_next then
+                out = out + ch::upper()
+                capitalize_next = False
+            else
+                out = out + ch::lower()
+            end
+        end
+        i = i + 1
+    end
+    return out
+}
+
+## — Contar palabras —
+task count_words(string s) = int ;
+{
+    var n: int = s::len()
+    var count: int = 0
+    var in_word: bool = False
+    var i: int = 0
+    while i < n do
+        var ch: string = s[i]
+        if _is_space(ch) then
+            in_word = False
+        else
+            if not in_word then
+                count = count + 1
+                in_word = True
+            end
+        end
+        i = i + 1
+    end
+    return count
+}
+
+## — Invertir el orden de las palabras —
+task reverse_words(string s) = string ;
+{
+    var parts: string[] = s::split(" ")
+    var out: string = ""
+    var i: int = parts::len() - 1
+    var first: bool = True
+    while i >= 0 do
+        if not first then
+            out = out + " "
+        end
+        out = out + parts[i]
+        first = False
+        i = i - 1
+    end
+    return out
+}
+
+## — Util: traducir vocales acentuadas y ñ a ASCII (sin acentos). —
+task _strip_accents(string s) = string ;
+{
+    var from_set: string[] = ["á", "é", "í", "ó", "ú", "Á", "É", "Í", "Ó", "Ú", "ñ", "Ñ", "ü", "Ü"]
+    var to_set:   string[] = ["a", "e", "i", "o", "u", "A", "E", "I", "O", "U", "n", "N", "u", "U"]
+    var out: string = s
+    var k: int = 0
+    while k < from_set::len() do
+        out = out::replace(from_set[k], to_set[k])
+        k = k + 1
+    end
+    return out
+}
+
+## — Slugify: "¡Hola Mundo!" -> "hola-mundo" —
+task slugify(string s) = string ;
+{
+    var t: string = _strip_accents(s)
+    t = t::lower()
+    var out: string = ""
+    var n: int = t::len()
+    var i: int = 0
+    var last_was_sep: bool = False
+    while i < n do
+        var ch: string = t[i]
+        if _is_alnum(ch) then
+            out = out + ch
+            last_was_sep = False
+        else
+            if not last_was_sep && out::len() > 0 then
+                out = out + "-"
+                last_was_sep = True
+            end
+        end
+        i = i + 1
+    end
+    ## quitar guion final si quedó
+    var L: int = out::len()
+    if L > 0 then
+        if out[L - 1] == "-" then
+            out = out::slice(0, L - 1)
+        end
+    end
+    return out
+}
+
+## — camelCase: "hola mundo" -> "holaMundo" —
+task camel_case(string s) = string ;
+{
+    var parts: string[] = s::split(" ")
+    var out: string = ""
+    var i: int = 0
+    var first_word: bool = True
+    while i < parts::len() do
+        var w: string = parts[i]
+        if w::len() == 0 then
+            i = i + 1
+            continue
+        end
+        if first_word then
+            out = out + w::lower()
+            first_word = False
+        else
+            out = out + w[0]::upper() + w::slice(1, w::len())::lower()
+        end
+        i = i + 1
+    end
+    return out
+}
+
+## — PascalCase: "hola mundo" -> "HolaMundo" —
+task pascal_case(string s) = string ;
+{
+    var parts: string[] = s::split(" ")
+    var out: string = ""
+    var i: int = 0
+    while i < parts::len() do
+        var w: string = parts[i]
+        if w::len() == 0 then
+            i = i + 1
+            continue
+        end
+        out = out + w[0]::upper() + w::slice(1, w::len())::lower()
+        i = i + 1
+    end
+    return out
+}
+
+## — snake_case: "HolaMundo" -> "hola_mundo" —
+task snake_case(string s) = string ;
+{
+    var out: string = ""
+    var n: int = s::len()
+    var i: int = 0
+    while i < n do
+        var ch: string = s[i]
+        if ch == " " || ch == "-" then
+            if out::len() > 0 then
+                out = out + "_"
+            end
+        else
+            if ch >= "A" && ch <= "Z" then
+                if out::len() > 0 then
+                    var prev: string = out[out::len() - 1]
+                    if prev != "_" then
+                        out = out + "_"
+                    end
+                end
+                out = out + ch::lower()
+            else
+                out = out + ch
+            end
+        end
+        i = i + 1
+    end
+    return out
+}
+
+## — kebab-case: "HolaMundo" -> "hola-mundo" —
+task kebab_case(string s) = string ;
+{
+    var out: string = ""
+    var n: int = s::len()
+    var i: int = 0
+    while i < n do
+        var ch: string = s[i]
+        if ch == " " || ch == "_" then
+            if out::len() > 0 then
+                out = out + "-"
+            end
+        else
+            if ch >= "A" && ch <= "Z" then
+                if out::len() > 0 then
+                    var prev: string = out[out::len() - 1]
+                    if prev != "-" then
+                        out = out + "-"
+                    end
+                end
+                out = out + ch::lower()
+            else
+                out = out + ch
+            end
+        end
+        i = i + 1
+    end
+    return out
+}
+
+## — Distancia de Levenshtein (DP iterativo, O(n*m)). —
+task levenshtein(string a, string b) = int ;
+{
+    var na: int = a::len()
+    var nb: int = b::len()
+    if na == 0 then
+        return nb
+    end
+    if nb == 0 then
+        return na
+    end
+
+    ## Fila anterior y fila actual (longitud nb+1)
+    var prev: int[] = []
+    var j: int = 0
+    while j <= nb do
+        prev::append(j)
+        j = j + 1
+    end
+
+    var i: int = 1
+    while i <= na do
+        var curr: int[] = [i]
+        var jj: int = 1
+        while jj <= nb do
+            var cost: int = 1
+            if a[i - 1] == b[jj - 1] then
+                cost = 0
+            end
+            var del: int = prev[jj] + 1
+            var ins: int = curr[jj - 1] + 1
+            var sub: int = prev[jj - 1] + cost
+            var mn: int = del
+            if ins < mn then
+                mn = ins
+            end
+            if sub < mn then
+                mn = sub
+            end
+            curr::append(mn)
+            jj = jj + 1
+        end
+        prev = curr
+        i = i + 1
+    end
+    return prev[nb]
+}
+
+## — Contar apariciones (no solapadas) de sub en s —
+task count_substr(string s, string sub) = int ;
+{
+    if sub::len() == 0 then
+        return 0
+    end
+    var count: int = 0
+    var i: int = 0
+    var n: int = s::len()
+    var m: int = sub::len()
+    while i + m <= n do
+        if s::slice(i, i + m) == sub then
+            count = count + 1
+            i = i + m
+        else
+            i = i + 1
+        end
+    end
+    return count
+}
+
+## — Centrar string en w chars (relleno con espacios) —
+task center_str(string s, int w) = string ;
+{
+    var n: int = s::len()
+    if n >= w then
+        return s
+    end
+    var total: int = w - n
+    var left: int = total // 2
+    var right: int = total - left
+    var out: string = ""
+    var i: int = 0
+    while i < left do
+        out = out + " "
+        i = i + 1
+    end
+    out = out + s
+    var j: int = 0
+    while j < right do
+        out = out + " "
+        j = j + 1
+    end
+    return out
+}
+
+## — Pad left: rellena a la izquierda con ch hasta llegar a w —
+task pad_left(string s, int w, string ch) = string ;
+{
+    var n: int = s::len()
+    if n >= w then
+        return s
+    end
+    if ch::len() == 0 then
+        return s
+    end
+    var pad: string = ch[0]
+    var out: string = ""
+    var i: int = 0
+    while i < w - n do
+        out = out + pad
+        i = i + 1
+    end
+    return out + s
+}
+
+## — Pad right: rellena a la derecha con ch hasta llegar a w —
+task pad_right(string s, int w, string ch) = string ;
+{
+    var n: int = s::len()
+    if n >= w then
+        return s
+    end
+    if ch::len() == 0 then
+        return s
+    end
+    var pad: string = ch[0]
+    var out: string = s
+    var i: int = 0
+    while i < w - n do
+        out = out + pad
+        i = i + 1
+    end
+    return out
+}

@@ -1,0 +1,2 @@
+[console_scripts]
+ayce = ayce.__main__:main

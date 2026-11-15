@@ -1,0 +1,38 @@
+## test_sorting.ayce — pruebas de sorting.ayce
+require sorting as S
+
+say("=== sorting.ayce ===")
+
+var xs: int[] = [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
+
+say("original:", xs)
+say("bubble_sort:   ", S::bubble_sort(xs))
+say("insertion_sort:", S::insertion_sort(xs))
+say("selection_sort:", S::selection_sort(xs))
+say("quicksort:     ", S::quicksort(xs))
+say("merge_sort:    ", S::merge_sort(xs))
+
+## casos borde
+var empty: int[] = []
+say("merge_sort([]):", S::merge_sort(empty))
+say("bubble_sort([]):", S::bubble_sort(empty))
+say("quicksort([]):", S::quicksort(empty))
+
+var one: int[] = [42]
+say("merge_sort([42]):", S::merge_sort(one))
+
+var sorted_in: int[] = [1, 2, 3, 4, 5]
+say("merge_sort([1..5]):", S::merge_sort(sorted_in))
+say("is_sorted([1..5]):", S::is_sorted(sorted_in))
+say("is_sorted([5,1]):", S::is_sorted([5, 1]))
+
+## binary_search
+var hay: int[] = [0, 2, 4, 6, 8, 10, 12]
+say("binary_search por 6 =", S::binary_search(hay, 6))   ## 3
+say("binary_search por 5 =", S::binary_search(hay, 5))   ## -1
+say("binary_search por 0 =", S::binary_search(hay, 0))   ## 0
+say("binary_search por 12 =", S::binary_search(hay, 12)) ## 6
+say("binary_search en [] =", S::binary_search([], 1))    ## -1
+
+## no mutar la entrada
+say("original después:", xs)

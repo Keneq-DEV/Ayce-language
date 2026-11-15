@@ -1,0 +1,240 @@
+## pprint.ayce — impresión legible de estructuras EN AYCE PURO (v0.6.0).
+## Igual que pprint.py de CPython: si la representación de una sola
+## línea cabe en el ancho (80 por defecto) se imprime entera; si no,
+## cada elemento del contenedor va en su propia línea con sangría de
+## un espacio por nivel, y los contenedores vacíos no se rompen.
+
+require _sys as _sysmod
+
+const _ancho_default: int = 80
+
+task format(stdlib::Cualquiera arg) | (stdlib::Cualquiera arg, stdlib::Cualquiera arg2) = string ;
+{
+    return _formato(arg, _ancho_default)
+    |
+    return _formato(arg, int(arg2))
+}
+
+task print(stdlib::Cualquiera arg) | (stdlib::Cualquiera arg, stdlib::Cualquiera arg2) ;
+{
+    return _imprimir(arg, _ancho_default)
+    |
+    return _imprimir(arg, int(arg2))
+}
+
+task _imprimir(stdlib::Cualquiera valor, int ancho) ;
+{
+    _sysmod::stdout(_formato(valor, ancho))
+    _sysmod::stdout("\n")
+}
+
+task _formato(stdlib::Cualquiera valor, int ancho) = string ;
+{
+    var linea: string = _repr(valor)
+    if linea::len() <= ancho then
+        return linea
+    end
+    return _romper(valor, ancho, 0)
+}
+
+## representación en una sola línea (como repr de CPython)
+task _repr(stdlib::Cualquiera valor) = string ;
+{
+    if is_list(valor) then
+        var out: string = "["
+        var i: int = 0
+        while i < valor::len() do
+            if i > 0 then
+                out += ", "
+            end
+            out += _repr(valor[i])
+            i += 1
+        end
+        return out + "]"
+    end
+    if is_dict(valor) then
+        var out: string = "{"
+        var claves: none[] = valor::keys()
+        var i: int = 0
+        while i < claves::len() do
+            if i > 0 then
+                out += ", "
+            end
+            var k: none = claves[i]
+            out += _repr(k) + ": " + _repr(valor<k>)
+            i += 1
+        end
+        return out + "}"
+    end
+    if is_tuple(valor) then
+        var out: string = "("
+        var i: int = 0
+        while i < valor::len() do
+            if i > 0 then
+                out += ", "
+            end
+            out += _repr(valor[i])
+            i += 1
+        end
+        if valor::len() == 1 then
+            out += ","
+        end
+        return out + ")"
+    end
+    if is_set(valor) then
+        var out: string = "{"
+        var primero: bool = True
+        for e in valor do
+            if !primero then
+                out += ", "
+            end
+            out += _repr(e)
+            primero = False
+        end
+        return out + "}"
+    end
+    if is_str(valor) then
+        return "\"" + valor + "\""
+    end
+    return string(valor)
+}
+
+## formato multilínea: cada elemento en su línea con sangría
+task _romper(stdlib::Cualquiera valor, int ancho, int nivel) = string ;
+{
+    var sangria: string = _espacios(nivel + 1)
+    var cierre_sangria: string = _espacios(nivel)
+    if is_list(valor) then
+        if valor::len() == 0 then
+            return "[]"
+        end
+        var out: string = "[\n"
+        var i: int = 0
+        while i < valor::len() do
+            out += sangria + _elemento(valor[i], ancho, nivel + 1)
+            if i < valor::len() - 1 then
+                out += ","
+            end
+            out += "\n"
+            i += 1
+        end
+        return out + cierre_sangria + "]"
+    end
+    if is_dict(valor) then
+        if valor::len() == 0 then
+            return "{}"
+        end
+        var out: string = "{\n"
+        var claves: none[] = valor::keys()
+        var i: int = 0
+        while i < claves::len() do
+            var k: none = claves[i]
+            out += sangria + _repr(k) + ": " + _elemento(valor<k>, ancho, nivel + 1)
+            if i < claves::len() - 1 then
+                out += ","
+            end
+            out += "\n"
+            i += 1
+        end
+        return out + cierre_sangria + "}"
+    end
+    if is_tuple(valor) then
+        if valor::len() == 0 then
+            return "()"
+        end
+        var out: string = "(\n"
+        var i: int = 0
+        while i < valor::len() do
+            out += sangria + _elemento(valor[i], ancho, nivel + 1)
+            if i < valor::len() - 1 then
+                out += ","
+            end
+            out += "\n"
+            i += 1
+        end
+        return out + cierre_sangria + ")"
+    end
+    if is_set(valor) then
+        var n: int = 0
+        for e in valor do
+            n += 1
+        end
+        if n == 0 then
+            return "set()"
+        end
+        var out: string = "{\n"
+        var primero: bool = True
+        for e in valor do
+            if !primero then
+                out += ",\n"
+            end
+            out += sangria + _elemento(e, ancho, nivel + 1)
+            primero = False
+        end
+        return out + "\n" + cierre_sangria + "}"
+    end
+    return _repr(valor)
+}
+
+## un elemento: línea única si cabe, contenedor roto si no
+task _elemento(stdlib::Cualquiera valor, int ancho, int nivel) = string ;
+{
+    var linea: string = _repr(valor)
+    if (is_list(valor) || is_dict(valor) || is_tuple(valor) || is_set(valor)) && linea::len() > ancho then
+        return _romper(valor, ancho, nivel)
+    end
+    return linea
+}
+
+task _espacios(int n) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < n do
+        out += " "
+        i += 1
+    end
+    return out
+}
+
+## predicados locales por sobrecarga (el módulo no depende de types)
+task is_list(list x) = bool ;
+{
+    return True
+}
+task is_list(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}
+task is_dict(dict x) = bool ;
+{
+    return True
+}
+task is_dict(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}
+task is_tuple(tuple x) = bool ;
+{
+    return True
+}
+task is_tuple(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}
+task is_set(set x) = bool ;
+{
+    return True
+}
+task is_set(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}
+task is_str(string x) = bool ;
+{
+    return True
+}
+task is_str(stdlib::Cualquiera x) = bool ;
+{
+    return False
+}

@@ -1,0 +1,35 @@
+## test_statistics.ayce — pruebas de statistics (ayce puro)
+require statistics as S
+
+var datos: int[] = [1, 2, 3, 4, 5]
+say("mean: " + string(S::mean(datos)) + " (3.0)")
+say("median impar: " + string(S::median(datos)) + " (3)")
+var pares: int[] = [1, 2, 3, 4]
+say("median par: " + string(S::median(pares)) + " (2.5)")
+var con_moda: int[] = [1, 2, 2, 3, 2]
+say("mode: " + string(S::mode(con_moda)) + " (2)")
+say("variance: " + string(S::variance(datos)))
+say("stdev: " + string(S::stdev(datos)))
+say("pvariance: " + string(S::pvariance(datos)) + " (2.0)")
+say("pstdev: " + string(S::pstdev(datos)))
+say("harmonic: " + string(S::harmonic_mean([1, 2, 4])))
+say("geometric: " + string(S::geometric_mean([1, 4, 16])))
+say("quantiles 4: " + string(S::quantiles(datos, 4)))
+say("minimum: " + string(S::minimum(datos)) + " (1.0)")
+say("maximum: " + string(S::maximum(datos)) + " (5.0)")
+say("total: " + string(S::total(datos)) + " (15.0)")
+
+## con floats
+var flotantes: float[] = [1.5, 2.5, 3.5]
+say("mean float: " + string(S::mean(flotantes)) + " (2.5)")
+
+## errores
+try
+    var vacia: int[] = []
+    S::mean(vacia)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_statistics")

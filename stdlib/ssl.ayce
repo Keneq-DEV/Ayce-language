@@ -1,0 +1,42 @@
+## ssl.ayce — conexiones TLS/SSL EN AYCE (v0.6.0).
+## El protocolo TLS requiere criptografía de máquina: como ssl.py de
+## CPython envuelve el módulo C `_ssl`, aquí el handshaking y el
+## descifrado vienen del batch privado `_ssl`; el módulo aporta la
+## construcción del contexto y el chequeo de certificado/cifrado.
+
+require _ssl as tls
+
+## valor de ssl.PROTOCOL_TLS_CLIENT de CPython
+const PROTOCOL_TLS_CLIENT: int = 16
+
+## contexto TLS con verificación de certificado activada;
+## inseguro=True desactiva la verificación (como ssl.SSLContext con
+## check_hostname False — sólo para pruebas)
+task create_context() | (bool inseguro) ;
+{
+    return tls::create_context()
+    |
+    return tls::create_context(inseguro)
+}
+
+## envuelve un socket TCP en TLS (SNI con el host si se da)
+task wrap_socket(ssl::Socket sock) | (ssl::Socket sock, string host) | (ssl::Socket sock, string host, bool inseguro) ;
+{
+    return tls::wrap_socket(sock)
+    |
+    return tls::wrap_socket(sock, host)
+    |
+    return tls::wrap_socket(sock, host, inseguro)
+}
+
+## cifrado negociado de la conexión, dict {nombre, protocolo, bits}
+task cipher(ssl::Socket sock) ;
+{
+    return tls::cipher(sock)
+}
+
+## certificado del par, dict {sujeto, emisor, fecha}
+task cert(ssl::Socket sock) ;
+{
+    return tls::cert(sock)
+}

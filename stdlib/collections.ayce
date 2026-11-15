@@ -1,0 +1,689 @@
+## collections.ayce — estructuras de datos (stdlib ayce puro)
+##
+## Implementa Stack, Queue, LinkedList, Counter, deque, OrderedDict y
+## defaultdict como Templates de ayce, sobre listas y dicts nativos.
+##
+## Templates:
+##   Stack        LIFO: push, pop, peek, size, is_empty, to_list
+##   Queue        FIFO: enqueue, dequeue, front, size, is_empty, to_list
+##   LinkedList   lista enlazada simple: prepend, append, get, len, to_list
+##   Counter      contador de apariciones: add, add_all, count, most_common, total
+##   deque        cola doble: append, append_left, pop, pop_left, rotate
+##   OrderedDict  dict ordenado: put, get, has, remove, keys, items
+##   defaultdict  dict con valor por defecto: put, get_or, inc
+
+## ─────────────────────────────────────────────────────────────────
+##  Stack — LIFO (último en entrar, primero en salir)
+## ─────────────────────────────────────────────────────────────────
+Template Stack {
+    items: int[]
+
+    task build() ;
+    {
+        self::items = []
+    }
+
+    ## Apilar
+    task push(int x) ;
+    {
+        self::items::append(x)
+    }
+
+    ## Desapilar (lanza error si está vacía)
+    task pop() = int ;
+    {
+        if self::is_empty() then
+            raise Error("Stack vacío: no se puede hacer pop", 1)
+        end
+        var n: int = self::items::len()
+        var x: int = self::items[n - 1]
+        self::items::pop()
+        return x
+    }
+
+    ## Ver el tope sin sacar (lanza error si está vacía)
+    task peek() = int ;
+    {
+        if self::is_empty() then
+            raise Error("Stack vacío: no se puede hacer peek", 1)
+        end
+        return self::items[self::items::len() - 1]
+    }
+
+    task size() = int ;
+    {
+        return self::items::len()
+    }
+
+    task is_empty() = bool ;
+    {
+        return self::items::len() == 0
+    }
+
+    task to_list() = int[] ;
+    {
+        return self::items
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  Queue — FIFO (primero en entrar, primero en salir)
+## ─────────────────────────────────────────────────────────────────
+Template Queue {
+    items: int[]
+
+    task build() ;
+    {
+        self::items = []
+    }
+
+    ## Encolar (al final)
+    task enqueue(int x) ;
+    {
+        self::items::append(x)
+    }
+
+    ## Desencolar (del frente). Lanza error si está vacía.
+    task dequeue() = int ;
+    {
+        if self::is_empty() then
+            raise Error("Queue vacía: no se puede hacer dequeue", 2)
+        end
+        var x: int = self::items[0]
+        self::items::delete(0)
+        return x
+    }
+
+    ## Ver el frente sin sacar
+    task front() = int ;
+    {
+        if self::is_empty() then
+            raise Error("Queue vacía: no hay frente", 2)
+        end
+        return self::items[0]
+    }
+
+    task size() = int ;
+    {
+        return self::items::len()
+    }
+
+    task is_empty() = bool ;
+    {
+        return self::items::len() == 0
+    }
+
+    task to_list() = int[] ;
+    {
+        return self::items
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  LinkedList — lista enlazada simple de enteros
+##  Implementada con nodos que usan `none` como marcador de fin.
+## ─────────────────────────────────────────────────────────────────
+Template Node {
+    value: int
+    next: none
+
+    task build(int v) ;
+    {
+        self::value = v
+        self::next = none
+    }
+}
+
+Template LinkedList {
+    head: none
+    size: int
+
+    task build() ;
+    {
+        self::head = none
+        self::size = 0
+    }
+
+    ## Insertar al frente (O(1))
+    task prepend(int x) ;
+    {
+        var n: Node = Node(x)
+        n::next = self::head
+        self::head = n
+        self::size = self::size + 1
+    }
+
+    ## Insertar al final (O(n))
+    task append(int x) ;
+    {
+        var n: Node = Node(x)
+        if self::head == none then
+            self::head = n
+            self::size = self::size + 1
+            return
+        end
+        var cur: none = self::head
+        while cur::next != none do
+            cur = cur::next
+        end
+        cur::next = n
+        self::size = self::size + 1
+    }
+
+    ## Obtener el valor en el índice i (O(n)). Lanza error si fuera de rango.
+    task get(int i) = int ;
+    {
+        if i < 0 || i >= self::size then
+            raise Error("Índice fuera de rango en LinkedList", 3)
+        end
+        var cur: none = self::head
+        var k: int = 0
+        while k < i do
+            cur = cur::next
+            k = k + 1
+        end
+        return cur::value
+    }
+
+    task len() = int ;
+    {
+        return self::size
+    }
+
+    task is_empty() = bool ;
+    {
+        return self::size == 0
+    }
+
+    ## Volcar a lista nativa (para inspección y tests)
+    task to_list() = int[] ;
+    {
+        var out: int[] = []
+        var cur: none = self::head
+        while cur != none do
+            out::append(cur::value)
+            cur = cur::next
+        end
+        return out
+    }
+
+    ## Buscar la primera posición de un valor. Devuelve -1 si no está.
+    task index_of(int x) = int ;
+    {
+        var cur: none = self::head
+        var i: int = 0
+        while cur != none do
+            if cur::value == x then
+                return i
+            end
+            cur = cur::next
+            i = i + 1
+        end
+        return -1
+    }
+
+    ## Eliminar el primer nodo con valor x. Devuelve True si lo borró.
+    task remove(int x) = bool ;
+    {
+        var cur: none = self::head
+        var prev: none = none
+        while cur != none do
+            if cur::value == x then
+                if prev == none then
+                    self::head = cur::next
+                else
+                    prev::next = cur::next
+                end
+                self::size = self::size - 1
+                return True
+            end
+            prev = cur
+            cur = cur::next
+        end
+        return False
+    }
+
+    ## Invertir la lista in-place
+    task reverse() ;
+    {
+        var prev: none = none
+        var cur: none = self::head
+        while cur != none do
+            var nxt: none = cur::next
+            cur::next = prev
+            prev = cur
+            cur = nxt
+        end
+        self::head = prev
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  Counter — cuenta apariciones de elementos (claves string)
+## ─────────────────────────────────────────────────────────────────
+Template Counter {
+    counts: none
+
+    task build() ;
+    {
+        self::counts = <>
+    }
+
+    ## Sumar 1 a la cuenta de un elemento
+    task add(string item) ;
+    {
+        var c: none = self::counts
+        if c::has(item) then
+            var v: int = int(c<item>)
+            c<item> = v + 1
+        else
+            c<item> = 1
+        end
+    }
+
+    ## Contar todos los elementos de una lista de strings
+    task add_all(string[] items) ;
+    {
+        for it in items do
+            self::add(it)
+        end
+    }
+
+    ## Restar 1 (si la cuenta llega a 0 se elimina la clave)
+    task subtract(string item) ;
+    {
+        var c: none = self::counts
+        if c::has(item) then
+            var v: int = int(c<item>)
+            if v <= 1 then
+                c::remove(item)
+            else
+                c<item> = v - 1
+            end
+        end
+    }
+
+    ## Cuántas veces apareció el elemento (0 si no está)
+    task count(string item) = int ;
+    {
+        var c: none = self::counts
+        if c::has(item) then
+            return int(c<item>)
+        end
+        return 0
+    }
+
+    ## ¿El elemento tiene cuenta > 0?
+    task has(string item) = bool ;
+    {
+        return self::count(item) > 0
+    }
+
+    ## Suma total de todas las cuentas
+    task total() = int ;
+    {
+        var c: none = self::counts
+        var s: int = 0
+        for k in c::keys() do
+            var kk: string = k
+            s += int(c<kk>)
+        end
+        return s
+    }
+
+    ## Cantidad de elementos distintos
+    task size() = int ;
+    {
+        return self::counts::len()
+    }
+
+    ## Claves (elementos)
+    task keys() = string[] ;
+    {
+        return self::counts::keys()
+    }
+
+    ## Los n elementos más frecuentes (descendente). Empates: orden de inserción.
+    task most_common(int n) = string[] ;
+    {
+        var c: none = self::counts
+        var ks: string[] = c::keys()
+        var out: string[] = []
+        var total_k: int = ks::len()
+        var limit: int = n
+        if limit > total_k then
+            limit = total_k
+        end
+        for _ in range(0, limit) do
+            ## buscar la clave con mayor cuenta que aún no salió
+            var best: string = ""
+            var best_v: int = -1
+            for k in ks do
+                var kk: string = k
+                var v: int = int(c<kk>)
+                if not out::contains(kk) then
+                    if v > best_v then
+                        best = kk
+                        best_v = v
+                    end
+                end
+            end
+            if best_v >= 0 then
+                out::append(best)
+            end
+        end
+        return out
+    }
+
+    ## Dict con todas las cuentas
+    task to_dict() = none ;
+    {
+        var out: none = <>
+        var c: none = self::counts
+        for k in c::keys() do
+            var kk: string = k
+            out<kk> = c<kk>
+        end
+        return out
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  deque — cola de doble extremo (de enteros)
+## ─────────────────────────────────────────────────────────────────
+Template deque {
+    items: int[]
+    max_len: int
+
+    task build() ;
+    {
+        self::items = []
+        self::max_len = 0
+    }
+
+    ## deque con longitud máxima (al llenar, se pierde por el otro lado)
+    task build_max(int maxlen) ;
+    {
+        self::items = []
+        self::max_len = maxlen
+    }
+
+    ## Agregar al final (derecha)
+    task append(int x) ;
+    {
+        self::items::append(x)
+        if self::max_len > 0 then
+            while self::items::len() > self::max_len do
+                self::items::delete(0)
+            end
+        end
+    }
+
+    ## Agregar al frente (izquierda)
+    task append_left(int x) ;
+    {
+        var nuevo: int[] = [x]
+        nuevo::extend(self::items)
+        self::items = nuevo
+        if self::max_len > 0 then
+            while self::items::len() > self::max_len do
+                self::items::delete(self::items::len() - 1)
+            end
+        end
+    }
+
+    ## Sacar del final (derecha). Error si está vacío.
+    task pop() = int ;
+    {
+        if self::is_empty() then
+            raise Error("deque vacío: pop", 20)
+        end
+        var x: int = self::items::last()
+        self::items::delete(self::items::len() - 1)
+        return x
+    }
+
+    ## Sacar del frente (izquierda). Error si está vacío.
+    task pop_left() = int ;
+    {
+        if self::is_empty() then
+            raise Error("deque vacío: pop_left", 20)
+        end
+        var x: int = self::items::first()
+        self::items::delete(0)
+        return x
+    }
+
+    task peek() = int ;
+    {
+        if self::is_empty() then
+            raise Error("deque vacío: peek", 20)
+        end
+        return self::items::last()
+    }
+
+    task peek_left() = int ;
+    {
+        if self::is_empty() then
+            raise Error("deque vacío: peek_left", 20)
+        end
+        return self::items::first()
+    }
+
+    ## Rotar n pasos a la derecha (n negativo rota a la izquierda)
+    task rotate(int n) ;
+    {
+        var len: int = self::items::len()
+        if len == 0 then
+            return
+        end
+        var k: int = n
+        while k < 0 do
+            k = k + len
+        end
+        k = k % len
+        var i: int = 0
+        while i < k do
+            var last_val: int = self::items::last()
+            ## mover el último al frente
+            var nuevo: int[] = [last_val]
+            var j: int = 0
+            while j < len - 1 do
+                nuevo::append(self::items[j])
+                j = j + 1
+            end
+            self::items = nuevo
+            len = self::items::len()
+            i = i + 1
+        end
+    }
+
+    task size() = int ;
+    {
+        return self::items::len()
+    }
+
+    task is_empty() = bool ;
+    {
+        return self::items::len() == 0
+    }
+
+    task clear() ;
+    {
+        self::items = []
+    }
+
+    task to_list() = int[] ;
+    {
+        return self::items
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  OrderedDict — dict que recuerda el orden de inserción
+## ─────────────────────────────────────────────────────────────────
+Template OrderedDict {
+    keys_list: string[]
+    values_map: none
+
+    task build() ;
+    {
+        self::keys_list = []
+        self::values_map = <>
+    }
+
+    ## Insertar o actualizar (claves string)
+    task put(string k, none v) ;
+    {
+        var m: none = self::values_map
+        if not m::has(k) then
+            self::keys_list::append(k)
+        end
+        m<k> = v
+    }
+
+    ## Obtener (default si no existe)
+    task get(string k, none default) = none ;
+    {
+        var m: none = self::values_map
+        if m::has(k) then
+            return m<k>
+        end
+        return default
+    }
+
+    task has(string k) = bool ;
+    {
+        return self::values_map::has(k)
+    }
+
+    task remove(string k) = bool ;
+    {
+        var m: none = self::values_map
+        if m::has(k) then
+            m::remove(k)
+            var idx: int = self::keys_list::index(k)
+            if idx >= 0 then
+                self::keys_list::delete(idx)
+            end
+            return True
+        end
+        return False
+    }
+
+    task keys() = string[] ;
+    {
+        return self::keys_list
+    }
+
+    ## Lista de pares [ [k1, v1], [k2, v2], ... ] en orden de inserción
+    task items() = none[] ;
+    {
+        var m: none = self::values_map
+        var out: none[] = []
+        for k in self::keys_list do
+            var kk: string = k
+            var par: none[] = [kk, m<kk>]
+            out::append(par)
+        end
+        return out
+    }
+
+    task size() = int ;
+    {
+        return self::keys_list::len()
+    }
+
+    task clear() ;
+    {
+        self::keys_list = []
+        self::values_map = <>
+    }
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  defaultdict — dict con valor por defecto para claves nuevas
+## ─────────────────────────────────────────────────────────────────
+Template defaultdict {
+    data: none
+    default_value: none
+
+    task build(none defval) ;
+    {
+        self::data = <>
+        self::default_value = defval
+    }
+
+    task put(string k, none v) ;
+    {
+        var d: none = self::data
+        d<k> = v
+    }
+
+    ## Devuelve el valor o el default (sin insertarlo)
+    task get_or(string k) = none ;
+    {
+        var d: none = self::data
+        if d::has(k) then
+            return d<k>
+        end
+        return self::default_value
+    }
+
+    ## Devuelve el valor; si no existe, inserta y devuelve el default
+    ## (comportamiento de defaultdict de Python)
+    task get_or_insert(string k) = none ;
+    {
+        var d: none = self::data
+        if d::has(k) then
+            return d<k>
+        end
+        d<k> = self::default_value
+        return self::default_value
+    }
+
+    ## Incrementar una clave numérica (empieza desde el default si es nueva)
+    task inc(string k, int by) ;
+    {
+        var d: none = self::data
+        var actual: int = 0
+        if d::has(k) then
+            actual = int(d<k>)
+        else
+            actual = int(self::default_value)
+        end
+        d<k> = actual + by
+    }
+
+    task has(string k) = bool ;
+    {
+        return self::data::has(k)
+    }
+
+    task remove(string k) = bool ;
+    {
+        var d: none = self::data
+        return d::remove(k)
+    }
+
+    task keys() = string[] ;
+    {
+        return self::data::keys()
+    }
+
+    task size() = int ;
+    {
+        return self::data::len()
+    }
+
+    task to_dict() = none ;
+    {
+        var out: none = <>
+        var d: none = self::data
+        for k in d::keys() do
+            var kk: string = k
+            out<kk> = d<kk>
+        end
+        return out
+    }
+}

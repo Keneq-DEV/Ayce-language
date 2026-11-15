@@ -1,0 +1,125 @@
+## functools.ayce — herramientas de orden superior (stdlib ayce puro)
+##
+## Tareas:
+##   reduce(f, xs, init)        reduce la lista con f(acc, x) (izquierda)
+##   identity(x)                devuelve x sin cambios
+##   apply(f, x)                llama f(x)
+##   flip(f, a, b)              llama f(b, a)
+##   compose2(f, g, x)          f(g(x))
+##   compose3(f, g, h, x)       f(g(h(x)))
+##   pipe2/3/4                  igual, en orden inverso de aplicación
+##   sum_list(xs)               suma de enteros
+##   product_list(xs)           producto de enteros
+##
+## Memoización:
+##   memoize(f)                 devuelve un Memoizer (caché de resultados)
+##   Memoizer::call(x)          valor de f(x) (con caché)
+##   Memoizer::hits/misses()    estadísticas de caché
+##   Memoizer::clear()          vacía el caché
+##
+## Nota: ayce no tiene closures todavía, así que `partial` no puede
+## capturar argumentos. Para eso, usá un Template que guarde el estado.
+
+task reduce(task f, int[] xs, int init) = int ;
+{
+    var acc: int = init
+    var i: int = 0
+    while i < xs::len() do
+        acc = f(acc, xs[i])
+        i = i + 1
+    end
+    return acc
+}
+
+task identity(int x) = int => x
+
+task apply(task f, int x) = int => f(x)
+
+task flip(task f, int a, int b) = int => f(b, a)
+
+task compose2(task f, task g, int x) = int => f(g(x))
+
+task compose3(task f, task g, task h, int x) = int => f(g(h(x)))
+
+task pipe2(task f, task g, int x) = int => g(f(x))
+
+task pipe3(task f, task g, task h, int x) = int => h(g(f(x)))
+
+task pipe4(task f, task g, task h, task k, int x) = int => k(h(g(f(x))))
+
+task sum_list(int[] xs) = int ;
+{
+    var s: int = 0
+    for x in xs do
+        s += x
+    end
+    return s
+}
+
+task product_list(int[] xs) = int ;
+{
+    var p: int = 1
+    for x in xs do
+        p = p * x
+    end
+    return p
+}
+
+## ─────────────────────────────────────────────────────────────────
+##  Memoizer — caché de resultados de una task de 1 argumento
+## ─────────────────────────────────────────────────────────────────
+Template Memoizer {
+    fn: task
+    cache: none
+    hits_count: int
+    misses_count: int
+
+    task build(task f) ;
+    {
+        self::fn = f
+        self::cache = <>
+        self::hits_count = 0
+        self::misses_count = 0
+    }
+
+    ## Devuelve f(x); la primera vez calcula, las demás usa el caché
+    task call(int x) = int ;
+    {
+        var c: none = self::cache
+        var k: string = string(x)
+        if c::has(k) then
+            self::hits_count += 1
+            return int(c<k>)
+        end
+        self::misses_count += 1
+        var f: task = self::fn
+        var v: int = f(x)
+        c<k> = v
+        return v
+    }
+
+    task hits() = int ;
+    {
+        return self::hits_count
+    }
+
+    task misses() = int ;
+    {
+        return self::misses_count
+    }
+
+    task cache_size() = int ;
+    {
+        return self::cache::len()
+    }
+
+    task clear() ;
+    {
+        self::cache = <>
+        self::hits_count = 0
+        self::misses_count = 0
+    }
+}
+
+## Crea un Memoizer para la task f (de 1 argumento int)
+task memoize(task f) = Memoizer => Memoizer(f)

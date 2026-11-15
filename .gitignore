@@ -1,5 +1,5 @@
 .git/
 __pycache__/
 *.py[cod]
-*.egg-info/
 ignora.txt
+alg.py

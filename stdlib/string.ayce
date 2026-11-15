@@ -1,0 +1,522 @@
+## string.ayce — utilidades de cadenas y plantillas EN AYCE PURO (v0.6.0).
+## Toda la lógica corre aquí, escrita en ayce, igual que string.py de
+## CPython está escrito en Python. El contacto con la máquina es cero:
+## sólo el lenguaje (strings, ord/chr del intérprete, bucles y métodos
+## nativos de string: len/split/slice/find/replace/starts_with/...).
+##
+## Técnicas:
+##   - upper/lower/capitalize/title/swapcase: recorrido carácter a
+##     carácter con ord/chr y tablas de equivalencias (ASCII + Latin-1),
+##     porque el lenguaje no trae conversión de mayúsculas integrada.
+##   - pad/ljust/rjust/center/zfill: relleno por repetición con repeat().
+##   - Plantilla estilo string.Template: el constructor parsea los
+##     identificadores ($nombre y ${nombre}) y substitute/safe_substitute
+##     reemplazan contra un diccionario de valores.
+
+## ── Tablas de caracteres (constantes del módulo) ──
+const ascii_lowercase: string = "abcdefghijklmnopqrstuvwxyz"
+const ascii_uppercase: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const ascii_letters: string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const digits: string = "0123456789"
+const octdigits: string = "01234567"
+const hexdigits: string = "0123456789abcdefABCDEF"
+const punctuation: string = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+const whitespace: string = " \t\n\r\x0b\x0c"
+## Latin-1: pares minúscula/mayúscula con acentos (à-ÿ, menos ÷×)
+const _latin1_min: string = "àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ"
+const _latin1_may: string = "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝ"
+
+## ── Conversión de un carácter (minúscula→mayúscula y al revés) ──
+task _may_char(string ch) = string ;
+{
+    var code: int = ord(ch)
+    ## ASCII: a-z → A-Z (restar 32)
+    if code >= 97 && code <= 122 then
+        return chr(code - 32)
+    end
+    ## Latin-1: buscar en la tabla de pares
+    var i: int = 0
+    while i < _latin1_min::len() do
+        if _latin1_min[i] == ch then
+            return _latin1_may[i]
+        end
+        i += 1
+    end
+    return ch
+}
+
+task _min_char(string ch) = string ;
+{
+    var code: int = ord(ch)
+    if code >= 65 && code <= 90 then
+        return chr(code + 32)
+    end
+    var i: int = 0
+    while i < _latin1_may::len() do
+        if _latin1_may[i] == ch then
+            return _latin1_min[i]
+        end
+        i += 1
+    end
+    return ch
+}
+
+## ── Funciones básicas ──
+task length(string s) = int ;
+{
+    return s::len()
+}
+
+task upper(string s) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        out += _may_char(s[i])
+        i += 1
+    end
+    return out
+}
+
+task lower(string s) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        out += _min_char(s[i])
+        i += 1
+    end
+    return out
+}
+
+task reverse(string s) = string ;
+{
+    ## el método reverse() del lenguaje invierte la cadena
+    return s::reverse()
+}
+
+task repeat(string s, int n) = string ;
+{
+    if n <= 0 then
+        return ""
+    end
+    return s::repeat(n)
+}
+
+task contains(string s, string sub) = bool ;
+{
+    return s::contains(sub)
+}
+
+task starts_with(string s, string s2) = bool ;
+{
+    return s::starts_with(s2)
+}
+
+task ends_with(string s, string s2) = bool ;
+{
+    return s::ends_with(s2)
+}
+
+task replace(string s, string viejo, string nuevo) = string ;
+{
+    ## replace() del lenguaje reemplaza TODAS las apariciones,
+    ## igual que str.replace de CPython
+    return s::replace(viejo, nuevo)
+}
+
+task trim(string s) = string ;
+{
+    return s::trim()
+}
+
+task split(string s, string sep) = none[] ;
+{
+    ## sin separador explícito (cadena vacía) → lista de caracteres
+    if sep == "" then
+        var chars: none[] = []
+        var i: int = 0
+        while i < s::len() do
+            chars::append(s[i])
+            i += 1
+        end
+        return chars
+    end
+    return s::split(sep)
+}
+
+task join(none[] sep, string partes) | (none() sep, string partes) ;
+{
+    ## join(partes, separador): la firma histórica llama "sep" al primer
+    ## parámetro pero recibe la LISTA de partes, y "partes" recibe el
+    ## separador — como str.join de CPython: sep.join(partes)
+    var out: string = ""
+    var i: int = 0
+    while i < sep::len() do
+        if i > 0 then
+            out += partes
+        end
+        out += sep[i]
+        i += 1
+    end
+    return out
+}
+
+task find(string s, string sub) = int ;
+{
+    return s::find(sub)
+}
+
+task slice(string s, int inicio, int fin) = string ;
+{
+    return s::slice(inicio, fin)
+}
+
+## ── Relleno y alineación ──
+task pad_left(string s, int ancho) = string ;
+{
+    ## rjust: rellena con espacios por la izquierda
+    if s::len() >= ancho then
+        return s
+    end
+    return repeat(" ", ancho - s::len()) + s
+}
+
+task pad_right(string s, int ancho) = string ;
+{
+    if s::len() >= ancho then
+        return s
+    end
+    return s + repeat(" ", ancho - s::len())
+}
+
+task pad_center(string s, int n) = string ;
+{
+    return center(s, n)
+}
+
+task to_int(string s) ;
+{
+    ## el cast int() del intérprete falla con error si no es numérico,
+    ## igual que int() de CPython
+    return int(s)
+}
+
+task to_float(string s) ;
+{
+    return float(s)
+}
+
+task capitalize(string s) = string ;
+{
+    ## primera letra a mayúscula, el resto a minúscula
+    if s::len() == 0 then
+        return s
+    end
+    return _may_char(s[0]) + lower(s::slice(1, s::len()))
+}
+
+task title(string s) = string ;
+{
+    ## cada palabra con inicial mayúscula (como str.title)
+    var out: string = ""
+    var nueva_palabra: bool = True
+    var i: int = 0
+    while i < s::len() do
+        var ch: string = s[i]
+        var es_letra: bool = contains(ascii_letters, ch) || contains(_latin1_min, ch) || contains(_latin1_may, ch)
+        if es_letra then
+            if nueva_palabra then
+                out += _may_char(ch)
+                nueva_palabra = False
+            else
+                out += _min_char(ch)
+            end
+        else
+            out += ch
+            nueva_palabra = True
+        end
+        i += 1
+    end
+    return out
+}
+
+task count(string s, string sub) = int ;
+{
+    ## cuenta apariciones NO solapadas, como str.count
+    if sub == "" then
+        return s::len() + 1
+    end
+    var n: int = 0
+    var pos: int = _find_from(s, sub, 0)
+    while pos != -1 do
+        n += 1
+        pos = _find_from(s, sub, pos + sub::len())
+    end
+    return n
+}
+
+## find con punto de partida (s::find del lenguaje no admite offset)
+task _find_from(string s, string sub, int desde) = int ;
+{
+    if desde >= s::len() then
+        return -1
+    end
+    var cola: string = s::slice(desde, s::len())
+    var rel: int = cola::find(sub)
+    if rel == -1 then
+        return -1
+    end
+    return desde + rel
+}
+
+task center(string s, int n) | (string s, int n, string s3) = string ;
+{
+    return _center_fill(s, n, " ")
+    |
+    return _center_fill(s, n, s3)
+}
+
+task _center_fill(string s, int ancho, string relleno) = string ;
+{
+    if s::len() >= ancho then
+        return s
+    end
+    var total: int = ancho - s::len()
+    var izq: int = total // 2
+    var der: int = total - izq
+    return repeat(relleno, izq) + s + repeat(relleno, der)
+}
+
+task swapcase(string s) = string ;
+{
+    var out: string = ""
+    var i: int = 0
+    while i < s::len() do
+        var ch: string = s[i]
+        var code: int = ord(ch)
+        if code >= 65 && code <= 90 then
+            out += chr(code + 32)
+        else if code >= 97 && code <= 122 then
+            out += chr(code - 32)
+        else
+            out += ch
+        end
+        i += 1
+    end
+    return out
+}
+
+task zfill(string s, int n) = string ;
+{
+    ## rellena con ceros por la izquierda conservando el signo
+    if s::len() >= n then
+        return s
+    end
+    if s::starts_with("-") || s::starts_with("+") then
+        var signo: string = s[0]
+        var cuerpo: string = s::slice(1, s::len())
+        return signo + repeat("0", n - s::len()) + cuerpo
+    end
+    return repeat("0", n - s::len()) + s
+}
+
+task ljust(string s, int n) | (string s, int n, stdlib::Cualquiera arg) = string ;
+{
+    return _ljust_espacios(s, n)
+    |
+    return _ljust_espacios(s, n)
+}
+
+task _ljust_espacios(string s, int n) = string ;
+{
+    if s::len() >= n then
+        return s
+    end
+    return s + repeat(" ", n - s::len())
+}
+
+task rjust(string s, int n) | (string s, int n, stdlib::Cualquiera arg) = string ;
+{
+    return _rjust_espacios(s, n)
+    |
+    return _rjust_espacios(s, n)
+}
+
+task _rjust_espacios(string s, int n) = string ;
+{
+    if s::len() >= n then
+        return s
+    end
+    return repeat(" ", n - s::len()) + s
+}
+
+## ── Plantillas estilo string.Template ──
+## El Template guarda la fuente y las claves detectadas; substitute
+## reemplaza $nombre y ${nombre} por los valores del diccionario.
+Template Plantilla {
+    fuente: string
+    claves: string[]
+
+    task build(string f) ;
+    {
+        self::fuente = f
+        self::claves = _extraer_claves(f)
+    }
+}
+
+## extrae los identificadores de la plantilla (soporta $id y ${id})
+task _extraer_claves(string f) = string[] ;
+{
+    var claves: string[] = []
+    var i: int = 0
+    var n: int = f::len()
+    while i < n do
+        if f[i] == "$" && i + 1 < n then
+            var nxt: string = f[i + 1]
+            if nxt == "{" then
+                ## forma ${identificador}
+                var cierre: int = _find_from(f, "}", i + 2)
+                if cierre != -1 then
+                    claves::append(f::slice(i + 2, cierre))
+                    i = cierre + 1
+                else
+                    i += 1
+                end
+            else if _es_id_char(nxt) then
+                ## forma $identificador
+                var j: int = i + 1
+                while j < n && _es_id_char(f[j]) do
+                    j += 1
+                end
+                claves::append(f::slice(i + 1, j))
+                i = j
+            else
+                ## "$" suelto (o $$): no es clave
+                i += 1
+            end
+        else
+            i += 1
+        end
+    end
+    return claves
+}
+
+task _es_id_char(string ch) = bool ;
+{
+    var code: int = ord(ch)
+    var es_letra: bool = (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code == 95
+    var es_dig: bool = code >= 48 && code <= 57
+    return es_letra || es_dig
+}
+
+task template(string f) = stdlib::Plantilla ;
+{
+    return Plantilla(f)
+}
+
+## reemplaza TODAS las claves; falla si falta alguna (como substitute)
+task substitute(stdlib::Plantilla plantilla, none<> valores) = string ;
+{
+    var out: string = ""
+    var f: string = plantilla::fuente
+    var i: int = 0
+    var n: int = f::len()
+    while i < n do
+        if f[i] == "$" && i + 1 < n then
+            var nxt: string = f[i + 1]
+            if nxt == "$" then
+                ## escape $$ → un solo $
+                out += "$"
+                i += 2
+            else if nxt == "{" then
+                var cierre: int = _find_from(f, "}", i + 2)
+                var clave: string = f::slice(i + 2, cierre)
+                if !valores::has(clave) then
+                    say_error_clave(clave)
+                end
+                out += string(valores<clave>)
+                i = cierre + 1
+            else if _es_id_char(nxt) then
+                var j: int = i + 1
+                while j < n && _es_id_char(f[j]) do
+                    j += 1
+                end
+                var clave: string = f::slice(i + 1, j)
+                if !valores::has(clave) then
+                    say_error_clave(clave)
+                end
+                out += string(valores<clave>)
+                i = j
+            else
+                out += f[i]
+                i += 1
+            end
+        else
+            out += f[i]
+            i += 1
+        end
+    end
+    return out
+}
+
+## igual que substitute pero deja $clave intacta si falta el valor
+task safe_substitute(stdlib::Plantilla plantilla, none<> valores) = string ;
+{
+    var out: string = ""
+    var f: string = plantilla::fuente
+    var i: int = 0
+    var n: int = f::len()
+    while i < n do
+        if f[i] == "$" && i + 1 < n then
+            var nxt: string = f[i + 1]
+            if nxt == "$" then
+                out += "$"
+                i += 2
+            else if nxt == "{" then
+                var cierre: int = _find_from(f, "}", i + 2)
+                if cierre == -1 then
+                    out += f[i]
+                    i += 1
+                else
+                    var clave: string = f::slice(i + 2, cierre)
+                    if valores::has(clave) then
+                        out += string(valores<clave>)
+                        i = cierre + 1
+                    else
+                        out += f::slice(i, cierre + 1)
+                        i = cierre + 1
+                    end
+                end
+            else if _es_id_char(nxt) then
+                var j: int = i + 1
+                while j < n && _es_id_char(f[j]) do
+                    j += 1
+                end
+                var clave: string = f::slice(i + 1, j)
+                if valores::has(clave) then
+                    out += string(valores<clave>)
+                    i = j
+                else
+                    out += f::slice(i, j)
+                    i = j
+                end
+            else
+                out += f[i]
+                i += 1
+            end
+        else
+            out += f[i]
+            i += 1
+        end
+    end
+    return out
+}
+
+task say_error_clave(string clave) ;
+{
+    ## substitute() de CPython lanza KeyError; aquí el error nativo
+    ## del intérprete es el equivalente (acceso a clave inexistente)
+    var d: none<> = <>
+    var v: stdlib::Cualquiera = d<clave>
+}

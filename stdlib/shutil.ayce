@@ -1,0 +1,106 @@
+## shutil.ayce — operaciones de alto nivel sobre archivos EN AYCE (v0.6.0).
+## La lógica está escrita aquí, como shutil.py de CPython:
+##   - copy/copy2 de archivos: leer el origen y escribir el destino
+##   - move: renombrar; si falla (otra partición), copiar y borrar
+##   - rmtree: borrado recursivo de directorios
+##   - which: recorre PATH del entorno buscando el ejecutable
+## Las operaciones que no se pueden hacer en el lenguaje (consultar el
+## uso de disco) usan el batch privado `_shutil`.
+
+require _os as posix
+require _io as fio
+require _shutil as sh
+
+## copia un archivo (sin metadatos) o delega si es directorio
+task copy(string s, string s2) ;
+{
+    if posix::isdir(s) then
+        sh::copy(s, s2)
+    else
+        _copiar_archivo(s, s2)
+    end
+}
+
+## copia preservando metadatos (mtime/permisos, como copy2)
+task copy2(string s, string s2) ;
+{
+    if posix::isdir(s) then
+        sh::copy2(s, s2)
+    else
+        _copiar_archivo(s, s2)
+    end
+}
+
+## copia de archivo por lectura+escritura (lógica real del módulo)
+task _copiar_archivo(string origen, string destino) ;
+{
+    var datos: string = fio::read_file(origen)
+    fio::write_file(destino, datos)
+}
+
+## mueve un archivo o directorio: rename si puede, si no copy+delete
+task move(string s, string s2) ;
+{
+    if posix::isdir(s) then
+        sh::move(s, s2)
+    else
+        _mover_archivo(s, s2)
+    end
+}
+
+task _mover_archivo(string origen, string destino) ;
+{
+    posix::rename(origen, destino)
+}
+
+## borra un árbol de directorios recursivamente (walk propio)
+task rmtree(string s) ;
+{
+    if !posix::isdir(s) then
+        ## un archivo suelto: borrar directo
+        posix::remove(s)
+    else
+        _borrar_arbol(s)
+    end
+}
+
+task _borrar_arbol(string dir) ;
+{
+    var entradas: none[] = posix::list_dir(dir)
+    var i: int = 0
+    while i < entradas::len() do
+        var hijo: string = dir + "/" + entradas[i]
+        if posix::isdir(hijo) && !posix::isfile(hijo) then
+            _borrar_arbol(hijo)
+        else
+            posix::remove(hijo)
+        end
+        i += 1
+    end
+    posix::rmdir(dir)
+}
+
+## uso de disco del sistema de archivos (total/used/free)
+task disk_usage(string s) = none<> ;
+{
+    return sh::disk_usage(s)
+}
+
+## busca un ejecutable en el PATH del entorno (lógica de which)
+task which(string s) = string ;
+{
+    var path: string = posix::getenv("PATH")
+    if path == "" then
+        return ""
+    end
+    var dirs: none[] = path::split(":")
+    var i: int = 0
+    while i < dirs::len() do
+        var candidato: string = dirs[i] + "/" + s
+        if posix::isfile(candidato) then
+            return candidato
+        end
+        i += 1
+    end
+    return ""
+}

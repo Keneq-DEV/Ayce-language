@@ -1,0 +1,41 @@
+## test_fractions.ayce — pruebas de fractions (ayce puro)
+require fractions as F
+
+var a: F::Fraction = F::fraction(1, 3)
+var b: F::Fraction = F::fraction(1, 6)
+
+say("1/3 + 1/6 = " + a::add(b)::to_string() + " (1/2)")
+say("1/3 - 1/6 = " + a::sub(b)::to_string() + " (1/6)")
+say("1/3 * 1/6 = " + a::mul(b)::to_string() + " (1/18)")
+say("1/3 / 1/6 = " + a::div(b)::to_string() + " (2)")
+say("fraction(2, 4) normalizada: " + F::fraction(2, 4)::to_string() + " (1/2)")
+say("fraction(-3, 6): " + F::fraction(-3, 6)::to_string() + " (-1/2)")
+say("fraction(3, -6): " + F::fraction(3, -6)::to_string() + " (-1/2)")
+say("numerator(3/4): " + string(F::numerator(F::fraction(3, 4))) + " (3)")
+say("denominator(3/4): " + string(F::denominator(F::fraction(3, 4))) + " (4)")
+say("value(1/2): " + string(F::fraction(1, 2)::value()) + " (0.5)")
+say("eq(1/2, 2/4): " + string(F::fraction(1, 2)::eq(F::fraction(2, 4))) + " (True)")
+say("lt(1/3, 1/2): " + string(F::fraction(1, 3)::lt(F::fraction(1, 2))) + " (True)")
+say("is_zero(0/5): " + string(F::fraction(0, 5)::is_zero()) + " (True)")
+say("is_negative(-1/2): " + string(F::fraction(-1, 2)::is_negative()) + " (True)")
+say("gcd(12, 18): " + string(F::gcd(12, 18)) + " (6)")
+say("lcm(4, 6): " + string(F::lcm(4, 6)) + " (12)")
+say("abs(-3/4): " + F::fraction(-3, 4)::abs_frac()::to_string() + " (3/4)")
+
+## aproximación de pi ≈ 3.14159
+var pi_aprox: F::Fraction = F::from_float(3.14159, 100)
+say("pi ≈ " + pi_aprox::to_string() + " (" + string(pi_aprox::value()) + ")")
+
+## cadena de operaciones
+var media: F::Fraction = F::fraction(1, 2)::add(F::fraction(1, 3))::div(F::fraction(2, 1))
+say("(1/2 + 1/3) / 2 = " + media::to_string() + " (5/12)")
+
+## error: denominador cero
+try
+    F::fraction(1, 0)
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_fractions")

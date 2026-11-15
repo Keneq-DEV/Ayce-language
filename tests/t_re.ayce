@@ -1,0 +1,47 @@
+## t_re.ayce — motor regex puro: mismos casos que re de CPython
+require re as R
+
+## match básico
+var m: none = R::match("hola", "hola mundo")
+say("match:", m<"match">, m<"start">, m<"end">)         ## hola 0 4
+say("match falla:", R::match("mundo", "hola") == none)  ## True
+## search encuentra en cualquier posición
+var s: none = R::search("mundo", "hola mundo cruel")
+say("search:", s<"start">, s<"end">)                    ## 5 10
+## clases y escapes
+say("\\d+:", R::search("\\d+", "abc 123 def")<"match">)            ## 123
+say("\\w+:", R::search("\\w+", "  hola ")<"match">)                ## hola
+say("\\s:", R::search("\\s", "ab cd")<"start">)                    ## 2
+say("\\W:", R::search("\\W", "ab!cd")<"match">)                    ## !
+say("[abc]+:", R::search("[abc]+", "xxabcyy")<"match">)            ## abc
+say("[^abc]+:", R::search("[^abc]+", "abxyz")<"match">)            ## xyz
+say("[a-z]+:", R::search("[a-z]+", "123abc456")<"match">)          ## abc
+## cuantificadores
+say("a*:", R::match("a*b", "aaab")<"match">)                       ## aaab
+say("a+:", R::match("a+b", "aaab")<"match">)                       ## aaab
+say("a?:", R::match("a?b", "b")<"match">)                          ## b
+say("a{3}:", R::match("a{3}", "aaa")<"match">)                     ## aaa
+say("a{2,4}:", R::match("a{2,4}", "aaaaa")<"match">)               ## aaaa
+say("a{2,}:", R::match("a{2,}", "aaaa")<"match">)                  ## aaaa
+say("lazy:", R::search("<.+?>", "<a><b>")<"match">)                ## <a>
+say("greedy:", R::search("<.+>", "<a><b>")<"match">)               ## <a><b>
+## grupos
+var g: none = R::match("(\\d+)-(\\d+)", "12-345")
+say("grupos:", g<"groups">)                                        ## ["12", "345"]
+say("group0:", g<"match">)                                         ## 12-345
+## alternación
+var alt: none = R::search("gato|perro", "tengo un perro")
+say("alt:", alt<"match">)                                          ## perro
+## anclas
+say("b:\\d+", R::search("\\b\\d+\\b", "x 42 y")<"match">)          ## 42
+say("punto no \\n:", R::match("a.b", "a\\nb") == none)             ## True
+say("findall:", R::find_all("\\d+", "a1bb22ccc333"))               ## ["1","22","333"]
+say("findall grupos:", R::find_all("(\\w+)@(\\w+)", "x@y z@w"))    ## [["x","y"],["z","w"]]
+say("replace:", R::replace("o", "hola mundo", "0"))                ## h0la mund0
+say("replace backref:", R::replace("(\\w+) (\\w+)", "hola mundo", "\\2 \\1"))  ## mundo hola
+say("split:", R::split(",", "a,b,,c"))                             ## ["a","b","","c"]
+say("split ws:", R::split("\\s+", "uno dos tres"))                 ## ["uno","dos","tres"]
+## IGNORECASE
+var ig: none = R::search("HOLA", "hola mundo", R::IGNORECASE)
+say("ignorecase:", ig != none)                                     ## True
+say("OK re")

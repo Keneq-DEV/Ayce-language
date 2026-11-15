@@ -1,0 +1,173 @@
+## email.ayce — construcción y parseo de emails EN AYCE PURO (v0.6.0).
+## El formato RFC 822 (cabeceras + cuerpo separados por línea vacía)
+## es tratamiento de texto: como email.py de CPython es Python puro,
+## aquí build() arma el mensaje con sus cabeceras MIME, parse()
+## separa cabeceras (incluidas las plegadas en varias líneas) y
+## extrae la parte text/plain, y format_addr() cita el nombre según
+## RFC 2047 como email.utils.formataddr.
+
+## build(subject, from, to, body, [html]) → mensaje RFC 822 completo
+task build(string s, string s2, string s3, string s4) = string ;
+{
+    return _plano(s, s2, s3, s4)
+}
+
+task _plano(string asunto, string remitente, string destino, string cuerpo) = string ;
+{
+    var out: string = ""
+    out += "Subject: " + asunto + "\r\n"
+    out += "From: " + remitente + "\r\n"
+    out += "To: " + destino + "\r\n"
+    out += "MIME-Version: 1.0\r\n"
+    out += "Content-Type: text/plain; charset=\"utf-8\"\r\n"
+    out += "Content-Transfer-Encoding: 8bit\r\n"
+    out += "\r\n"
+    out += cuerpo
+    ## set_content de CPython termina el mensaje con \r\n
+    if !cuerpo::ends_with("\n") then
+        out += "\r\n"
+    end
+    return out
+}
+
+## parse(msg) → dict {subject, from, to, body, headers, is_multipart}
+task parse(string s) = none<> ;
+{
+    var out: none<> = <>
+    var cabeceras: none<> = <>
+    var cuerpo: string = ""
+    var es_multi: bool = False
+    var tipo: string = ""
+    ## separar cabeceras del cuerpo en la primera línea vacía
+    var fin_cab: int = s::find("\n\r\n")
+    var sep: int = 2
+    if fin_cab == -1 then
+        fin_cab = s::find("\n\n")
+        sep = 1
+    end
+    var bloque: string = ""
+    if fin_cab != -1 then
+        bloque = s::slice(0, fin_cab + 1)
+        cuerpo = s::slice(fin_cab + 1 + sep, s::len())
+    else
+        ## todo cabeceras (sin cuerpo) o mensaje con líneas sueltas
+        bloque = s
+        cuerpo = ""
+    end
+    ## parsear cabeceras: "Clave: valor" con plegado (líneas que
+    ## empiezan con espacio/tab son continuación de la anterior)
+    var lineas: none[] = bloque::split("\n")
+    var i: int = 0
+    var ultima: string = ""
+    while i < lineas::len() do
+        var linea: string = lineas[i]
+        linea = _quita_cr(linea)
+        if linea == "" then
+            i += 1
+            continue
+        end
+        if (linea::starts_with(" ") || linea::starts_with("\t")) && ultima != "" then
+            ## continuación plegada: se añade al valor anterior
+            cabeceras<ultima> = _valor_cab(cabeceras<ultima>, linea::trim())
+            i += 1
+            continue
+        end
+        var dos: int = linea::find(":")
+        if dos != -1 then
+            var clave: string = linea::slice(0, dos)::lower()
+            var valor: string = linea::slice(dos + 1, linea::len())::trim()
+            cabeceras<clave> = valor
+            ultima = clave
+        end
+        i += 1
+    end
+    if cabeceras::has("content-type") then
+        tipo = cabeceras<"content-type">
+        es_multi = tipo::starts_with("multipart/")
+    end
+    ## cuerpo: si es multipart, extraer la primera parte text/plain
+    if es_multi then
+        cuerpo = _parte_plana(s, tipo, cuerpo)
+    end
+    out<"subject"> = _cab_o_vacio(cabeceras, "subject")
+    out<"from"> = _cab_o_vacio(cabeceras, "from")
+    out<"to"> = _cab_o_vacio(cabeceras, "to")
+    out<"body"> = _quita_cr(cuerpo)
+    out<"headers"> = cabeceras
+    out<"is_multipart"> = es_multi
+    return out
+}
+
+task _quita_cr(string s) = string ;
+{
+    return s::replace("\r", "")
+}
+
+task _cab_o_vacio(none<> cabeceras, string clave) = string ;
+{
+    if cabeceras::has(clave) then
+        return cabeceras<clave>
+    end
+    return ""
+}
+
+task _valor_cab(string anterior, string continuacion) = string ;
+{
+    return anterior + " " + continuacion
+}
+
+## extrae la primera parte text/plain de un multipart
+task _parte_plana(string mensaje, string tipo, string cuerpo) = string ;
+{
+    ## límite del multipart (boundary=... en la cabecera)
+    var p: int = tipo::find("boundary=\"")
+    if p == -1 then
+        return cuerpo
+    end
+    var cola: string = tipo::slice(p + 10, tipo::len())
+    var cierre: int = cola::find("\"")
+    if cierre == -1 then
+        return cuerpo
+    end
+    var limite: string = cola::slice(0, cierre)
+    var partes: none[] = cuerpo::split("--" + limite)
+    var i: int = 0
+    while i < partes::len() do
+        var parte: string = partes[i]
+        if parte::contains("Content-Type: text/plain") || parte::contains("content-type: text/plain") then
+            ## quitar las cabeceras internas de la parte
+            var vacio: int = parte::find("\n\n")
+            if vacio != -1 then
+                return _quita_cr(parte::slice(vacio + 2, parte::len()))
+            end
+        end
+        i += 1
+    end
+    return _quita_cr(cuerpo)
+}
+
+## format_addr(nombre, email) — como email.utils.formataddr
+## cita el nombre si contiene caracteres especiales
+task format_addr(string s, string s2) = string ;
+{
+    if s == "" then
+        return s2
+    end
+    ## caracteres que fuerzan el entrecomillado del nombre
+    var especiales: string = "()<>[]:;@\\,.\""
+    var necesita: bool = False
+    var i: int = 0
+    while i < especiales::len() do
+        if s::contains(especiales[i]) then
+            necesita = True
+        end
+        i += 1
+    end
+    if necesita then
+        ## escapar \ y " y envolver en comillas
+        var escapado: string = s::replace("\\", "\\\\")
+        escapado = escapado::replace("\"", "\\\"")
+        return "\"" + escapado + "\" <" + s2 + ">"
+    end
+    return s + " <" + s2 + ">"
+}

@@ -1,0 +1,91 @@
+## test_collections.ayce — pruebas de la librería collections (ayce puro)
+require collections as C
+
+## ── Stack ──
+var s: C::Stack = C::Stack()
+s::push(1)
+s::push(2)
+s::push(3)
+say("stack pop: " + string(s::pop()) + " (3)")
+say("stack peek: " + string(s::peek()) + " (2)")
+say("stack size: " + string(s::size()) + " (2)")
+
+## ── Queue ──
+var q: C::Queue = C::Queue()
+q::enqueue(10)
+q::enqueue(20)
+say("queue dequeue: " + string(q::dequeue()) + " (10)")
+say("queue front: " + string(q::front()) + " (20)")
+
+## ── LinkedList ──
+var ll: C::LinkedList = C::LinkedList()
+ll::append(1)
+ll::append(2)
+ll::prepend(0)
+say("linkedlist: " + string(ll::to_list()) + " ([0, 1, 2])")
+say("ll get(2): " + string(ll::get(2)) + " (2)")
+ll::reverse()
+say("ll reverse: " + string(ll::to_list()) + " ([2, 1, 0])")
+
+## ── Counter ──
+var c: C::Counter = C::Counter()
+c::add_all(["a", "b", "a", "c", "a", "b"])
+say("counter a: " + string(c::count("a")) + " (3)")
+say("counter z: " + string(c::count("z")) + " (0)")
+say("counter total: " + string(c::total()) + " (6)")
+say("counter most_common(2): " + string(c::most_common(2)) + " ([a, b])")
+c::subtract("a")
+say("counter tras subtract a: " + string(c::count("a")) + " (2)")
+c::subtract("z")
+say("counter size: " + string(c::size()) + " (3)")
+say("counter keys: " + string(c::keys()))
+
+## ── deque ──
+var d: C::deque = C::deque()
+d::append(1)
+d::append(2)
+d::append_left(0)
+say("deque: " + string(d::to_list()) + " ([0, 1, 2])")
+say("deque pop_left: " + string(d::pop_left()) + " (0)")
+say("deque pop: " + string(d::pop()) + " (2)")
+d::append(5)
+d::append(6)
+d::append(7)
+d::rotate(1)
+say("deque rotate: " + string(d::to_list()) + " ([7, 1, 5, 6])")
+var dmax: C::deque = C::deque()
+say("deque vacío: " + string(dmax::is_empty()) + " (True)")
+
+## ── OrderedDict ──
+var od: C::OrderedDict = C::OrderedDict()
+od::put("banana", 2)
+od::put("manzana", 5)
+od::put("cereza", 7)
+od::put("banana", 3)
+say("od keys (orden de inserción): " + string(od::keys()))
+say("od get banana: " + string(od::get("banana", -1)) + " (3)")
+say("od get fantasma: " + string(od::get("fantasma", -1)) + " (-1)")
+od::remove("manzana")
+say("od tras remove: " + string(od::keys()) + " size=" + string(od::size()))
+say("od items: " + string(od::items()))
+
+## ── defaultdict ──
+var dd: C::defaultdict = C::defaultdict(0)
+say("dd get_or nuevo: " + string(dd::get_or("x")) + " (0)")
+dd::inc("x", 5)
+dd::inc("x", 2)
+say("dd inc x: " + string(dd::get_or("x")) + " (7)")
+dd::put("y", "texto")
+say("dd y: " + string(dd::get_or("y")) + " (texto)")
+say("dd keys: " + string(dd::keys()))
+
+## ── try/rescue sobre errores de collections ──
+try
+    var vacio: C::Stack = C::Stack()
+    vacio::pop()
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_collections")

@@ -64,6 +64,12 @@ class TokenType(Enum):
     BOOL_T     = auto()
     BYTES_T    = auto()
 
+    # Tipos colección (palabras reservadas v0.6.0: list/dict/tuple/set sin tipo elem)
+    LIST_T     = auto()
+    DICT_T     = auto()
+    TUPLE_T    = auto()
+    SET_T      = auto()
+
     # Operadores
     PLUS       = auto()   # +
     MINUS      = auto()   # -
@@ -81,6 +87,11 @@ class TokenType(Enum):
     AND        = auto()   # &&
     OR         = auto()   # ||
     NOT        = auto()   # !
+    AMP        = auto()   # &  (AND bit a bit — los modificadores &in/&out/&inout se lexifican aparte)
+    BIT_XOR    = auto()   # ^  (XOR bit a bit)
+    BIT_NOT    = auto()   # ~  (NOT bit a bit, unario)
+    LSHIFT     = auto()   # << (desplazamiento a la izquierda)
+    RSHIFT     = auto()   # >> (desplazamiento a la derecha)
     ASSIGN     = auto()   # =
     QUESTION   = auto()   # ?
     # Asignación compuesta (v0.4)
@@ -90,6 +101,11 @@ class TokenType(Enum):
     SLASH_ASSIGN = auto() # /=
     DSLASH_ASSIGN= auto() # //=
     PERCENT_ASSIGN= auto()# %=
+    AMP_ASSIGN   = auto() # &=
+    OR_ASSIGN    = auto() # |=
+    XOR_ASSIGN   = auto() # ^=
+    LSHIFT_ASSIGN= auto() # <<=
+    RSHIFT_ASSIGN= auto() # >>=
 
     # Puntuación y delimitadores
     LPAREN     = auto()   # (
@@ -149,6 +165,7 @@ KEYWORDS = {
     "require":  TokenType.REQUIRE,
     "from":     TokenType.FROM,
     "as":       TokenType.AS,
+    "not":      TokenType.NOT,    # v0.6.0: alias de '!'
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,
     "none":     TokenType.NONE,
@@ -157,6 +174,10 @@ KEYWORDS = {
     "string":   TokenType.STRING_T,
     "bool":     TokenType.BOOL_T,
     "bytes":    TokenType.BYTES_T,
+    "list":     TokenType.LIST_T,
+    "dict":     TokenType.DICT_T,
+    "tuple":    TokenType.TUPLE_T,
+    "set":      TokenType.SET_T,
 }
 
 

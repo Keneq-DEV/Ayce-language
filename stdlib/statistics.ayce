@@ -1,0 +1,246 @@
+## statistics.ayce — estadística descriptiva (stdlib ayce puro)
+require math
+##
+## Acepta listas flexibles (none[]) para poder recibir tanto int[] como
+## float[]. Los resultados numéricos se devuelven como float.
+##
+## Tareas:
+##   mean(xs)            media aritmética
+##   median(xs)          mediana (elemento o promedio central)
+##   mode(xs)            el más frecuente (el primero en caso de empate)
+##   variance(xs)        varianza muestral (n-1)
+##   stdev(xs)           desviación estándar muestral
+##   pvariance(xs)       varianza poblacional (n)
+##   pstdev(xs)          desviación estándar poblacional
+##   harmonic_mean(xs)   media armónica
+##   geometric_mean(xs)  media geométrica
+##   quantiles(xs, n)    n-1 puntos de corte (método "exclusive")
+##   minimum(xs)         el menor
+##   maximum(xs)         el mayor
+##   total(xs)           suma
+
+task _as_floats(none[] xs) = float[] ;
+{
+    var out: float[] = []
+    for x in xs do
+        out::append(float(x))
+    end
+    return out
+}
+
+task total(none[] xs) = float ;
+{
+    var s: float = 0.0
+    for x in xs do
+        s += float(x)
+    end
+    return s
+}
+
+task mean(none[] xs) = float ;
+{
+    if xs::len() == 0 then
+        raise Error("statistics::mean de lista vacía", 23)
+    end
+    return total(xs) / float(xs::len())
+}
+
+task median(none[] xs) = none ;
+{
+    if xs::len() == 0 then
+        raise Error("statistics::median de lista vacía", 23)
+    end
+    var copia: none[] = []
+    for x in xs do
+        copia::append(x)
+    end
+    ## ordenar por valor numérico (burbuja simple; n suele ser chico)
+    var n: int = copia::len()
+    var i: int = 0
+    while i < n - 1 do
+        var j: int = 0
+        while j < n - 1 - i do
+            if float(copia[j]) > float(copia[j + 1]) then
+                var tmp: none = copia[j]
+                copia[j] = copia[j + 1]
+                copia[j + 1] = tmp
+            end
+            j = j + 1
+        end
+        i = i + 1
+    end
+    var mitad: int = n // 2
+    if n % 2 == 1 then
+        return copia[mitad]
+    end
+    var a: float = float(copia[mitad - 1])
+    var b: float = float(copia[mitad])
+    return (a + b) / 2.0
+}
+
+task mode(none[] xs) = none ;
+{
+    if xs::len() == 0 then
+        raise Error("statistics::mode de lista vacía", 23)
+    end
+    var mejor: none = xs[0]
+    var mejor_n: int = 0
+    for x in xs do
+        var vf: float = float(x)
+        var n: int = _count_val(xs, vf)
+        if n > mejor_n then
+            mejor_n = n
+            mejor = x
+        end
+    end
+    return mejor
+}
+
+task _count_val(none[] xs, float v) = int ;
+{
+    var n: int = 0
+    for x in xs do
+        if float(x) == v then
+            n += 1
+        end
+    end
+    return n
+}
+
+task variance(none[] xs) = float ;
+{
+    var n: int = xs::len()
+    if n < 2 then
+        raise Error("statistics::variance requiere al menos 2 datos", 23)
+    end
+    return _sum_sq_diff(xs) / float(n - 1)
+}
+
+task stdev(none[] xs) = float ;
+{
+    return math::sqrt(variance(xs))
+}
+
+task pvariance(none[] xs) = float ;
+{
+    var n: int = xs::len()
+    if n == 0 then
+        raise Error("statistics::pvariance de lista vacía", 23)
+    end
+    return _sum_sq_diff(xs) / float(n)
+}
+
+task pstdev(none[] xs) = float ;
+{
+    return math::sqrt(pvariance(xs))
+}
+
+## suma de cuadrados de las diferencias respecto a la media
+task _sum_sq_diff(none[] xs) = float ;
+{
+    var mu: float = mean(xs)
+    var s: float = 0.0
+    for x in xs do
+        var d: float = float(x) - mu
+        s += d * d
+    end
+    return s
+}
+
+task harmonic_mean(none[] xs) = float ;
+{
+    var n: int = xs::len()
+    if n == 0 then
+        raise Error("statistics::harmonic_mean de lista vacía", 23)
+    end
+    var s: float = 0.0
+    for x in xs do
+        var v: float = float(x)
+        if v == 0.0 then
+            raise Error("statistics::harmonic_mean con dato cero", 23)
+        end
+        s += 1.0 / v
+    end
+    return float(n) / s
+}
+
+task geometric_mean(none[] xs) = float ;
+{
+    var n: int = xs::len()
+    if n == 0 then
+        raise Error("statistics::geometric_mean de lista vacía", 23)
+    end
+    var log_suma: float = 0.0
+    for x in xs do
+        var v: float = float(x)
+        if v <= 0.0 then
+            raise Error("statistics::geometric_mean requiere valores > 0", 23)
+        end
+        log_suma += math::ln(v)
+    end
+    return math::exp(log_suma / float(n))
+}
+
+## Cuantiles por el método "exclusive" (como Python statistics.quantiles)
+## Devuelve n-1 puntos de corte.
+task quantiles(none[] xs, int n) = float[] ;
+{
+    var m: int = xs::len()
+    if m < 2 then
+        raise Error("statistics::quantiles requiere al menos 2 datos", 23)
+    end
+    if n < 1 then
+        raise Error("statistics::quantiles: n debe ser >= 1", 23)
+    end
+    var ordenados: float[] = _as_floats(xs)
+    ordenados::sort()
+    var out: float[] = []
+    var k: int = 1
+    while k < n do
+        var pos: int = (k * m) // n
+        var frac_num: int = (k * m) % n
+        if pos == 0 then
+            pos = 1
+        end
+        if pos >= m then
+            pos = m - 1
+        end
+        if frac_num == 0 then
+            out::append((ordenados[pos - 1] + ordenados[pos]) / 2.0)
+        else
+            out::append(ordenados[pos])
+        end
+        k = k + 1
+    end
+    return out
+}
+
+task minimum(none[] xs) = float ;
+{
+    if xs::len() == 0 then
+        raise Error("statistics::minimum de lista vacía", 23)
+    end
+    var mejor: float = float(xs[0])
+    for x in xs do
+        var v: float = float(x)
+        if v < mejor then
+            mejor = v
+        end
+    end
+    return mejor
+}
+
+task maximum(none[] xs) = float ;
+{
+    if xs::len() == 0 then
+        raise Error("statistics::maximum de lista vacía", 23)
+    end
+    var mejor: float = float(xs[0])
+    for x in xs do
+        var v: float = float(x)
+        if v > mejor then
+            mejor = v
+        end
+    end
+    return mejor
+}

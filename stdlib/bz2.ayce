@@ -1,0 +1,22 @@
+## bz2.ayce — compresión bzip2 EN AYCE (v0.6.0).
+## BZIP2 (transformada de Burrows-Wheeler + Huffman) es la librería C
+## externa: igual que bz2.py de CPython, la compresión corre en el
+## batch privado `_bz2`.
+
+require _bz2 as bz
+
+## comprime datos a formato bzip2
+task compress(string s) | (bytes datos) = string ;
+{
+    return bz::compress(s)
+    |
+    return bz::compress(datos)
+}
+
+## descomprime datos bzip2
+task decompress(string s) | (bytes datos) ;
+{
+    return bz::decompress(s)
+    |
+    return bz::decompress(datos)
+}

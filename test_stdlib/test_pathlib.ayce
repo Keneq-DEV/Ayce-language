@@ -1,0 +1,56 @@
+## test_pathlib.ayce — pruebas de pathlib (ayce puro)
+require pathlib as P
+require tempfile
+
+var ruta: P::Path = P::Path("/home/usuario/docs/reporte.ayce")
+say("ruta: " + ruta::to_string())
+say("name: " + ruta::name() + " (reporte.ayce)")
+say("stem: " + ruta::stem() + " (reporte)")
+say("suffix: " + ruta::suffix() + " (.ayce)")
+var padre: P::Path = ruta::parent()
+say("parent: " + padre::to_string() + " (/home/usuario/docs)")
+say("parent name: " + padre::name() + " (docs)")
+var hija: P::Path = padre::join("otro.txt")
+say("join: " + hija::to_string() + " (/home/usuario/docs/otro.txt)")
+say("parts: " + string(ruta::parts()))
+say("parts len: " + string(ruta::parts()::len()) + " (5)")
+
+## operaciones reales sobre archivos
+var tmp: string = tempfile::gettempdir()
+var archivo: P::Path = P::Path(tmp + "/ayce_pathlib_test.txt")
+archivo::write_text("hola desde pathlib")
+say("exists: " + string(archivo::exists()) + " (True)")
+say("is_file: " + string(archivo::is_file()) + " (True)")
+say("size: " + string(archivo::size()) + " (18)")
+say("read_text: " + archivo::read_text())
+archivo::append_text("\nsegunda línea")
+var lineas: string[] = archivo::read_lines()
+say("lines: " + string(lineas::len()) + " (2)")
+say("absolute: " + string(archivo::absolute()::to_string()::starts_with("/")) + " (True)")
+archivo::delete()
+say("exists tras delete: " + string(archivo::exists()) + " (False)")
+
+## glob
+var dir_tmp: P::Path = P::Path(tempfile::mkdtemp())
+var f1: P::Path = dir_tmp::join("a.ayce")
+var f2: P::Path = dir_tmp::join("b.ayce")
+var f3: P::Path = dir_tmp::join("c.txt")
+f1::write_text("x")
+f2::write_text("y")
+f3::write_text("z")
+say("glob *.ayce: " + string(dir_tmp::glob("*.ayce")::len()) + " (2)")
+
+## tareas libres
+say("join_paths: " + P::join_paths("carpeta", "archivo.txt") + " (carpeta/archivo.txt)")
+say("cwd: " + P::cwd()::to_string())
+
+## error: size de lo inexistente
+try
+    var fantasma: P::Path = P::Path("/no/existe/seguro_xyz")
+    fantasma::size()
+    say("no llegó")
+rescue (err)
+    say("capturado: " + err::mensaje)
+end
+
+say("FIN test_pathlib")

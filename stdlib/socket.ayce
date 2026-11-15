@@ -1,0 +1,108 @@
+## socket.ayce — sockets TCP/UDP EN AYCE (v0.6.0).
+## Igual que socket.py de CPython, que envuelve el módulo C `_socket`:
+## las conexiones y el envío crudo vienen del batch privado `_socket`,
+## y la composición (send_line agrega \n, recv_line acumula hasta
+## encontrar el salto) está escrita aquí en ayce.
+
+require _socket as sk
+
+## conecta por TCP (timeout opcional en segundos)
+task tcp_connect(string host, int puerto) | (string host, int puerto, float timeout) ;
+{
+    return sk::tcp_connect(host, puerto)
+    |
+    if timeout < 0.0 then
+        error_timeout()
+    end
+    return sk::tcp_connect(host, puerto, timeout)
+}
+
+task error_timeout() ;
+{
+    var d: none<> = <>
+    var clave: string = "socket::tcp_connect: el timeout no puede ser negativo"
+    var v: none = d<clave>
+}
+
+## envía bytes/datos crudos
+task send(socket::Socket sock, string datos) | (socket::Socket sock, bytes datos) ;
+{
+    return sk::send(sock, datos)
+    |
+    return sk::send(sock, datos)
+}
+
+## recibe un bloque (bufsize por defecto 4096)
+task recv(socket::Socket sock) | (socket::Socket sock, int bufsize) = string ;
+{
+    return sk::recv(sock)
+    |
+    return sk::recv(sock, bufsize)
+}
+
+## envía una línea con \n final (composición propia del módulo)
+task send_line(socket::Socket sock, string linea) ;
+{
+    sk::send(sock, linea + "\n")
+}
+
+## acumula recibos hasta un \n (o el máximo dado)
+task recv_line(socket::Socket sock) | (socket::Socket sock, int maximo) = string ;
+{
+    return _acumular(sock, sk::recv(sock), 8192)
+    |
+    return _acumular(sock, sk::recv(sock), maximo)
+}
+
+task _acumular(socket::Socket sock, string primer_bloque, int maximo) = string ;
+{
+    var out: string = ""
+    var bloque: string = primer_bloque
+    while True do
+        var salto: int = bloque::find("\n")
+        if salto != -1 then
+            out += bloque::slice(0, salto)
+            return out
+        end
+        out += bloque
+        if out::len() >= maximo then
+            return out
+        end
+        bloque = sk::recv(sock)
+        if bloque == "" then
+            return out
+        end
+    end
+}
+
+task close(socket::Socket sock) ;
+{
+    sk::close(sock)
+}
+
+## envío UDP de un datagrama
+task udp_send(string host, int puerto, string datos) | (string host, int puerto, bytes datos) ;
+{
+    return sk::udp_send(host, puerto, datos)
+    |
+    return sk::udp_send(host, puerto, datos)
+}
+
+## escucha un datagrama UDP; dict {datos, origen}
+task udp_recv(int puerto) | (int puerto, int bufsize) = none<> ;
+{
+    return sk::udp_recv(puerto)
+    |
+    return sk::udp_recv(puerto, bufsize)
+}
+
+## direcciones locales y remotas de la conexión
+task local_addr(socket::Socket sock) = none<> ;
+{
+    return sk::local_addr(sock)
+}
+
+task peer_addr(socket::Socket sock) = none<> ;
+{
+    return sk::peer_addr(sock)
+}

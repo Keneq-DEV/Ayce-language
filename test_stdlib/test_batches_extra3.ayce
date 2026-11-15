@@ -1,0 +1,227 @@
+## Tests de los batches nuevos y ampliados (v0.6.0, parte 3)
+## - 11 batches nativos nuevos: stat, tarfile, binascii, socket, ssl,
+##   http, email, signal, multiprocessing, gettext, inspect
+## - ampliaciones: math, random, json, io, os, sys, time, string,
+##   datetime, urllib, decimal
+
+require stat
+require tarfile
+require binascii
+require socket
+require ssl
+require http
+require email
+require signal
+require multiprocessing
+require gettext
+require inspect
+require tempfile
+require math
+require random
+require json
+require io
+require os
+require sys
+require time
+require string
+require datetime
+require urllib
+require decimal
+
+## ═════════ 1) Nativos nuevos ═════════
+
+## stat (archivo temporal propio)
+var tmp: string = tempfile::gettempdir()
+io::write_file(tmp + "/ayce_stat_test.txt", "contenido de prueba")
+var st: none = stat::stat(tmp + "/ayce_stat_test.txt")
+say("stat size: " + string(st<"size">) + " (21)")
+say("mode: " + stat::mode_str(tmp + "/ayce_stat_test.txt"))
+say("is_file: " + string(stat::is_file(tmp + "/ayce_stat_test.txt")) + " (True)")
+
+## tarfile
+io::write_file(tmp + "/ayce_num.txt", "uno")
+io::write_file(tmp + "/ayce_sort.txt", "dos")
+tarfile::create_gz(tmp + "/test_ayce.tar.gz", [tmp + "/ayce_num.txt", tmp + "/ayce_sort.txt"])
+var entries: none = tarfile::list_files(tmp + "/test_ayce.tar.gz")
+say("tar entries: " + string(entries::len()) + " (2)")
+say("contenido: " + tarfile::read(tmp + "/test_ayce.tar.gz", "ayce_num.txt") + " (uno)")
+
+## binascii
+say("hexlify: " + binascii::hexlify("ayce"))
+say("unhexlify: " + binascii::unhexlify("61796365"))
+say("crc32: " + string(binascii::crc32("ayce")))
+say("b2a: " + binascii::b2a_base64("hola"))
+
+## socket (conecta a un eco local no disponible; solo prueba de error limpio)
+try
+    var s: none = socket::tcp_connect("127.0.0.1", 59999, 2.0)
+    say("conectó (inesperado)")
+rescue (err)
+    say("socket ok (falló como se esperaba)")
+end
+
+## ssl / http — sin red real, probamos que existan
+say("ssl ctx: " + string(ssl::create_context(True) != none))
+try
+    var r: none = http::get("https://example.com")
+    say("http status: " + string(r<"status">))
+rescue (err)
+    say("http sin red: " + err::mensaje::slice(0, 30))
+end
+
+## email
+var msg: string = email::build("Prueba", "yo@ayce.lang", "tu@ayce.lang", "Cuerpo del mensaje")
+say("email contiene subject: " + string(msg::contains("Prueba")))
+var parsed: none = email::parse(msg)
+say("parsed subject: " + parsed<"subject">)
+
+## signal
+say("pid: " + string(signal::pid()))
+say("SIGINT: " + string(signal::SIGINT) + " = " + signal::name(signal::SIGINT))
+
+## multiprocessing
+say("cpus: " + string(multiprocessing::cpu_count()))
+var info: none = multiprocessing::info()
+say("info pid: " + string(info<"pid">))
+
+## gettext
+var cat: none = gettext::from_dict(<"hola": "hello", "adiós": "bye">)
+say("gettext: " + gettext::get(cat, "hola") + " / " + gettext::get(cat, "no_está"))
+
+## inspect
+Template Persona {
+    nombre: string
+    edad: int
+    task build(string n, int e) ;
+    {
+        self::nombre = n
+        self::edad = e
+    }
+    task mayor() = bool ; { return self::edad >= 18 }
+}
+var p: Persona = Persona("Ana", 30)
+say("type_of: " + inspect::type_of(p))
+say("is_instance: " + string(inspect::is_instance(p)))
+say("fields: " + string(inspect::fields_of(p)))
+say("get_field: " + inspect::get_field(p, "nombre"))
+task saludar(string quien) = string => "hola " + quien
+say("params: " + string(inspect::params_of(saludar)))
+say("name_of: " + inspect::name_of(saludar))
+say("type_of int: " + inspect::type_of(42))
+say("type_of str: " + inspect::type_of("hola"))
+
+## ═════════ 2) Ampliaciones ═════════
+
+## math ampliado
+say("perm(5,2): " + string(math::perm(5, 2)))
+say("comb(5,2): " + string(math::comb(5, 2)))
+say("isclose: " + string(math::isclose(0.1 + 0.2, 0.3)))
+say("copysign: " + string(math::copysign(3.0, -1.0)))
+say("fmod: " + string(math::fmod(7.5, 2.0)))
+say("dist: " + string(math::dist([0, 0], [3, 4])))
+say("gamma(5): " + string(math::gamma(5.0)))
+say("erf(1): " + string(math::erf(1.0)))
+
+## random ampliado
+random::seed(42)
+say("gauss: " + string(random::gauss(10.0, 2.0)))
+say("uniform: " + string(random::uniform(1.5, 2.5)))
+say("randrange: " + string(random::randrange(10)))
+var rb: bytes = random::random_bytes(4)
+say("random_bytes len: " + string(rb::len()))
+say("choices: " + string(random::choices(["a", "b", "c"], 3)))
+
+## json ampliado
+var tmp: string = tempfile::gettempdir()
+json::write_file(tmp + "/ayce_test.json", <"nombre": "Ana", "edad": 30, "tags": [1, 2]>)
+var leido: none = json::parse_file(tmp + "/ayce_test.json")
+say("json roundtrip: " + leido<"nombre"> + " " + string(leido<"edad">))
+say("json valid: " + string(json::valid("{\"a\": 1}")) + "/" + string(json::valid("{no}")))
+try
+    json::parse("{mal}")
+    say("no llegó")
+rescue (err)
+    say("JSONDecodeError capturado: " + err::mensaje)
+end
+
+## io ampliado
+io::write_lines(tmp + "/ayce_test.txt", ["línea 1", "línea 2", "línea 3"])
+var lineas: none = io::read_lines(tmp + "/ayce_test.txt")
+say("read_lines: " + string(lineas::len()) + " primera=" + lineas[0])
+io::write_bytes(tmp + "/ayce_test.bin", bytes("ABCD"))
+var rb2: bytes = io::read_bytes(tmp + "/ayce_test.bin")
+say("read_bytes len: " + string(rb2::len()))
+say("file_size: " + string(io::file_size(tmp + "/ayce_test.txt")))
+
+## os ampliado
+say("os sep: '" + os::sep() + "'")
+say("getpid: " + string(os::getpid()))
+os::rename(tmp + "/ayce_test.txt", tmp + "/ayce_test2.txt")
+say("rename ok: " + string(io::file_exists(tmp + "/ayce_test2.txt")))
+os::remove(tmp + "/ayce_test2.txt")
+say("remove ok: " + string(not io::file_exists(tmp + "/ayce_test2.txt")))
+say("getenv: '" + os::getenv("NO_EXISTE_XYZ", "default") + "'")
+say("isfile: " + string(os::isfile(tmp + "/ayce_test.json")))
+
+## sys ampliado
+sys::stdout("stdout sin salto de línea: ")
+say("listo")
+sys::stderr("esto va a stderr")
+
+## time ampliado
+var ts: float = time::now()
+say("strftime: " + time::strftime("%Y-%m-%d", ts))
+var parseado: none = time::strptime("2026-03-15 14:30:00", "%Y-%m-%d %H:%M:%S")
+say("strptime year: " + string(parseado<"year">) + " month: " + string(parseado<"month">))
+var lt: none = time::localtime(ts)
+say("localtime iso: " + lt<"iso">)
+
+## string ampliado
+say("digits: " + string::digits::slice(0, 5))
+say("ascii_upper: " + string::ascii_uppercase::slice(0, 5))
+var tpl: none = string::template("Hola $nombre, tenés $n mensajes ($$)")
+say("substitute: " + string::substitute(tpl, <"nombre": "Ana", "n": 3>))
+say("safe: " + string::safe_substitute(tpl, <"nombre": "Ana">))
+say("capitalize: " + string::capitalize("hola MUNDO"))
+say("title: " + string::title("hola mundo ayce"))
+say("count: " + string(string::count("banana", "na")))
+say("center: '" + string::center("hi", 6, "*") + "'")
+say("zfill: " + string::zfill("42", 6))
+say("swapcase: " + string::swapcase("AyCe"))
+
+## datetime ampliado
+var hoy: none = datetime::today()
+var manana: none = datetime::add_days(hoy, 1)
+say("hoy: " + hoy<"iso"> + " mañana: " + manana<"iso">)
+var en_2_meses: none = datetime::add_months(hoy, 2)
+say("add_months: " + en_2_meses<"iso">)
+say("diff_days: " + string(datetime::diff_days(hoy, manana)))
+say("weekday_name: " + datetime::weekday_name(hoy))
+say("day_of_year: " + string(datetime::day_of_year(hoy)))
+var dentro: none = datetime::add_seconds(datetime::now(), 90)
+say("add_seconds hora: " + string(dentro<"minute">) + "s" + string(dentro<"second">))
+
+## urllib ampliado
+var qs: none = urllib::parse_qs("a=1&b=2&a=3")
+say("parse_qs a: " + string(qs<"a">) + " b: " + qs<"b">)
+say("join: " + urllib::join("https://ejemplo.com/docs/", "guia.html"))
+try
+    var r: none = urllib::urlopen("https://example.com")
+    say("urlopen: " + string(r<"status">))
+rescue (err)
+    say("urlopen sin red")
+end
+
+## decimal ampliado
+say(decimal::decimal("0.1"))
+say(decimal::add("0.1", "0.2"))
+say(decimal::sub("1.0", "0.000001"))
+say(decimal::mul("1.10", "10"))
+say(decimal::div("1", "3"))
+say(decimal::compare("0.5", "0.25"))
+say(decimal::round_dp("3.14159", 2))
+say(decimal::abs_dec("-5.5"))
+say(decimal::neg("7"))
+say(decimal::is_zero("0.000"))
+say(decimal::to_float("2.5"))
+say(decimal::pow_int("1.05", 4))

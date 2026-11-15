@@ -1,0 +1,269 @@
+## functional.ayce — utilidades funcionales (stdlib ayce puro)
+##
+## Tareas de orden superior sobre listas de enteros. Aceptan `task`
+## (incluyendo lambdas de una sola línea) como callback.
+##
+## Tareas:
+##   map_fn(task f, int[] xs)            = int[]    aplica f a cada elemento
+##   filter_fn(task pred, int[] xs)      = int[]    deja los que cumplen pred
+##   reduce_fn(task combine, int[] xs, int init) = int  reduce izquierda
+##   any(task pred, int[] xs)            = bool    ¿algún elemento cumple pred?
+##   all(task pred, int[] xs)            = bool    ¿todos cumplen pred?
+##   count_if(task pred, int[] xs)       = int     cuántos cumplen pred
+##   find_first(task pred, int[] xs)      = int     primer elemento que cumple (o -1 si ninguno)
+##   take(int n, int[] xs)               = int[]   primeros n elementos
+##   drop(int n, int[] xs)               = int[]   xs sin los primeros n elementos
+##   zip_sum(int[] xs, int[] ys)         = int     suma de productos elemento a elemento
+##   range_list(int lo, int hi)          = int[]   [lo, lo+1, ..., hi-1]
+##   reverse_list(int[] xs)             = int[]   copia invertida
+##   contains_value(int[] xs, int x)     = bool    ¿x está en xs?
+##   min_of(int[] xs)                    = int     mínimo (error si vacío)
+##   max_of(int[] xs)                    = int     máximo (error si vacío)
+##   sum_of(int[] xs)                    = int     suma de elementos
+
+## — map —
+task map_fn(task f, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < xs::len() do
+        out::append(f(xs[i]))
+        i = i + 1
+    end
+    return out
+}
+
+## — filter —
+task filter_fn(task pred, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = 0
+    while i < xs::len() do
+        if pred(xs[i]) then
+            out::append(xs[i])
+        end
+        i = i + 1
+    end
+    return out
+}
+
+## — reduce (fold izquierdo) —
+task reduce_fn(task combine, int[] xs, int init) = int ;
+{
+    var acc: int = init
+    var i: int = 0
+    while i < xs::len() do
+        acc = combine(acc, xs[i])
+        i = i + 1
+    end
+    return acc
+}
+
+## — any —
+task any(task pred, int[] xs) = bool ;
+{
+    var i: int = 0
+    while i < xs::len() do
+        if pred(xs[i]) then
+            return True
+        end
+        i = i + 1
+    end
+    return False
+}
+
+## — all —
+task all(task pred, int[] xs) = bool ;
+{
+    var i: int = 0
+    while i < xs::len() do
+        if not pred(xs[i]) then
+            return False
+        end
+        i = i + 1
+    end
+    return True
+}
+
+## — count_if —
+task count_if(task pred, int[] xs) = int ;
+{
+    var count: int = 0
+    var i: int = 0
+    while i < xs::len() do
+        if pred(xs[i]) then
+            count = count + 1
+        end
+        i = i + 1
+    end
+    return count
+}
+
+## — find_first —
+task find_first(task pred, int[] xs) = int ;
+{
+    var i: int = 0
+    while i < xs::len() do
+        if pred(xs[i]) then
+            return xs[i]
+        end
+        i = i + 1
+    end
+    return -1
+}
+
+## — take (primeros n; si n > len, toma todo) —
+task take(int n, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    if n <= 0 then
+        return out
+    end
+    var limit: int = n
+    if limit > xs::len() then
+        limit = xs::len()
+    end
+    var i: int = 0
+    while i < limit do
+        out::append(xs[i])
+        i = i + 1
+    end
+    return out
+}
+
+## — drop (sin los primeros n) —
+task drop(int n, int[] xs) = int[] ;
+{
+    var out: int[] = []
+    if n >= xs::len() then
+        return out
+    end
+    var start: int = n
+    if n < 0 then
+        start = 0
+    end
+    var i: int = start
+    while i < xs::len() do
+        out::append(xs[i])
+        i = i + 1
+    end
+    return out
+}
+
+## — zip_sum: producto escalar (asume mismo largo) —
+task zip_sum(int[] xs, int[] ys) = int ;
+{
+    var s: int = 0
+    var n: int = xs::len()
+    if ys::len() < n then
+        n = ys::len()
+    end
+    var i: int = 0
+    while i < n do
+        s = s + xs[i] * ys[i]
+        i = i + 1
+    end
+    return s
+}
+
+## — range_list: [lo, lo+1, ..., hi-1] (exclusivo hi) —
+task range_list(int lo, int hi) = int[] ;
+{
+    var out: int[] = []
+    var i: int = lo
+    while i < hi do
+        out::append(i)
+        i = i + 1
+    end
+    return out
+}
+
+## — reverse_list (copia invertida) —
+task reverse_list(int[] xs) = int[] ;
+{
+    var out: int[] = []
+    var i: int = xs::len() - 1
+    while i >= 0 do
+        out::append(xs[i])
+        i = i - 1
+    end
+    return out
+}
+
+## — contains_value —
+task contains_value(int[] xs, int x) = bool ;
+{
+    var i: int = 0
+    while i < xs::len() do
+        if xs[i] == x then
+            return True
+        end
+        i = i + 1
+    end
+    return False
+}
+
+## — min_of (error si vacío) —
+task min_of(int[] xs) = int ;
+{
+    if xs::len() == 0 then
+        raise Error("min_of de lista vacía", 4)
+    end
+    var m: int = xs[0]
+    var i: int = 1
+    while i < xs::len() do
+        if xs[i] < m then
+            m = xs[i]
+        end
+        i = i + 1
+    end
+    return m
+}
+
+## — max_of —
+task max_of(int[] xs) = int ;
+{
+    if xs::len() == 0 then
+        raise Error("max_of de lista vacía", 4)
+    end
+    var m: int = xs[0]
+    var i: int = 1
+    while i < xs::len() do
+        if xs[i] > m then
+            m = xs[i]
+        end
+        i = i + 1
+    end
+    return m
+}
+
+## — sum_of —
+task sum_of(int[] xs) = int ;
+{
+    var s: int = 0
+    var i: int = 0
+    while i < xs::len() do
+        s = s + xs[i]
+        i = i + 1
+    end
+    return s
+}
+
+## — Pipeline: aplica una lista de tareas secuenciales a un valor inicial.
+##   pipe(int x, task[] fs) — pero ayce no tiene arrays de tasks todavía.
+##   Lo simulamos con 3 versiones de aridad fija: pipe2, pipe3, pipe4.
+##   Ej: pipe3(x, f, g, h) == h(g(f(x)))
+task pipe2(int x, task f, task g) = int ;
+{
+    return g(f(x))
+}
+
+task pipe3(int x, task f, task g, task h) = int ;
+{
+    return h(g(f(x)))
+}
+
+task pipe4(int x, task f, task g, task h, task k) = int ;
+{
+    return k(h(g(f(x))))
+}

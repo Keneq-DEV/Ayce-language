@@ -1,0 +1,110 @@
+## os.ayce — sistema operativo EN AYCE (v0.6.0).
+## Igual que os.py de CPython: la lógica vive aquí y las syscalls
+## (crear directorio, listar, entorno, PID...) vienen del batch
+## privado `_os`, el equivalente del módulo C `posix` que os.py
+## importa con `from posix import *`. Las funciones con lógica real
+## (getenv con valor por defecto, sort de list_dir) están escritas
+## en ayce.
+
+require _os as posix
+
+## nombre del SO ("posix" / "nt"), como os.name
+task name() = string ;
+{
+    return posix::name()
+}
+
+## separador de rutas del sistema
+task sep() = string ;
+{
+    return posix::sep()
+}
+
+task cwd() = string ;
+{
+    return posix::cwd()
+}
+
+task list_dir() | (string ruta) ;
+{
+    return _listar(posix::list_dir())
+    |
+    return _listar(posix::list_dir(ruta))
+}
+
+## ordena la lista de entradas (determinismo útil para scripts)
+task _listar(none[] entradas) = none[] ;
+{
+    var out: none[] = entradas::copy()
+    out::sort()
+    return out
+}
+
+task exists(string ruta) = bool ;
+{
+    return posix::exists(ruta)
+}
+
+task isfile(string ruta) = bool ;
+{
+    return posix::isfile(ruta)
+}
+
+task isdir(string ruta) = bool ;
+{
+    return posix::isdir(ruta)
+}
+
+## os.environ[nombre] — falla si no existe, como os.environ de CPython
+task env(string nombre) = string ;
+{
+    return posix::env(nombre)
+}
+
+## os.getenv(nombre, default) — devuelve el default si no existe
+task getenv(string nombre) | (string nombre, string s) = string ;
+{
+    return _getenv(nombre, "")
+    |
+    return _getenv(nombre, s)
+}
+
+task _getenv(string nombre, string por_defecto) = string ;
+{
+    ## el batch nativo devuelve "" cuando la variable no existe
+    var valor: string = posix::getenv(nombre)
+    if valor != "" then
+        return valor
+    end
+    return por_defecto
+}
+
+task mkdir(string ruta) ;
+{
+    posix::mkdir(ruta)
+}
+
+task rmdir(string ruta) ;
+{
+    posix::rmdir(ruta)
+}
+
+task remove(string ruta) ;
+{
+    posix::remove(ruta)
+}
+
+task rename(string vieja, string nueva) ;
+{
+    posix::rename(vieja, nueva)
+}
+
+task chmod(string ruta, int modo) ;
+{
+    posix::chmod(ruta, modo)
+}
+
+task getpid() = int ;
+{
+    return posix::getpid()
+}

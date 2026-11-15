@@ -1,0 +1,40 @@
+## t_string.ayce — pruebas de string.ayce puro
+require string as S
+
+say("len:", S::length("hola"))                    ## 4
+say("upper:", S::upper("hola mundo árbol"))       ## HOLA MUNDO ÁRBOL
+say("lower:", S::lower("HOLA MUNDO ÁRBOL"))       ## hola mundo árbol
+say("reverse:", S::reverse("hola"))               ## aloh
+say("repeat:", S::repeat("ab", 3))                ## ababab
+say("contains:", S::contains("hola", "ol"))       ## true
+say("starts:", S::starts_with("hola", "ho"))      ## true
+say("ends:", S::ends_with("hola", "la"))          ## true
+say("replace:", S::replace("banana", "a", "e"))   ## benene
+say("trim:", "[" + S::trim("  x  ") + "]")        ## [x]
+say("split:", S::split("a,b,c", ","))             ## ["a", "b", "c"]
+say("split vacío:", S::split("abc", ""))          ## ["a","b","c"]
+say("join:", S::join(["a", "b", "c"], "-"))       ## a-b-c
+say("find:", S::find("hola mundo", "mundo"))      ## 5
+say("find no:", S::find("hola", "zz"))            ## -1
+say("slice:", S::slice("abcdef", 2, 4))           ## cd
+say("pad_left:", "[" + S::pad_left("7", 3) + "]")     ## [  7]
+say("pad_right:", "[" + S::pad_right("7", 3) + "]")   ## [7  ]
+say("center:", "[" + S::center("hi", 6) + "]")        ## [  hi  ]
+say("to_int:", S::to_int("42") + 1)               ## 43
+say("to_float:", S::to_float("3.5") * 2.0)        ## 7.0
+say("capitalize:", S::capitalize("hOLA"))         ## Hola
+say("title:", S::title("el quijote de la mancha")) ## El Quijote De La Mancha
+say("count:", S::count("banana", "an"))           ## 2
+say("swapcase:", S::swapcase("HoLa"))             ## hOla
+say("zfill:", S::zfill("-42", 6))                 ## -00042
+say("zfill+", S::zfill("42", 5))                  ## 00042
+say("ljust:", "[" + S::ljust("x", 4) + "]")       ## [x   ]
+say("rjust:", "[" + S::rjust("x", 4) + "]")       ## [   x]
+say("ascii_lower:", S::ascii_lowercase::len())    ## 26
+say("digits:", S::digits)                          ## 0123456789
+## plantillas
+var t: none = S::template("Hola $nombre, tienes ${n} mensajes y $$ suelto")
+say("claves:", t::claves)                          ## ["nombre", "n"]
+say("substitute:", S::substitute(t, <"nombre": "Ana", "n": 3>))
+say("safe (falta):", S::safe_substitute(t, <"n": 7>))
+say("OK string")

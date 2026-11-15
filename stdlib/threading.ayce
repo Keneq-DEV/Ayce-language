@@ -1,0 +1,26 @@
+## threading.ayce — información de hilos EN AYCE (v0.6.0).
+## Los hilos reales los administra el intérprete: igual que
+## threading.py de CPython envuelve al módulo C `_thread`, aquí las
+## consultas van al batch privado `_threading`. El intérprete de
+## referencia corre en un solo hilo, así que siempre hay un hilo
+## activo ("MainThread").
+
+require _threading as th
+
+## nombre del hilo actual
+task current_thread() = string ;
+{
+    return th::current_thread()
+}
+
+## cuántos hilos están vivos
+task active_count() = int ;
+{
+    return th::active_count()
+}
+
+## lista de identificadores de hilos vivos
+task enumerate() = none[] ;
+{
+    return th::enumerate()
+}
