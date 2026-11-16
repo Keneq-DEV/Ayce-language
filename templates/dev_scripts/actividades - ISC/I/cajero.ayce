@@ -1,0 +1,52 @@
+var salir: bool = False
+var DINERO: int = 1000
+var NIP: int = 1234
+var nip_guardado: int = NIP
+var autenticado: bool = False
+
+while ! autenticado do
+    var nip: int = inlet("ingresa tu NIP: ", int)
+    
+    if nip == NIP then
+        autenticado = True
+        say("NIP correcto. Accediendo al menú...")
+    else
+        say("NIP incorrecto. Intenta de nuevo.")
+    end
+end
+
+while ! salir do
+    var menu: string = inlet(""" 
+    *************************
+            ATM CAJERO 
+    *************************
+
+    1. Retiro de efectivo
+    2. Deposito de efectivo
+    3. consultar saldo
+    4. salir
+
+    INGRESE EL COMANDO: """, string)
+    
+
+    if menu == "1" then
+        var retiro: int = inlet("Ingresa la cantidad a retirar: ", int)
+        if retiro <= DINERO then
+            DINERO = DINERO - retiro
+            say(f"Retiro exitoso. Saldo actual: {DINERO}")
+        else
+            say("Saldo insuficiente.")
+        end
+    else if menu == "2" then
+        var deposito: int = inlet("Ingresa la cantidad a depositar: ", int)
+        DINERO = DINERO + deposito
+        say(f"Deposito exitoso. Saldo actual: {DINERO}")
+    else if menu == "3" then
+        say(f"Saldo actual: {DINERO}")
+    else if menu == "4" then
+        salir = True
+        say("Gracias por usar el cajero automático.")
+    else
+        say("Opción inválida. Intenta de nuevo.")
+    end
+end

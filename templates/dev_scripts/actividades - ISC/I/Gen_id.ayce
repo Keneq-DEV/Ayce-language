@@ -1,0 +1,22 @@
+var Id: string = inlet("Ingresa tu nombre completo: ", string)
+var year: int = inlet("ingresa el año de nacimiento: ", int)
+
+var full_name: string = Id::trim()
+var words: string[] = full_name::split(" ")
+
+var iniciales: string = ""
+var years: string = string(year)
+
+for i in range(0, words::len()) do
+    if words[i]::len() > 0 && iniciales::len() < 3 then
+        iniciales = iniciales + words[i]::slice(0, 1)::upper()
+    end
+end
+
+var number_year: string = years
+if years::len() > 2 then
+    number_year = years::slice(years::len() - 2, years::len())
+end
+
+var generated_id: string = iniciales + number_year
+say("ID generado:", generated_id)

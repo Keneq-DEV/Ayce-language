@@ -1,0 +1,9 @@
+require random
+
+var text: string = "Ayce "
+
+var time: int = random::rand_int(000, 999)
+
+var res: string = text::repeat(time)
+
+say(res)

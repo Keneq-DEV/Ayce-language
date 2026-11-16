@@ -1,0 +1,49 @@
+## todavia no existe *args, **kwargs
+
+task func(list args, dict kwargs) ;
+{
+    say("Argumentos posicionales:", args)
+    say("Argumentos con nombre:", kwargs)
+}
+
+say(func([1, 2, 3], <"nombre": "Juan", "edad": 30>))
+
+task a(list val) ;
+{
+}
+
+task s(int... args) = int ;
+{
+    var total: int = 0
+    for valor in args do
+        total += valor
+    end
+    return total
+}
+
+say(s(1, 2, 3, 4, 5))
+
+task show(int... val) ;
+{
+    for numero in val do
+        say(numero)
+    end
+}
+
+say(show(1, 2, 3, 4, 5))
+
+task show2(dict val) ;
+{
+    say(val)
+}
+
+say(show2(<"nombre": "Juan", "edad": 30, "ciudad": "Madrid">))
+
+task show3(dict val) ;
+{
+    for par in val::items() do
+        say(par[0], ":", par[1])
+    end
+}
+
+say(show3(<"nombre": "Juan", "edad": 30, "ciudad": "Madrid">))

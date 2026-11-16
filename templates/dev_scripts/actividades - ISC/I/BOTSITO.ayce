@@ -1,0 +1,72 @@
+require random
+
+## todavia no existe asinacion multiple de variables
+
+var winsplayer: int = 0
+var winsbot: int = 0
+var empate: int = 0
+var rondas: int = 0
+var historial: none[] = []
+
+task botsito() = string ;
+{
+    var opciones: string[] = ["papel", "tijera", "piedra"]
+    var indice: int = random::rand_int(0, 2)
+    return opciones[indice]
+}
+
+task jugar();
+{
+    global winsplayer, winsbot, empate, rondas, historial
+    rondas = 0
+
+    while rondas < 5 do
+        var entrada: string = inlet("Elige tu opción (papel, tijera, piedra): ", string)
+        entrada = entrada::trim()::lower()
+
+        if entrada != "papel" && entrada != "tijera" && entrada != "piedra" then
+            say("Opción inválida. Elige papel, tijera o piedra.")
+            continue
+        end
+
+        var bot: string = botsito()
+        say(f"El bot eligió: {bot}")
+
+        if entrada == bot then
+            say("¡Es un empate!")
+            empate += 1
+        else if (entrada == "piedra" && bot == "tijera") || (entrada == "papel" && bot == "piedra") || (entrada == "tijera" && bot == "papel") then
+            say("¡Ganaste esta ronda!")
+            winsplayer += 1
+        else
+            say("¡Perdiste esta ronda!")
+            winsbot += 1
+        end
+
+        rondas += 1
+        var registro: <string, int> = <"jugador": winsplayer, "bot": winsbot, "empates": empate>
+        historial::append(registro)
+    end
+}
+
+task inicio();
+{
+    say("¡Bienvenido a piedra, papel o tijera!")
+    jugar()
+
+    say(f"Resultados: jugador {winsplayer}, bot {winsbot}, empates {empate}")
+    if winsplayer > winsbot then
+        say("¡Ganaste la partida!")
+    else if winsbot > winsplayer then
+        say("El bot ganó la partida.")
+    else
+        say("La partida terminó en empate.")
+    end
+
+    say("Historial de puntuaciones:")
+    for registro in historial do
+        say("Jugador:", registro<"jugador">, "Bot:", registro<"bot">, "Empates:", registro<"empates">)
+    end
+}
+
+inicio()

@@ -1,11 +1,11 @@
-"""ayce — Intérprete del lenguaje ayce v0.6.0."""
+"""ayce — Intérprete del lenguaje ayce v0.6.1."""
 
 from .lexer import Lexer
 from .parser import Parser
 from .interpreter import Interpreter
 from .errors import AyceError
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 
 def run_source(source: str, filename: str = "<stdin>", import_paths: list = None):

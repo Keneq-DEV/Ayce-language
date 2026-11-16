@@ -40,7 +40,7 @@ class Parser:
 
     def _expect(self, type_: TokenType, what: str) -> Token:
         if self._peek().type != type_:
-            # v0.6.0: '>>' se lexifica como un único token RSHIFT, pero en un
+            # v0.6.1: '>>' se lexifica como un único token RSHIFT, pero en un
             # tipo dict anidado <K, <V1, V2>> el cierre son dos '>' seguidos.
             # Igual que hace CPython con los generics: dividimos el token.
             if type_ == TokenType.GT and self._peek().type == TokenType.RSHIFT:
@@ -339,7 +339,7 @@ class Parser:
         branches.append((cond, body))
 
         # else if / else (sin end entre ramas — el end va al final de toda la cadena)
-        # v0.6.0 fix: 'else if' sólo se interpreta como cadena else-if cuando
+        # v0.6.1 fix: 'else if' sólo se interpreta como cadena else-if cuando
         # 'else' e 'if' están en la MISMA línea. Si están en líneas distintas,
         # es un bloque else normal que contiene un if anidado (con su propio end).
         # Esto resuelve la ambigüedad:
@@ -559,7 +559,7 @@ class Parser:
             value = self._parse_expr()
             return AssignStmt(target=expr, value=value, line=t.line, col=t.col)
         # Asignación compuesta (v0.4): +=, -=, *=, /=, //=, %=
-        # (v0.6.0: también las bit a bit &=, |=, ^=, <<=, >>=)
+        # (v0.6.1: también las bit a bit &=, |=, ^=, <<=, >>=)
         compound_ops = {
             TokenType.PLUS_ASSIGN: "+=",
             TokenType.MINUS_ASSIGN: "-=",
@@ -636,7 +636,7 @@ class Parser:
             return base
 
         # Tipos colección "flexibles" (sin tipo de elemento): list / dict / tuple / set
-        # v0.6.0: ahora son keywords, no caen al IDENT.
+        # v0.6.1: ahora son keywords, no caen al IDENT.
         if t.type == TokenType.LIST_T:
             self._advance()
             return ListType(flexible=True, line=t.line, col=t.col)
@@ -760,7 +760,7 @@ class Parser:
                 )
         return left
 
-    # Operadores bit a bit (v0.6.0), con la precedencia de Python:
+    # Operadores bit a bit (v0.6.1), con la precedencia de Python:
     # comparación es más floja que | ^ & << >>, y entre ellos:
     # | (flojo) < ^ < & < << >> (fuerte).
     # Para '|' se mira el token SIGUIENTE: si puede iniciar un operando es
@@ -1057,7 +1057,7 @@ class Parser:
             return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
         # Identificador — incluido keywords de tipo usados como nombre de batch
-        # (v0.6.0: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
+        # (v0.6.1: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
         #  para permitir list::range(10), string::upper("x"), etc.)
         type_as_ident = {
             TokenType.IDENT:    None,   # identificador normal

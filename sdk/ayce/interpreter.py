@@ -238,7 +238,7 @@ class Interpreter:
     def __init__(self, filename: str = "<stdin>", import_paths: list = None):
         self.filename = filename
         self.global_env = Env()
-        # v0.6.0: builtins globales del lenguaje (ord, chr, urandom,
+        # v0.6.1: builtins globales del lenguaje (ord, chr, urandom,
         # bytes_from_ints, bytes_to_ints) — como los builtins de CPython:
         # están en el intérprete, sin `require`, y la stdlib algorítmica
         # se apoya sólo en ellos para tocar la máquina.
@@ -260,7 +260,7 @@ class Interpreter:
 
         for stmt in program.stmts:
             if isinstance(stmt, TaskDecl):
-                # v0.6.0: si el task ya fue declarado, las nuevas firmas se
+                # v0.6.1: si el task ya fue declarado, las nuevas firmas se
                 # FUNDEN como overloads (igual que la sintaxis `|` dentro de
                 # una sola declaración); antes, la última pisaba a las demás.
                 existing = self.global_env.lookup(stmt.name)
@@ -466,7 +466,7 @@ class Interpreter:
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "Las tuplas son inmutables: no se puede asignar a una posición")
             if isinstance(container, str) or isinstance(container, bytes):
-                # v0.6.0: strings y bytes son inmutables en ayce.
+                # v0.6.1: strings y bytes son inmutables en ayce.
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "Los strings y bytes son inmutables: no se puede asignar a s[i]")
             if not isinstance(container, AyceList):
@@ -705,7 +705,7 @@ class Interpreter:
             return
 
         # 2. Modo batch entero: require M [as A]
-        #    v0.6.0: la stdlib escrita en ayce (.ayce en disco) tiene PRIORIDAD
+        #    v0.6.1: la stdlib escrita en ayce (.ayce en disco) tiene PRIORIDAD
         #    sobre los batches built-in (wrappers de Python). Así el usuario
         #    puede reemplazar o complementar los builtins con su propio código
         #    ayce. Si no hay .ayce que coincida, se cae al builtin.
@@ -733,7 +733,7 @@ class Interpreter:
             return
 
         # 3. Modo selectivo: require X[, Y as Z] from M
-        #    v0.6.0: igual que el modo batch, prioriza .ayce sobre built-in.
+        #    v0.6.1: igual que el modo batch, prioriza .ayce sobre built-in.
         if stmt.mode == "selective":
             batch_name = stmt.batch_spec
             batch_path = self._try_resolve_batch_path(batch_name)
@@ -1044,7 +1044,7 @@ class Interpreter:
                 raise AyceRuntimeError(self.filename, stmt.line, stmt.col, "Batch por cero")
             new_val = current % value
         elif op in ("&", "|", "^", "<<", ">>"):
-            # v0.6.0: asignación compuesta bit a bit &=, |=, ^=, <<=, >>=
+            # v0.6.1: asignación compuesta bit a bit &=, |=, ^=, <<=, >>=
             if not (isinstance(current, int) and isinstance(value, int) and
                     not isinstance(current, bool) and not isinstance(value, bool)):
                 raise AyceTypeError(self.filename, stmt.line, stmt.col,
@@ -1078,7 +1078,7 @@ class Interpreter:
             if isinstance(container, AyceList):
                 container.elements[idx] = new_val
             elif isinstance(container, str) or isinstance(container, bytes):
-                # v0.6.0: strings y bytes son inmutables.
+                # v0.6.1: strings y bytes son inmutables.
                 raise AyceRuntimeError(self.filename, target.line, target.col,
                     "Los strings y bytes son inmutables: no se puede asignar a s[i]")
             else:
@@ -1161,7 +1161,7 @@ class Interpreter:
                         f"Índice {idx} fuera de rango (longitud {len(target.elements)})")
                 return target.elements[idx]
             if isinstance(target, str):
-                # v0.6.0: indexación de strings — s[i] devuelve un string de 1 char.
+                # v0.6.1: indexación de strings — s[i] devuelve un string de 1 char.
                 if not isinstance(idx, int):
                     raise AyceTypeError(self.filename, expr.line, expr.col,
                         "El índice de string debe ser int")
@@ -1170,7 +1170,7 @@ class Interpreter:
                         f"Índice {idx} fuera de rango (longitud {len(target)})")
                 return target[idx]
             if isinstance(target, bytes):
-                # v0.6.0: indexación de bytes — b[i] devuelve el byte como int (0-255).
+                # v0.6.1: indexación de bytes — b[i] devuelve el byte como int (0-255).
                 if not isinstance(idx, int):
                     raise AyceTypeError(self.filename, expr.line, expr.col,
                         "El índice de bytes debe ser int")
@@ -1237,24 +1237,24 @@ class Interpreter:
                     try:
                         return int(raw)
                     except ValueError:
-                        say(f"'{raw}' no es un int válido. Intentá de nuevo.")
+                        print(f"'{raw}' no es un int válido. Intentá de nuevo.")
                 elif expr.target_type == "float":
                     try:
                         return float(raw)
                     except ValueError:
-                        say(f"'{raw}' no es un float válido. Intentá de nuevo.")
+                        print(f"'{raw}' no es un float válido. Intentá de nuevo.")
                 elif expr.target_type == "bytes":
                     try:
                         return raw.encode("utf-8")
                     except Exception:
-                        say(f"'{raw}' no es convertible a bytes. Intentá de nuevo.")
+                        print(f"'{raw}' no es convertible a bytes. Intentá de nuevo.")
                 elif expr.target_type == "bool":
                     r = raw.strip().lower()
                     if r in ("true", "t", "1", "yes", "y", "s", "si", "sí", "verdadero"):
                         return True
                     if r in ("false", "f", "0", "no", "n", "falso"):
                         return False
-                    say(f"'{raw}' no es un bool válido. Usá s/n, true/false, 1/0.")
+                    print(f"'{raw}' no es un bool válido. Usá s/n, true/false, 1/0.")
                 else:
                     return raw
         if isinstance(expr, TernaryExpr):
@@ -1456,7 +1456,7 @@ class Interpreter:
             # Suma de bytes
             if expr.op == "+" and isinstance(left, bytes) and isinstance(right, bytes):
                 return left + right
-            # Concatenación de listas (v0.6.0): [1,2] + [3,4] = [1,2,3,4]
+            # Concatenación de listas (v0.6.1): [1,2] + [3,4] = [1,2,3,4]
             if expr.op == "+" and isinstance(left, AyceList) and isinstance(right, AyceList):
                 new_elems = list(left.elements) + list(right.elements)
                 # El tipo resultante: si alguno es flexible, queda flexible.
@@ -1505,7 +1505,7 @@ class Interpreter:
             if expr.op == "**":
                 return left ** right
 
-        # Operadores bit a bit (v0.6.0): & | ^ << >> — solo enteros (no bool)
+        # Operadores bit a bit (v0.6.1): & | ^ << >> — solo enteros (no bool)
         if expr.op in ("&", "|", "^", "<<", ">>"):
             for side in (left, right):
                 if not isinstance(side, int) or isinstance(side, bool):
@@ -1528,7 +1528,7 @@ class Interpreter:
 
         # Comparaciones
         if expr.op in ("==", "!="):
-            # v0.6.0: comparar con none es siempre válido (estilo Python `x is None`).
+            # v0.6.1: comparar con none es siempre válido (estilo Python `x is None`).
             # Cualquier valor puede preguntarse si es none o no es none.
             if left is None or right is None:
                 return (left == right) if expr.op == "==" else (left != right)
@@ -1964,7 +1964,7 @@ class Interpreter:
         if isinstance(target_val, AyceTask):
             return self._call_task(target_val, [self.eval(a, env) for a in expr.args],
                                     expr.line, expr.col)
-        # v0.6.0: tarea nativa retenida en una variable (p.ej. `var f: task =
+        # v0.6.1: tarea nativa retenida en una variable (p.ej. `var f: task =
         # primitives::math_sqrt` o require selectivo de un batch built-in).
         from .batches import AyceNativeTask
         if isinstance(target_val, AyceNativeTask):
@@ -2163,7 +2163,7 @@ class Interpreter:
                     f"Se esperaba set, se recibió {self._type_name(value)}")
             return
         if isinstance(type_node, TaskType):
-            # v0.6.0: también acepta tareas nativas (AyceNativeTask de los
+            # v0.6.1: también acepta tareas nativas (AyceNativeTask de los
             # batches built-in), necesarias para las librerías stdlib en ayce.
             from .batches import AyceNativeTask
             if not isinstance(value, (AyceTask, AyceNativeTask)):
@@ -2383,7 +2383,7 @@ class Interpreter:
         if isinstance(value, int):  return str(value)
         if isinstance(value, float):
             # Formatear float: si es entero, añadir .0
-            # (v0.6.0: inf/nan no admiten comparación con int() — proteger)
+            # (v0.6.1: inf/nan no admiten comparación con int() — proteger)
             if value != value:
                 return "nan"
             if value == float("inf"):

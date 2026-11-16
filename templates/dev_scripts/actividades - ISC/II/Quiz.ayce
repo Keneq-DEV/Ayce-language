@@ -1,0 +1,105 @@
+require random
+
+var preguntas: none[] = [
+    ["¿Cuánto es 2 + 2?", ["A:3", "B:4", "C:5"], "B"],
+    ["¿Cuál es el planeta rojo?", ["A:Marte", "B:Venus", "C:Júpiter"], "A"],
+    ["¿Cuántos días tiene una semana?", ["A:5", "B:7", "C:10"], "B"],
+    ["¿Qué lenguaje se ejecuta en el navegador?", ["A:Python", "B:JavaScript", "C:C++"], "B"],
+    ["¿Cuál es el océano más grande?", ["A:Atlántico", "B:Índico", "C:Pacífico"], "C"],
+    ["¿Cuánto es 10 / 2?", ["A:2", "B:5", "C:8"], "B"],
+    ["¿Cuál es un mamífero?", ["A:Delfín", "B:Tiburón", "C:Águila"], "A"],
+    ["¿Cuántos lados tiene un triángulo?", ["A:3", "B:4", "C:5"], "A"],
+    ["¿Qué estrella ilumina la Tierra?", ["A:La Luna", "B:El Sol", "C:Venus"], "B"],
+    ["¿Cuál es el resultado de 3 * 3?", ["A:6", "B:9", "C:12"], "B"]
+]
+
+task jugar(string tag) ;
+{
+    say(f"¡Bienvenido, {tag}!")
+
+    var reiniciar: bool = True
+    while reiniciar do
+        reiniciar = False
+        var aciertos: int = 0
+        var vidas: int = 3
+        var disponibles: int[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+        while disponibles::len() > 0 && vidas > 0 do
+            var indice: int = random::rand_int(0, disponibles::len() - 1)
+            var numero_pregunta: int = disponibles[indice]
+            disponibles::delete(indice)
+
+            var actual: none[] = preguntas[numero_pregunta]
+            var numero: int = 10 - disponibles::len()
+            say("Pregunta", numero, "/10:", actual[0])
+
+            var opciones: none[] = actual[1]
+            for opcion in opciones do
+                say(opcion)
+            end
+
+            var respuesta: string = inlet("Elige una opción (A-C): ", string)
+            respuesta = respuesta::trim()::upper()
+            while respuesta != "A" && respuesta != "B" && respuesta != "C" do
+                say("Opción inválida.")
+                respuesta = inlet("Elige una opción (A-C): ", string)
+                respuesta = respuesta::trim()::upper()
+            end
+
+            if respuesta == actual[2] then
+                aciertos += 1
+                say("¡Correcto!")
+            else
+                vidas -= 1
+                say(f"Incorrecto, {tag}. Te quedan {vidas} vidas.")
+
+                if vidas == 0 then
+                    say("Has perdido.")
+                    var continuar: string = inlet("¿Deseas continuar? (Y/N): ", string)
+                    continuar = continuar::trim()::upper()
+                    if continuar == "Y" then
+                        reiniciar = True
+                    end
+                end
+            end
+        end
+
+        if ! reiniciar then
+            if aciertos >= 6 then
+                say(f"¡Has ganado con {aciertos} respuestas correctas!")
+            else
+                say(f"Terminaste con {aciertos} respuestas correctas. Necesitas 6 para ganar.")
+            end
+        end
+    end
+}
+
+task q_menu() ;
+{
+    var opcion: string = ""
+    while opcion != "2" do
+        say("""
+*** QUIZ TIME ***
+1 - Empezar
+2 - Salir
+""")
+        opcion = inlet("Ingrese su opción: ", string)
+        opcion = opcion::trim()
+
+        if opcion == "1" then
+            var tag: string = inlet("Ingrese el tag del jugador: ", string)
+            tag = tag::trim()
+            if tag != "" then
+                jugar(tag)
+            else
+                say("El tag no puede estar vacío.")
+            end
+        else if opcion == "2" then
+            say("¡Hasta luego!")
+        else
+            say("Opción inválida.")
+        end
+    end
+}
+
+q_menu()

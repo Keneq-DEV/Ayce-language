@@ -1,0 +1,15 @@
+var valor: float = inlet("Ingrese el valor sin impuesto: ", float)
+var impuesto: float = inlet("Ingrese el porcentaje del impuesto: ", float)
+
+task calcular_imp(float sin_impuesto, float impuesto) = float ;
+{
+    var con_impuesto: float = sin_impuesto + (sin_impuesto * impuesto / 100)
+    return con_impuesto
+
+}
+
+var calculado: float = calcular_imp(valor, impuesto)
+
+say(f"proporciona el pago sin impuesto: {valor}")
+say(f"proporciona el porcentaje del impuesto: {impuesto}")
+say(f"pago con impuesto: {calculado:.2f}")

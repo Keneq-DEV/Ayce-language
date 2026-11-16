@@ -1,5 +1,5 @@
 """
-ayce — Batches stdlib extra (v0.6.0).
+ayce — Batches stdlib extra (v0.6.1).
 
 Batches adicionales equivalentes a módulos stdlib de Python que no estaban
 en v0.5.1. Cada batch expone tareas (AyceNativeTask) y constantes.
@@ -333,7 +333,7 @@ def _build_datetime_batch():
         })
     exports["from_iso"] = _task(_wrap(_from_iso))
 
-    ## ── Ampliación v0.6.0: aritmética de fechas (timedelta) ──
+    ## ── Ampliación v0.6.1: aritmética de fechas (timedelta) ──
     ## Los dicts de datetime aceptan las claves year/month/day/hour/minute/second.
 
     def _dt_from_dict(value, default_date=None):
@@ -1277,7 +1277,7 @@ def _build_decimal_batch():
         return str(a / b)
     exports["div"] = _task(_wrap(_div))
 
-    ## ── Ampliación v0.6.0 ──
+    ## ── Ampliación v0.6.1 ──
 
     def _compare(interp, args, line, col):
         _nargs(args, 2, "decimal::compare", line, col)
@@ -2120,7 +2120,7 @@ def _build_urllib_batch():
         return _urlparse.unquote(args[0])
     exports["unquote"] = _task(_wrap(_unquote))
 
-    ## ── Ampliación v0.6.0 ──
+    ## ── Ampliación v0.6.1 ──
 
     def _urlopen(interp, args, line, col):
         _nargs(args, (1, 2), "urllib::urlopen", line, col)
@@ -3078,7 +3078,7 @@ def _build_inspect_batch():
 
 
 def get_extra_batches():
-    """Devuelve un dict con todos los batches stdlib nuevos (v0.6.0)."""
+    """Devuelve un dict con todos los batches stdlib nuevos (v0.6.1)."""
     return {
         "copy":        _build_copy_batch(),
         "re":          _build_re_batch(),
@@ -3126,7 +3126,7 @@ def get_extra_batches():
         "sqlite3":     _build_sqlite3_batch(),
         "urllib":      _build_urllib_batch(),
         "array":       _build_array_batch(),
-        # Nuevos en la ampliación v0.6.0
+        # Nuevos en la ampliación v0.6.1
         "stat":           _build_stat_batch(),
         "tarfile":        _build_tarfile_batch(),
         "binascii":       _build_binascii_batch(),

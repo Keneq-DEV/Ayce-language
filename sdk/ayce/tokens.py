@@ -64,7 +64,7 @@ class TokenType(Enum):
     BOOL_T     = auto()
     BYTES_T    = auto()
 
-    # Tipos colección (palabras reservadas v0.6.0: list/dict/tuple/set sin tipo elem)
+    # Tipos colección (palabras reservadas v0.6.1: list/dict/tuple/set sin tipo elem)
     LIST_T     = auto()
     DICT_T     = auto()
     TUPLE_T    = auto()
@@ -165,7 +165,7 @@ KEYWORDS = {
     "require":  TokenType.REQUIRE,
     "from":     TokenType.FROM,
     "as":       TokenType.AS,
-    "not":      TokenType.NOT,    # v0.6.0: alias de '!'
+    "not":      TokenType.NOT,    # v0.6.1: alias de '!'
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,
     "none":     TokenType.NONE,

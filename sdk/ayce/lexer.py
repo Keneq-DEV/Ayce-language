@@ -186,6 +186,13 @@ class Lexer:
         # Consumir la comilla de apertura
         self._advance()  # '"'
 
+        # Triple comilla (v0.6.1): """...""" admite saltos de línea reales
+        triple = False
+        if self._peek() == '"' and self._peek(1) == '"':
+            triple = True
+            self._advance()
+            self._advance()
+
         parts: list = []  # para f-string: lista de (str | expr_source_string)
         current = []
 
@@ -196,6 +203,16 @@ class Lexer:
             c = self._peek()
 
             if c == '"':
+                if triple:
+                    if self._peek(1) == '"' and self._peek(2) == '"':
+                        self._advance()
+                        self._advance()
+                        self._advance()
+                        break
+                    # Una " suelta dentro de """...""" es contenido
+                    current.append(c)
+                    self._advance()
+                    continue
                 self._advance()  # cierra comillas
                 break
 
@@ -338,7 +355,7 @@ class Lexer:
         line, col = self.line, self.col
         is_float = False
 
-        # Literales enteros con base (v0.6.0): 0x hex, 0o octal, 0b binario
+        # Literales enteros con base (v0.6.1): 0x hex, 0o octal, 0b binario
         if self._peek() == "0" and self._peek(1) in ("x", "X", "o", "O", "b", "B"):
             base_char = self._peek(1).lower()
             base = {"x": 16, "o": 8, "b": 2}[base_char]
@@ -420,7 +437,7 @@ class Lexer:
         if three == "//=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.DSLASH_ASSIGN, "//=", line, col)); return
-        # Desplazamientos con asignación (v0.6.0): <<= y >>=
+        # Desplazamientos con asignación (v0.6.1): <<= y >>=
         if three == "<<=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.LSHIFT_ASSIGN, "<<=", line, col)); return
@@ -482,7 +499,7 @@ class Lexer:
         if two == "%=":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.PERCENT_ASSIGN, "%=", line, col)); return
-        # Operadores bit a bit de 2 caracteres (v0.6.0)
+        # Operadores bit a bit de 2 caracteres (v0.6.1)
         if two == "<<":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.LSHIFT, "<<", line, col)); return
@@ -504,7 +521,7 @@ class Lexer:
             self._advance()
             self.tokens.append(Token(TokenType.QUESTION, "?", line, col)); return
 
-        # Modificadores &in &out &inout (v0.6.0: inout primero, para que '&in'
+        # Modificadores &in &out &inout (v0.6.1: inout primero, para que '&in'
         # no se coma el prefijo de '&inout' — bug de orden corregido aquí)
         # '& ' a secas ahora es el operador AND bit a bit.
         if c == "&":
