@@ -40,7 +40,7 @@ class Parser:
 
     def _expect(self, type_: TokenType, what: str) -> Token:
         if self._peek().type != type_:
-            # v0.6.2: '>>' se lexifica como un único token RSHIFT, pero en un
+            # v0.6.1: '>>' se lexifica como un único token RSHIFT, pero en un
             # tipo dict anidado <K, <V1, V2>> el cierre son dos '>' seguidos.
             # Igual que hace CPython con los generics: dividimos el token.
             # v0.6.2: la división INSERTA el segundo '>' en vez de pisar el
@@ -347,7 +347,7 @@ class Parser:
         branches.append((cond, body))
 
         # else if / else (sin end entre ramas — el end va al final de toda la cadena)
-        # v0.6.2 fix: 'else if' sólo se interpreta como cadena else-if cuando
+        # v0.6.1 fix: 'else if' sólo se interpreta como cadena else-if cuando
         # 'else' e 'if' están en la MISMA línea. Si están en líneas distintas,
         # es un bloque else normal que contiene un if anidado (con su propio end).
         # Esto resuelve la ambigüedad:
@@ -568,7 +568,7 @@ class Parser:
             value = self._parse_expr()
             return AssignStmt(target=expr, value=value, line=t.line, col=t.col)
         # Asignación compuesta (v0.4): +=, -=, *=, /=, //=, %=
-        # (v0.6.2: también las bit a bit &=, |=, ^=, <<=, >>=)
+        # (v0.6.1: también las bit a bit &=, |=, ^=, <<=, >>=)
         compound_ops = {
             TokenType.PLUS_ASSIGN: "+=",
             TokenType.MINUS_ASSIGN: "-=",
@@ -645,7 +645,7 @@ class Parser:
             return base
 
         # Tipos colección "flexibles" (sin tipo de elemento): list / dict / tuple / set
-        # v0.6.2: ahora son keywords, no caen al IDENT.
+        # v0.6.1: ahora son keywords, no caen al IDENT.
         if t.type == TokenType.LIST_T:
             self._advance()
             return ListType(flexible=True, line=t.line, col=t.col)
@@ -782,7 +782,7 @@ class Parser:
                 )
         return left
 
-    # Operadores bit a bit (v0.6.2), con la precedencia de Python:
+    # Operadores bit a bit (v0.6.1), con la precedencia de Python:
     # comparación es más floja que | ^ & << >>, y entre ellos:
     # | (flojo) < ^ < & < << >> (fuerte).
     # Para '|' se mira el token SIGUIENTE: si puede iniciar un operando es
@@ -889,28 +889,20 @@ class Parser:
                 expr = IndexExpr(target=expr, index=idx, line=t.line, col=t.col)
             elif t.type == TokenType.LT:
                 # Acceso a diccionario x<clave>
-                # Heurística: si tras '<' hay un literal o identificador seguido de '>',
-                # es dict access; en otro caso es comparación.
-                # La clave se parsea con una restricción: sólo se permiten literales
-                # o identificadores simples (no expresiones con comparaciones)
-                # para evitar ambigüedad con el '>' de cierre.
+                # Heurística (extendida): tras '<' la clave puede ser
+                #   - un literal simple (string/int/float/bool/none),
+                #   - un identificador (o nombre de tipo stdlib como list/math)
+                #     seguido de una cadena opcional de ::miembro y llamadas,
+                #   - una expresión entre paréntesis (expr),
+                # siempre seguidos del '>' de cierre. En otro caso '<' es
+                # comparación. La comparación encadenada a < b > c ya está
+                # prohibida desde v0.2, así que reconocer <clave> no es ambiguo:
+                # evita el falso "comparaciones encadenadas" para x<v::cliente>.
                 if isinstance(expr, (IdentExpr, DictAccessExpr, IndexExpr, MethodCallExpr, CallExpr)):
                     save = self.pos
                     self._advance()  # '<'
-                    next_tok = self._peek()
-                    # Caso simple: <literal> o <identificador> seguido de '>'
-                    if next_tok.type in (TokenType.STRING, TokenType.INT, TokenType.FLOAT,
-                                         TokenType.TRUE, TokenType.FALSE, TokenType.NONE):
-                        if self._peek(1).type == TokenType.GT:
-                            key = self._parse_primary()
-                            self._expect(TokenType.GT, "'>'")
-                            expr = DictAccessExpr(target=expr, key=key, line=t.line, col=t.col)
-                            continue
-                        else:
-                            self.pos = save
-                            break
-                    if next_tok.type == TokenType.IDENT and self._peek(1).type == TokenType.GT:
-                        key = self._parse_primary()
+                    key = self._try_parse_dict_key()
+                    if key is not None:
                         self._expect(TokenType.GT, "'>'")
                         expr = DictAccessExpr(target=expr, key=key, line=t.line, col=t.col)
                         continue
@@ -967,6 +959,93 @@ class Parser:
             else:
                 break
         return expr
+
+    def _try_parse_dict_key(self):
+        """Parsea la clave de un acceso a dict x<clave> (el '<' ya fue consumido).
+
+        Devuelve la expresión de la clave si la forma es reconocible, o None si
+        no (el llamador debe restaurar la posición y tratar el '<' como el
+        inicio de una comparación). Este método nunca consume el '>' de cierre:
+        de eso se encarga el llamador con _expect.
+        Formas aceptadas:
+          - literal simple: x<"a">, x<5>, x<True>, x<none>
+          - identificador con cadena opcional de ::miembro / ::metodo(args),
+            incluyendo el primer tramo con nombre de tipo stdlib (x<list::len(l)>)
+          - expresión entre paréntesis: x<(expr)>
+        """
+        t = self._peek()
+        # Literal simple (sólo si el '>' de cierre está pegado; si no, es
+        # una comparación como `if x < 5 then`)
+        if t.type in (TokenType.STRING, TokenType.INT, TokenType.FLOAT,
+                      TokenType.TRUE, TokenType.FALSE, TokenType.NONE):
+            if self._peek(1).type != TokenType.GT:
+                return None
+            return self._parse_primary()
+        member_type_tokens = {
+            TokenType.STRING_T: "string",
+            TokenType.INT_T:    "int",
+            TokenType.FLOAT_T:  "float",
+            TokenType.BOOL_T:   "bool",
+            TokenType.BYTES_T:  "bytes",
+            TokenType.RANGE:    "range",
+            TokenType.LIST_T:   "list",
+            TokenType.DICT_T:   "dict",
+            TokenType.TUPLE_T:  "tuple",
+            TokenType.SET_T:    "set",
+        }
+        if t.type == TokenType.IDENT or t.type in member_type_tokens:
+            # _parse_primary ya mapea nombres de tipo stdlib (string, list, ...)
+            # a identificadores, así que el primer tramo sale de ahí.
+            key = self._parse_primary()
+            # Llamada directa sobre el primer tramo: x<string(n)>, x<int(v)>
+            if self._check(TokenType.LPAREN):
+                self._advance()
+                args = []
+                if not self._check(TokenType.RPAREN):
+                    args.append(self._parse_expr())
+                    while self._match(TokenType.COMMA):
+                        args.append(self._parse_expr())
+                self._expect(TokenType.RPAREN, "')'")
+                key = CallExpr(target=key, args=args, line=t.line, col=t.col)
+            # Cadena opcional de ::miembro / ::metodo(args)
+            while self._check(TokenType.DOUBLE_COLON):
+                self._advance()
+                if self._peek().type in member_type_tokens:
+                    mname = member_type_tokens[self._peek().type]
+                    self._advance()
+                else:
+                    mname = self._expect(TokenType.IDENT, "nombre de miembro").value
+                if self._check(TokenType.LPAREN):
+                    self._advance()
+                    args = []
+                    if not self._check(TokenType.RPAREN):
+                        args.append(self._parse_expr())
+                        while self._match(TokenType.COMMA):
+                            args.append(self._parse_expr())
+                    self._expect(TokenType.RPAREN, "')'")
+                    key = MethodCallExpr(target=key, method=mname, args=args,
+                                         line=t.line, col=t.col)
+                else:
+                    key = ModuleAccessExpr(target=key, name=mname, line=t.line, col=t.col)
+            if self._check(TokenType.GT):
+                return key
+            return None
+        # Expresión entre paréntesis: x<(expr)>
+        if t.type == TokenType.LPAREN:
+            save = self.pos
+            self._advance()
+            try:
+                inner = self._parse_expr()
+            except AyceSyntaxError:
+                self.pos = save
+                return None
+            if self._check(TokenType.RPAREN):
+                self._advance()
+                if self._check(TokenType.GT):
+                    return inner
+            self.pos = save
+            return None
+        return None
 
     def _parse_primary(self) -> Expr:
         t = self._peek()
@@ -1079,7 +1158,7 @@ class Parser:
             return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
         # Identificador — incluido keywords de tipo usados como nombre de batch
-        # (v0.6.2: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
+        # (v0.6.1: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
         #  para permitir list::range(10), string::upper("x"), etc.)
         type_as_ident = {
             TokenType.IDENT:    None,   # identificador normal
