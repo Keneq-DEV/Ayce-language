@@ -1,0 +1,19 @@
+var n: int = inlet("Altura de la piramide: ", int)
+
+if n <= 0 then
+    say("La altura debe ser mayor que cero.")
+else
+    for i in range(0, n) do
+        var fila: string = ""
+
+        for j in range(0, n - i - 1) do
+            fila = fila + " "
+        end
+
+        for j in range(0, 2 * i + 1) do
+            fila = fila + "*"
+        end
+
+        say(fila)
+    end
+end

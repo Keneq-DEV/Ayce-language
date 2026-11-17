@@ -83,12 +83,20 @@ class Lexer:
 
             # Comentario ### ... ### (multilínea)
             if c == "#" and self._peek(1) == "#" and self._peek(2) == "#":
+                # v0.6.2: un comentario multilínea sin cerrar es error de sintaxis,
+                # no se traga el resto del archivo en silencio.
+                start_line, start_col = self.line, self.col
                 self._advance(); self._advance(); self._advance()  # consume ###
+                closed = False
                 while self.pos < len(self.source):
                     if self._peek() == "#" and self._peek(1) == "#" and self._peek(2) == "#":
                         self._advance(); self._advance(); self._advance()  # consume ###
+                        closed = True
                         break
                     self._advance()
+                if not closed:
+                    self._error("Comentario multilínea sin cerrar (falta '###')",
+                                start_line, start_col)
                 continue
 
             # Comentario ## hasta fin de línea
@@ -148,10 +156,12 @@ class Lexer:
         {expr:formato} → (expr, formato)
         {expr}         → (expr, "")
         El : que separa es el primer : que NO está dentro de () [] <> {} ni en un string,
-        Y que NO es parte de '::' (acceso a miembros en v0.5).
+        Y que NO es parte de '::' (acceso a miembros en v0.5),
+        Y que NO cierra un ternario `cond ? a : b` (v0.6.2, bug I4).
         """
         depth = 0
         in_string = False
+        ternary_depth = 0
         i = 0
         while i < len(full):
             c = full[i]
@@ -171,11 +181,18 @@ class Lexer:
             elif c in ")]}>":
                 if depth > 0:
                     depth -= 1
+            elif c == "?" and depth == 0:
+                ternary_depth += 1
             elif c == ":" and depth == 0:
                 # v0.5: ignorar '::' (acceso a miembros)
                 if i + 1 < len(full) and full[i+1] == ":":
                     # Saltar el '::' completo
                     i += 2
+                    continue
+                # v0.6.2: un ':' con ternario abierto es el del ternario, no formato
+                if ternary_depth > 0:
+                    ternary_depth -= 1
+                    i += 1
                     continue
                 return full[:i].strip(), full[i+1:].strip()
             i += 1
@@ -186,7 +203,7 @@ class Lexer:
         # Consumir la comilla de apertura
         self._advance()  # '"'
 
-        # Triple comilla (v0.6.1): """...""" admite saltos de línea reales
+        # Triple comilla (v0.6.2): """...""" admite saltos de línea reales
         triple = False
         if self._peek() == '"' and self._peek(1) == '"':
             triple = True
@@ -355,7 +372,7 @@ class Lexer:
         line, col = self.line, self.col
         is_float = False
 
-        # Literales enteros con base (v0.6.1): 0x hex, 0o octal, 0b binario
+        # Literales enteros con base (v0.6.2): 0x hex, 0o octal, 0b binario
         if self._peek() == "0" and self._peek(1) in ("x", "X", "o", "O", "b", "B"):
             base_char = self._peek(1).lower()
             base = {"x": 16, "o": 8, "b": 2}[base_char]
@@ -437,7 +454,7 @@ class Lexer:
         if three == "//=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.DSLASH_ASSIGN, "//=", line, col)); return
-        # Desplazamientos con asignación (v0.6.1): <<= y >>=
+        # Desplazamientos con asignación (v0.6.2): <<= y >>=
         if three == "<<=":
             self._advance(); self._advance(); self._advance()
             self.tokens.append(Token(TokenType.LSHIFT_ASSIGN, "<<=", line, col)); return
@@ -499,7 +516,7 @@ class Lexer:
         if two == "%=":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.PERCENT_ASSIGN, "%=", line, col)); return
-        # Operadores bit a bit de 2 caracteres (v0.6.1)
+        # Operadores bit a bit de 2 caracteres (v0.6.2)
         if two == "<<":
             self._advance(); self._advance()
             self.tokens.append(Token(TokenType.LSHIFT, "<<", line, col)); return
@@ -521,7 +538,7 @@ class Lexer:
             self._advance()
             self.tokens.append(Token(TokenType.QUESTION, "?", line, col)); return
 
-        # Modificadores &in &out &inout (v0.6.1: inout primero, para que '&in'
+        # Modificadores &in &out &inout (v0.6.2: inout primero, para que '&in'
         # no se coma el prefijo de '&inout' — bug de orden corregido aquí)
         # '& ' a secas ahora es el operador AND bit a bit.
         if c == "&":

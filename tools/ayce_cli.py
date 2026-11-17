@@ -53,6 +53,10 @@ def main(argv=None):
     if not os.path.exists(filename):
         print(f"Error: el archivo '{filename}' no existe", file=sys.stderr)
         return 2
+    if os.path.isdir(filename):
+        # v0.6.2 (I23): mensaje limpio para un directorio, sin traceback crudo
+        print(f"Error: '{filename}' es un directorio, no un archivo .ayce", file=sys.stderr)
+        return 2
 
     try:
         run_file(filename)

@@ -352,10 +352,12 @@ class QualifiedTypeName(TypeNode):
 # ──────────────────────────────────────────────────────────────────────
 @dataclass
 class TryStmt(Stmt):
-    """try ... rescue(nombre: Tipo) ... end"""
+    """try ... rescue(nombre: Tipo) ... end
+    v0.6.2: admite VARIOS rescue en orden (spec 12.1)."""
     body: list = field(default_factory=list)
-    rescue_name: str = ""
-    rescue_type: str = ""    # nombre del tipo de error (ej: "Div0", "Error", "")
+    rescues: list = field(default_factory=list)  # [(nombre, tipo, cuerpo), ...]
+    rescue_name: str = ""    # compat v0.6.2 (un solo rescue)
+    rescue_type: str = ""
     rescue_body: list = field(default_factory=list)
     line: int = 0
     col: int = 0

@@ -40,13 +40,16 @@ class Parser:
 
     def _expect(self, type_: TokenType, what: str) -> Token:
         if self._peek().type != type_:
-            # v0.6.1: '>>' se lexifica como un único token RSHIFT, pero en un
+            # v0.6.2: '>>' se lexifica como un único token RSHIFT, pero en un
             # tipo dict anidado <K, <V1, V2>> el cierre son dos '>' seguidos.
             # Igual que hace CPython con los generics: dividimos el token.
+            # v0.6.2: la división INSERTA el segundo '>' en vez de pisar el
+            # token siguiente (antes se comía el '=' de la inicialización).
             if type_ == TokenType.GT and self._peek().type == TokenType.RSHIFT:
-                t = self._advance()
-                self.tokens[self.pos] = Token(TokenType.GT, ">", t.line, t.col + 1)
-                return Token(TokenType.GT, ">", t.line, t.col)
+                t = self._peek()
+                self.tokens[self.pos] = Token(TokenType.GT, ">", t.line, t.col)
+                self.tokens.insert(self.pos + 1, Token(TokenType.GT, ">", t.line, t.col + 1))
+                return self._advance()
             t = self._peek()
             raise AyceSyntaxError(
                 self.filename, t.line, t.col,
@@ -161,7 +164,12 @@ class Parser:
             expr = self._parse_expr()
             bodies.append([ReturnStmt(value=expr, line=t.line, col=t.col)])
         else:
-            self._expect(TokenType.SEMICOLON, "';'")
+            # v0.6.2 (spec 15.3): ';' obligatorio sólo si NO hay tipo de retorno.
+            # Con `= tipo` el ';' es opcional.
+            if return_type is None:
+                self._expect(TokenType.SEMICOLON, "';'")
+            else:
+                self._match(TokenType.SEMICOLON)
             self._skip_newlines()
             self._expect(TokenType.LBRACE, "'{'")
             # Un cuerpo por firma, separados por | dentro del mismo bloque
@@ -339,7 +347,7 @@ class Parser:
         branches.append((cond, body))
 
         # else if / else (sin end entre ramas — el end va al final de toda la cadena)
-        # v0.6.1 fix: 'else if' sólo se interpreta como cadena else-if cuando
+        # v0.6.2 fix: 'else if' sólo se interpreta como cadena else-if cuando
         # 'else' e 'if' están en la MISMA línea. Si están en líneas distintas,
         # es un bloque else normal que contiene un if anidado (con su propio end).
         # Esto resuelve la ambigüedad:
@@ -384,14 +392,15 @@ class Parser:
         return ForStmt(var_name=var_name, iterable=iterable, body=body, line=t.line, col=t.col)
 
     def _parse_try(self) -> TryStmt:
-        """try ... rescue(nombre: Tipo) ... end"""
+        """try ... rescue(nombre: Tipo) ... end
+        v0.6.2: varios rescue en orden (spec 12.1), con o sin paréntesis."""
         t = self._expect(TokenType.TRY, "'try'")
         body = self._parse_block_body()
-        rescue_name = ""
-        rescue_type = ""
-        rescue_body = []
-        if self._check(TokenType.RESCUE):
+        rescues = []
+        while self._check(TokenType.RESCUE):
             self._advance()
+            rescue_name = ""
+            rescue_type = ""
             if self._check(TokenType.LPAREN):
                 self._advance()
                 rescue_name = self._expect(TokenType.IDENT, "nombre de variable de error").value
@@ -415,9 +424,9 @@ class Parser:
                         raise AyceSyntaxError(self.filename, type_tok.line, type_tok.col,
                             "Se esperaba un nombre de tipo de error después de ':'")
             rescue_body = self._parse_block_body()
+            rescues.append((rescue_name, rescue_type, rescue_body))
         self._expect(TokenType.END, "'end'")
-        return TryStmt(body=body, rescue_name=rescue_name, rescue_type=rescue_type,
-                       rescue_body=rescue_body, line=t.line, col=t.col)
+        return TryStmt(body=body, rescues=rescues, line=t.line, col=t.col)
 
     def _parse_require(self) -> RequireStmt:
         """require M [as A]
@@ -559,7 +568,7 @@ class Parser:
             value = self._parse_expr()
             return AssignStmt(target=expr, value=value, line=t.line, col=t.col)
         # Asignación compuesta (v0.4): +=, -=, *=, /=, //=, %=
-        # (v0.6.1: también las bit a bit &=, |=, ^=, <<=, >>=)
+        # (v0.6.2: también las bit a bit &=, |=, ^=, <<=, >>=)
         compound_ops = {
             TokenType.PLUS_ASSIGN: "+=",
             TokenType.MINUS_ASSIGN: "-=",
@@ -636,7 +645,7 @@ class Parser:
             return base
 
         # Tipos colección "flexibles" (sin tipo de elemento): list / dict / tuple / set
-        # v0.6.1: ahora son keywords, no caen al IDENT.
+        # v0.6.2: ahora son keywords, no caen al IDENT.
         if t.type == TokenType.LIST_T:
             self._advance()
             return ListType(flexible=True, line=t.line, col=t.col)
@@ -662,7 +671,9 @@ class Parser:
                 value_types.append(self._parse_type())
                 self._skip_newlines()
             self._expect(TokenType.GT, "'>'")
-            return DictType(key_type=key_type, value_types=value_types, line=t.line, col=t.col)
+            d = DictType(key_type=key_type, value_types=value_types, line=t.line, col=t.col)
+            # v0.6.2: sufijo [] sobre tipos colección — <K, V>[] (lista de dicts)
+            return self._parse_type_suffix(d, t)
 
         # Tupla heterogénea: (T1, T2, ...)
         if t.type == TokenType.LPAREN:
@@ -671,7 +682,8 @@ class Parser:
             while self._match(TokenType.COMMA):
                 elem_types.append(self._parse_type())
             self._expect(TokenType.RPAREN, "')'")
-            return TupleType(elem_types=elem_types, line=t.line, col=t.col)
+            tt = TupleType(elem_types=elem_types, line=t.line, col=t.col)
+            return self._parse_type_suffix(tt, t)
 
         # 'task' como tipo (para callbacks)
         if t.type == TokenType.TASK:
@@ -702,6 +714,16 @@ class Parser:
             self.filename, t.line, t.col,
             f"Se esperaba un tipo pero se encontró {t.value!r}"
         )
+
+    def _parse_type_suffix(self, base, t):
+        """v0.6.2: sufijos [] sobre tipos colección ya formados
+        (<K, V>[], (T1, T2)[], ...) para declarar listas de dicts, etc."""
+        result = base
+        while self._check(TokenType.LBRACKET):
+            self._advance()
+            self._expect(TokenType.RBRACKET, "']'")
+            result = ListType(elem=result, line=t.line, col=t.col)
+        return result
 
     # ──────────────────────────────────────────────────────────────────
     #  Expresiones (con precedencia)
@@ -756,11 +778,11 @@ class Parser:
                 nt = self._peek()
                 raise AyceSyntaxError(
                     self.filename, nt.line, nt.col,
-                    "Las comparaciones encadenadas (a < b < c) no están permitidas en v0.2"
+                    "Las comparaciones encadenadas (a < b < c) no están permitidas"
                 )
         return left
 
-    # Operadores bit a bit (v0.6.1), con la precedencia de Python:
+    # Operadores bit a bit (v0.6.2), con la precedencia de Python:
     # comparación es más floja que | ^ & << >>, y entre ellos:
     # | (flojo) < ^ < & < << >> (fuerte).
     # Para '|' se mira el token SIGUIENTE: si puede iniciar un operando es
@@ -1057,7 +1079,7 @@ class Parser:
             return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
         # Identificador — incluido keywords de tipo usados como nombre de batch
-        # (v0.6.1: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
+        # (v0.6.2: list/dict/tuple/set/string/int/float/bool/bytes como primaria,
         #  para permitir list::range(10), string::upper("x"), etc.)
         type_as_ident = {
             TokenType.IDENT:    None,   # identificador normal

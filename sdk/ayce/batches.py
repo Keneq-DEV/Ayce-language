@@ -427,7 +427,7 @@ def _build_math_batch():
         return _math.isqrt(args[0])
     exports["isqrt"] = _task(AyceNativeTask("isqrt", _isqrt))
 
-    ## ── Ampliación v0.6.1 ──
+    ## ── Ampliación v0.6.2 ──
 
     def _perm(interp, args, line, col):
         if len(args) != 2 or not isinstance(args[0], int) or not isinstance(args[1], int):
@@ -611,7 +611,7 @@ def _build_random_batch():
         return None
     exports["seed"] = _task(AyceNativeTask("seed", _seed))
 
-    ## ── Ampliación v0.6.1 ──
+    ## ── Ampliación v0.6.2 ──
 
     def _gauss(interp, args, line, col):
         if len(args) > 2 or (len(args) >= 1 and not isinstance(args[0], (int, float))) \
@@ -671,7 +671,7 @@ def _build_string_batch():
         return len(args[0])
     exports["length"] = _task(AyceNativeTask("length", _length))
 
-    # v0.6.1: ord/chr — builtins de carácter al nivel del lenguaje.
+    # v0.6.2: ord/chr — builtins de carácter al nivel del lenguaje.
     # Sin ellos no se pueden implementar en ayce algoritmos como SHA-256,
     # MT19937 o el parser de JSON (necesitan códigos de carácter).
     def _ord(interp, args, line, col):
@@ -820,7 +820,7 @@ def _build_string_batch():
             raise _err(line, col, f"string::to_float: '{args[0]}' no es un float válido")
     exports["to_float"] = _task(AyceNativeTask("to_float", _to_float))
 
-    ## ── Ampliación v0.6.1: constantes de caracteres ──
+    ## ── Ampliación v0.6.2: constantes de caracteres ──
     exports["ascii_lowercase"] = _const("abcdefghijklmnopqrstuvwxyz")
     exports["ascii_uppercase"] = _const("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     exports["ascii_letters"] = _const("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -831,7 +831,7 @@ def _build_string_batch():
     exports["whitespace"] = _const(" \t\n\r\x0b\x0c")
     exports["printable"] = _const("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c")
 
-    ## ── Ampliación v0.6.1: más operaciones ──
+    ## ── Ampliación v0.6.2: más operaciones ──
 
     def _capitalize(interp, args, line, col):
         if len(args) != 1 or not isinstance(args[0], str):
@@ -888,7 +888,7 @@ def _build_string_batch():
         return args[0].rjust(args[1], fill)
     exports["rjust"] = _task(AyceNativeTask("rjust", _rjust))
 
-    ## ── Ampliación v0.6.1: string.Template ──
+    ## ── Ampliación v0.6.2: string.Template ──
     ## Template(patrón) devuelve un objeto-dict {"pattern": ...}.
     ## substitute(tpl, vars) reemplaza $nombre y ${nombre}; lanza error si falta.
     ## safe_substitute(tpl, vars) deja intactas las que faltan.
@@ -1294,7 +1294,7 @@ def _build_io_batch():
                 print(f"'{raw}' no es un float válido. Intentá de nuevo.")
     exports["read_float"] = _task(AyceNativeTask("read_float", _read_float))
 
-    ## ── Ampliación v0.6.1 ──
+    ## ── Ampliación v0.6.2 ──
 
     def _read_lines(interp, args, line, col):
         from .interpreter import AyceList, ListType, PrimitiveType
@@ -1429,7 +1429,7 @@ def _build_time_batch():
         return datetime.datetime.now().isoformat()
     exports["timestamp"] = _task(AyceNativeTask("timestamp", _timestamp))
 
-    ## ── Ampliación v0.6.1 ──
+    ## ── Ampliación v0.6.2 ──
 
     def _strftime(interp, args, line, col):
         import datetime as _dt
@@ -1555,7 +1555,7 @@ def _build_os_batch():
         return _os.name
     exports["name"] = _task(AyceNativeTask("name", _name))
 
-    ## ── Ampliación v0.6.1 ──
+    ## ── Ampliación v0.6.2 ──
 
     def _rename(interp, args, line, col):
         if len(args) != 2 or not (isinstance(args[0], str) and isinstance(args[1], str)):
@@ -1626,7 +1626,7 @@ def _build_os_batch():
         return _os.getpid()
     exports["getpid"] = _task(AyceNativeTask("getpid", _getpid))
 
-    # v0.6.1: urandom — la única frontera de entropía del SO, igual que
+    # v0.6.2: urandom — la única frontera de entropía del SO, igual que
     # CPython: random.py importa `from os import urandom as _urandom`.
     def _urandom(interp, args, line, col):
         if len(args) != 1 or not isinstance(args[0], int) or isinstance(args[0], bool):
@@ -1693,7 +1693,7 @@ def _build_sys_batch():
         return _sys.platform
     exports["platform"] = _task(AyceNativeTask("platform", _platform))
 
-    ## ── Ampliación v0.6.1: streams de salida ──
+    ## ── Ampliación v0.6.2: streams de salida ──
 
     def _stdout(interp, args, line, col):
         if len(args) < 1:
@@ -1783,7 +1783,7 @@ def _build_json_batch():
             raise _err(line, col, f"json::stringify_compact: {e}")
     exports["stringify_compact"] = _task(AyceNativeTask("stringify_compact", _stringify_compact))
 
-    ## ── Ampliación v0.6.1: archivos y validación ──
+    ## ── Ampliación v0.6.2: archivos y validación ──
     ## Nota: los errores de JSON se lanzan con mensaje "JSONDecodeError: ..."
     ## y código 13, para poder filtrarlos con rescue (err) comprobando
     ## err::mensaje::starts_with("JSONDecodeError").
@@ -1838,7 +1838,7 @@ def _build_json_batch():
 #  Registro de todos los batches built-in
 # ──────────────────────────────────────────────────────────────────────
 
-# v0.6.1: batch bytes — constructores a nivel del lenguaje.
+# v0.6.2: batch bytes — constructores a nivel del lenguaje.
 # `bytes_from_ints` es el equivalente de Python bytes([1, 2, 3]): sin esto
 # no se puede construir bytes arbitrarios desde ayce (hashes, base64).
 def _build_bytes_batch():
@@ -1869,7 +1869,7 @@ def _build_bytes_batch():
     return AyceNativeBatch("bytes", exports)
 
 
-# v0.6.1: builtins GLOBALES del lenguaje — la superficie de contacto con
+# v0.6.2: builtins GLOBALES del lenguaje — la superficie de contacto con
 # la máquina, al nivel de `ord`/`chr`/`len` en CPython (sin `require`:
 # están siempre presentes, como los builtins de Python).
 # Con esto los módulos algorítmicos de la stdlib (random, hashlib, base64,
@@ -1950,7 +1950,7 @@ def get_builtin_batches():
         "sys":    _build_sys_batch(),
         "json":   _build_json_batch(),
     }
-    # v0.6.1: batches stdlib extra (copy, re, datetime, hashlib, etc.)
+    # v0.6.2: batches stdlib extra (copy, re, datetime, hashlib, etc.)
     try:
         from .batches_extra import get_extra_batches
         batches.update(get_extra_batches())
@@ -1959,7 +1959,7 @@ def get_builtin_batches():
         import sys as _s
         print(f"[ayce] advertencia: no se pudo cargar batches_extra: {e}", file=_s.stderr)
 
-    # v0.6.1: capa de primitivas nativas — un único batch `primitives` que
+    # v0.6.2: capa de primitivas nativas — un único batch `primitives` que
     # expone TODAS las tareas y constantes nativas con el prefijo del batch
     # (primitives::math_sqrt, primitives::random_gauss, primitives::json_parse, ...).
     # Es el equivalente al C de CPython: las librerías stdlib escritas en ayce
@@ -1972,7 +1972,7 @@ def get_builtin_batches():
             prim_exports[f"{bname}_{ename}"] = entry
     batches["primitives"] = AyceNativeBatch("primitives", prim_exports)
 
-    # v0.6.1: alias privados `_nombre` para cada batch nativo. Son el
+    # v0.6.2: alias privados `_nombre` para cada batch nativo. Son el
     # equivalente exacto de los módulos C de CPython (`posix`, `_socket`,
     # `_sqlite3`, `zlib`, ...): los módulos stdlib/*.ayce que tocan la
     # máquina hacen `require _os as posix`, igual que os.py de CPython
