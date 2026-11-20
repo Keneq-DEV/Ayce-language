@@ -1,0 +1,117 @@
+{
+  "comments": {
+    "lineComment": "##",
+    "blockComment": [
+      "###",
+      "###"
+    ]
+  },
+  "brackets": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "<",
+      ">"
+    ]
+  ],
+  "autoClosingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "<",
+      ">"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "f\"",
+      "\""
+    ],
+    [
+      "b\"",
+      "\""
+    ]
+  ],
+  "surroundingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "<",
+      ">"
+    ],
+    [
+      "\"",
+      "\""
+    ]
+  ],
+  "autoCloseBefore": "};:)]>` \n\t",
+  "wordPattern": "[A-Za-z_áéíóúüñÁÉÍÓÚÜÑ][A-Za-z0-9_áéíóúüñÁÉÍÓÚÜÑ]*",
+  "folding": {
+    "markers": {
+      "start": "^\\s*(task|if|while|for)\\b",
+      "end": "^\\s*end\\b"
+    }
+  },
+  "indentationRules": {
+    "increaseIndentPattern": "^.*(then|do)\\s*$",
+    "decreaseIndentPattern": "^\\s*(end|else)\\b"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "\\bthen\\s*$",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "\\bdo\\s*$",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^\\s*else\\s*$",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^\\s*else if.*then\\s*$",
+      "action": {
+        "indent": "indent"
+      }
+    }
+  ]
+}

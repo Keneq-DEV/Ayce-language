@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest
+    Version="2.0.0"
+    xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+    xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+    <Metadata>
+        <Identity
+            Language="es-MX"
+            Id="ayce"
+            Version="0.5.2"
+            Publisher="ayce-project" />
+        <DisplayName>ayce</DisplayName>
+        <Description xml:space="preserve">Soporte del lenguaje de programación ayce para VS Code.</Description>
+        <Tags>ayce,language,interpreter,static-typing</Tags>
+        <Categories>Programming Languages,Snippets,Other</Categories>
+        <GalleryFlags>Public</GalleryFlags>
+        <Icon>extension/icons/icon.png</Icon>
+        <Properties>
+            <Property Id="Microsoft.VisualStudio.Code.Engine" Value="^1.74.0" />
+            <Property Id="Microsoft.VisualStudio.Code.ExtensionDependencies" Value="" />
+            <Property Id="Microsoft.VisualStudio.Code.PackagedExtension" Value="true" />
+            <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="ui,workspace" />
+        </Properties>
+    </Metadata>
+    <Installation>
+        <InstallationTarget Id="Microsoft.VisualStudio.Code" />
+    </Installation>
+    <Dependencies>
+        <Dependency Id="Microsoft.VisualStudio.Code" Version="1.74.0" />
+    </Dependencies>
+    <Assets>
+        <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+        <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icons/icon.png" Addressable="true" />
+    </Assets>
+</PackageManifest>

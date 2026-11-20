@@ -1,0 +1,208 @@
+{
+  "name": "ayce",
+  "displayName": "ayce",
+  "description": "Soporte del lenguaje ayce para VS Code: resaltado de sintaxis con paleta propia (claro/oscuro), snippets, ejecución de archivos .ayce e integración con Code Runner. v0.5: módulos (require), acceso con ::, constructor build.",
+  "version": "0.5.2",
+  "publisher": "ayce-project",
+  "license": "MIT",
+  "icon": "icons/icon.png",
+  "galleryBanner": {
+    "color": "#162235",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "ayce",
+    "language",
+    "interpreter",
+    "static-typing"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:ayce",
+    "onCommand:ayce.runFile",
+    "onCommand:ayce.runFileInTerminal",
+    "onCommand:ayce.setupCodeRunner",
+    "onCommand:ayce.applyColors",
+    "onCommand:ayce.removeColors"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ayce",
+        "aliases": [
+          "ayce",
+          "Ayce"
+        ],
+        "extensions": [
+          ".ayce"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/ayce-file.png",
+          "dark": "./icons/ayce-file.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ayce",
+        "scopeName": "source.ayce",
+        "path": "./syntaxes/ayce.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ayce",
+        "path": "./snippets/ayce.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ayce.runFile",
+        "title": "ayce: Ejecutar archivo (panel de salida)",
+        "category": "ayce",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ayce.runFileInTerminal",
+        "title": "ayce: Ejecutar archivo (terminal interactiva)",
+        "category": "ayce",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ayce.setupCodeRunner",
+        "title": "ayce: Configurar Code Runner automáticamente",
+        "category": "ayce"
+      },
+      {
+        "command": "ayce.applyColors",
+        "title": "ayce: Aplicar colores de sintaxis",
+        "category": "ayce"
+      },
+      {
+        "command": "ayce.removeColors",
+        "title": "ayce: Quitar todos los colores de ayce",
+        "category": "ayce"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "ayce.runFile",
+          "when": "resourceLangId == ayce"
+        },
+        {
+          "command": "ayce.runFileInTerminal",
+          "when": "resourceLangId == ayce"
+        },
+        {
+          "command": "ayce.setupCodeRunner",
+          "when": "true"
+        },
+        {
+          "command": "ayce.applyColors",
+          "when": "true"
+        },
+        {
+          "command": "ayce.removeColors",
+          "when": "true"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ayce.runFileInTerminal",
+          "when": "resourceLangId == ayce",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/run": [
+        {
+          "command": "ayce.runFileInTerminal",
+          "when": "resourceLangId == ayce",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "ayce.runFileInTerminal",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "resourceLangId == ayce"
+      },
+      {
+        "command": "ayce.runFile",
+        "key": "ctrl+alt+shift+r",
+        "mac": "cmd+alt+shift+r",
+        "when": "resourceLangId == ayce"
+      }
+    ],
+    "configuration": {
+      "title": "ayce",
+      "properties": {
+        "ayce.interpreterPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Ruta al intérprete de ayce. Si está vacío, la extensión busca `tools/ayce_cli.py` en el workspace. Si tampoco existe, usa `python3 -m ayce` (requiere `pip install -e sdk/`)."
+        },
+        "ayce.pythonPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Ejecutable de Python que invoca el intérprete. En Windows suele ser `python` o `py`."
+        },
+        "ayce.saveBeforeRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Guardar el archivo automáticamente antes de ejecutarlo."
+        },
+        "ayce.clearOutputBeforeRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Limpiar el panel de salida antes de cada ejecución (sólo modo panel)."
+        },
+        "ayce.colors.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "dark",
+            "light",
+            "off"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "Elige la paleta según tu tema (claro u oscuro) y cambia sola.",
+            "Fuerza la paleta oscura.",
+            "Fuerza la paleta clara.",
+            "No colorear: ayce usa los colores de tu tema y quita los suyos."
+          ],
+          "markdownDescription": "Paleta de colores de ayce (**Ayce Dusk**). Con `off` la extensión no toca tus colores."
+        },
+        "ayce.colors.overrides": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+          },
+          "markdownDescription": "Cambia colores puntuales de la paleta sin tocar el código. Ejemplo: `{ \"variable\": \"#8FD68A\", \"operator\": \"#D9A0C8\" }`. Nombres: `variable`, `operator`, `none`, `string`, `int`, `float`, `bool`, `bytes`, `comment`, `control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[ayce]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.semanticHighlighting.enabled": true
+      }
+    }
+  }
+}

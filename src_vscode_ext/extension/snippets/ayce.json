@@ -1,0 +1,420 @@
+{
+  "Variable": {
+    "prefix": "var",
+    "body": [
+      "var ${1:nombre}: ${2:int} = ${3:0}"
+    ],
+    "description": "Declaración de variable con tipo"
+  },
+  "Constante": {
+    "prefix": "const",
+    "body": [
+      "const ${1:NOMBRE}: ${2:int} = ${3:0}"
+    ],
+    "description": "Declaración de constante"
+  },
+  "say": {
+    "prefix": "say",
+    "body": [
+      "say(${1:\"${2:hola}\"})"
+    ],
+    "description": "Salida a consola"
+  },
+  "say f-string": {
+    "prefix": "sayf",
+    "body": [
+      "say(f\"${1:texto} {${2:variable}}\")"
+    ],
+    "description": "say con f-string"
+  },
+  "inlet": {
+    "prefix": "inlet",
+    "body": [
+      "var ${1:nombre}: string = inlet(\"${2:Escribe: }\")"
+    ],
+    "description": "Entrada por teclado"
+  },
+  "if": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condicion} then",
+      "    ${2:## cuerpo}",
+      "end"
+    ],
+    "description": "Condicional if/then/end"
+  },
+  "if-else": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:condicion} then",
+      "    ${2:## cuerpo}",
+      "else",
+      "    ${3:## alternativo}",
+      "end"
+    ],
+    "description": "Condicional if/else/end"
+  },
+  "if-else if": {
+    "prefix": "elseif",
+    "body": [
+      "if ${1:c1} then",
+      "    ${2:## cuerpo}",
+      "else if ${3:c2} then",
+      "    ${4:## cuerpo}",
+      "else",
+      "    ${5:## default}",
+      "end"
+    ],
+    "description": "Condicional if/else if/else/end"
+  },
+  "while": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condicion} do",
+      "    ${2:## cuerpo}",
+      "end"
+    ],
+    "description": "Bucle while/do/end"
+  },
+  "for": {
+    "prefix": "for",
+    "body": [
+      "for ${1:var} in ${2:iterable} do",
+      "    ${3:## cuerpo}",
+      "end"
+    ],
+    "description": "Bucle for/in/do/end"
+  },
+  "for range": {
+    "prefix": "forrange",
+    "body": [
+      "for ${1:i} in range(${2:0}, ${3:10}) do",
+      "    ${4:## cuerpo}",
+      "end"
+    ],
+    "description": "Bucle for sobre range"
+  },
+  "task": {
+    "prefix": "task",
+    "body": [
+      "task ${1:nombre}(${2:tipo param}) ;",
+      "{",
+      "    ${3:## cuerpo}",
+      "}"
+    ],
+    "description": "Tarea sin retorno"
+  },
+  "task con retorno": {
+    "prefix": "taskret",
+    "body": [
+      "task ${1:nombre}(${2:tipo param}) = ${3:tipo_ret} ;",
+      "{",
+      "    ${4:## cuerpo}",
+      "    return ${5:valor}",
+      "}"
+    ],
+    "description": "Tarea con retorno tipado"
+  },
+  "task lambda": {
+    "prefix": "lambda",
+    "body": [
+      "task ${1:nombre}(${2:tipo param}) = ${3:tipo_ret} => ${4:expr}"
+    ],
+    "description": "Tarea lambda"
+  },
+  "task sobrecarga": {
+    "prefix": "taskover",
+    "body": [
+      "task ${1:procesar}(${2:int x}) | (${3:string s}) ;",
+      "{",
+      "    ${4:## bloque 1}",
+      "    |",
+      "    ${5:## bloque 2}",
+      "}"
+    ],
+    "description": "Tarea con sobrecarga |"
+  },
+  "Lista": {
+    "prefix": "list",
+    "body": [
+      "var ${1:nombre}: ${2:int}[] = [${3:1, 2, 3}]"
+    ],
+    "description": "Lista estricta"
+  },
+  "Diccionario": {
+    "prefix": "dict",
+    "body": [
+      "var ${1:nombre}: <${2:string}, ${3:int}> = <",
+      "    ${4:\"clave\"}: ${5:valor}",
+      ">"
+    ],
+    "description": "Diccionario estricto"
+  },
+  "Tupla": {
+    "prefix": "tuple",
+    "body": [
+      "var ${1:nombre}: (${2:string}, ${3:int}) = (${4:\"v\"}, ${5:0})"
+    ],
+    "description": "Tupla heterogénea"
+  },
+  "Set": {
+    "prefix": "set",
+    "body": [
+      "var ${1:nombre}: ${2:int}{} = {${3:1, 2, 3}}"
+    ],
+    "description": "Set estricto"
+  },
+  "range": {
+    "prefix": "range",
+    "body": [
+      "range(${1:0}, ${2:10})"
+    ],
+    "description": "range(inicio, fin)"
+  },
+  "global": {
+    "prefix": "global",
+    "body": [
+      "global ${1:variable}"
+    ],
+    "description": "Acceso a variable global"
+  },
+  "return": {
+    "prefix": "return",
+    "body": [
+      "return ${1:valor}"
+    ],
+    "description": "Sentencia return"
+  },
+  "break": {
+    "prefix": "break",
+    "body": [
+      "break"
+    ],
+    "description": "Salir del bucle"
+  },
+  "continue": {
+    "prefix": "continue",
+    "body": [
+      "continue"
+    ],
+    "description": "Siguiente iteración"
+  },
+  "Template (clase)": {
+    "prefix": "template",
+    "body": [
+      "Template ${1:Nombre} {",
+      "    ${2:campo}: ${3:tipo}",
+      "",
+      "    task build(${4:tipo param}) ;",
+      "    {",
+      "        self::${2:campo} = ${5:param}",
+      "    }",
+      "",
+      "    task ${6:metodo}() ;",
+      "    {",
+      "        ${7:## cuerpo}",
+      "    }",
+      "}"
+    ],
+    "description": "Template (clase) con campos, build y métodos (v0.5)"
+  },
+  "Shape (registro)": {
+    "prefix": "shape",
+    "body": [
+      "Shape ${1:Nombre} {",
+      "    ${2:campo}: ${3:tipo}",
+      "}"
+    ],
+    "description": "Shape (registro inmutable, sin métodos)"
+  },
+  "Variant (enum)": {
+    "prefix": "variant",
+    "body": [
+      "Variant ${1:Nombre} {",
+      "    ${2:Caso1}",
+      "    ${3:Caso2}",
+      "}"
+    ],
+    "description": "Variant (enum) con casos nombrados"
+  },
+  "Variant con payload": {
+    "prefix": "variantpayload",
+    "body": [
+      "Variant ${1:Resultado} {",
+      "    ${2:Ok}(${3:int})",
+      "    ${4:Err}(${5:string})",
+      "}"
+    ],
+    "description": "Variant con casos que llevan payload"
+  },
+  "new Shape": {
+    "prefix": "new",
+    "body": [
+      "new ${1:Tipo} { ${2:campo}: ${3:valor} }"
+    ],
+    "description": "Construcción de Shape"
+  },
+  "is (comparación de Variant)": {
+    "prefix": "is",
+    "body": [
+      "${1:expr} is ${2:Tipo}::${3:Caso}"
+    ],
+    "description": "Comparar un Variant contra un caso (v0.5: usa ::)"
+  },
+  "self": {
+    "prefix": "self",
+    "body": [
+      "self::${1:campo}"
+    ],
+    "description": "Acceso a miembro de self dentro de un método de Template (v0.5: usa ::)"
+  },
+  "try/rescue": {
+    "prefix": "try",
+    "body": [
+      "try",
+      "    ${1:## código que puede fallar}",
+      "rescue(${2:err})",
+      "    ${3:## manejo del error}",
+      "end"
+    ],
+    "description": "Bloque try/rescue para capturar errores"
+  },
+  "raise": {
+    "prefix": "raise",
+    "body": [
+      "raise Error(\"${1:mensaje}\", ${2:0})"
+    ],
+    "description": "Lanzar un error"
+  },
+  "Conversión int": {
+    "prefix": "toint",
+    "body": [
+      "int(${1:expr})"
+    ],
+    "description": "Convertir a int"
+  },
+  "Conversión float": {
+    "prefix": "tofloat",
+    "body": [
+      "float(${1:expr})"
+    ],
+    "description": "Convertir a float"
+  },
+  "Conversión string": {
+    "prefix": "tostring",
+    "body": [
+      "string(${1:expr})"
+    ],
+    "description": "Convertir a string"
+  },
+  "Conversión bool": {
+    "prefix": "tobool",
+    "body": [
+      "bool(${1:expr})"
+    ],
+    "description": "Convertir a bool"
+  },
+  "Ternario": {
+    "prefix": "ternary",
+    "body": [
+      "(${1:condición}) ? ${2:si_verdadero} : ${3:si_falso}"
+    ],
+    "description": "Operador ternario"
+  },
+  "inlet con tipo": {
+    "prefix": "inlett",
+    "body": [
+      "var ${1:var}: ${2:int} = inlet(\"${3:prompt}\", ${2:int})"
+    ],
+    "description": "inlet con tipo (int, float, bool, string)"
+  },
+  "Comentario multilínea": {
+    "prefix": "commentmulti",
+    "body": [
+      "###",
+      "${1:comentario}",
+      "###"
+    ],
+    "description": "Comentario multilínea ### ... ###"
+  },
+  "Template con herencia": {
+    "prefix": "templateext",
+    "body": [
+      "Template ${1:Hijo} : ${2:Padre} {",
+      "    ${3:## campos y métodos propios}",
+      "}"
+    ],
+    "description": "Template que hereda de otro Template"
+  },
+  "rescue con tipo": {
+    "prefix": "rescuetype",
+    "body": [
+      "rescue(${1:err}: ${2:Error})",
+      "    ${3:## manejo del error}"
+    ],
+    "description": "rescue con tipo de error específico"
+  },
+  "raise Div0": {
+    "prefix": "raisediv0",
+    "body": [
+      "raise Div0(\"${1:mensaje}\", ${2:1})"
+    ],
+    "description": "Lanzar error Div0 (división por cero)"
+  },
+  "raise KeyErr": {
+    "prefix": "raisekey",
+    "body": [
+      "raise KeyErr(\"${1:mensaje}\", ${2:3})"
+    ],
+    "description": "Lanzar error KeyErr (clave inexistente)"
+  },
+  "raise IndexErr": {
+    "prefix": "raiseindex",
+    "body": [
+      "raise IndexErr(\"${1:mensaje}\", ${2:4})"
+    ],
+    "description": "Lanzar error IndexErr (índice fuera de rango)"
+  },
+  "f-string con formato": {
+    "prefix": "ffmt",
+    "body": [
+      "f\"{${1:expr}:${2:.2f}}\""
+    ],
+    "description": "f-string con formato (ej: :.2f, :10d, :>10)"
+  },
+  "require módulo": {
+    "prefix": "require",
+    "body": [
+      "require ${1:modulo}"
+    ],
+    "description": "Importar módulo entero (acceso con ::modulo::item) — v0.5"
+  },
+  "require módulo con alias": {
+    "prefix": "requireas",
+    "body": [
+      "require ${1:modulo} as ${2:alias}"
+    ],
+    "description": "Importar módulo entero con alias (acceso con alias::item) — v0.5"
+  },
+  "require selectivo": {
+    "prefix": "requirefrom",
+    "body": [
+      "require ${1:item} from ${2:modulo}"
+    ],
+    "description": "Importar un item específico de un módulo (acceso directo) — v0.5"
+  },
+  "require selectivo con alias": {
+    "prefix": "requirefromas",
+    "body": [
+      "require ${1:item} as ${2:alias} from ${3:modulo}"
+    ],
+    "description": "Importar un item específico con rename (acceso con alias) — v0.5"
+  },
+  "require string path": {
+    "prefix": "requirepath",
+    "body": [
+      "require \"${1:ruta/al/archivo}.ayce\" as ${2:alias}"
+    ],
+    "description": "Importar módulo desde ruta literal con alias — v0.5"
+  }
+}
