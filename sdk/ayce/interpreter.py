@@ -11,6 +11,8 @@ from .errors import (
 )
 from .tokens import Token
 
+import sys
+
 
 # ──────────────────────────────────────────────────────────────────────
 #  Valores en runtime
@@ -286,6 +288,14 @@ class Interpreter:
 
     def __init__(self, filename: str = "<stdin>", import_paths: list = None):
         self.filename = filename
+        # v0.6.3: ruta absoluta del programa principal (para <GUARD>-<MAIN>).
+        # El Interpreter raíz es el programa; los hijos de `require` heredan
+        # esta ruta y como su propio filename es distinto, su guard no corre.
+        if filename.startswith("<"):
+            self._main_file = filename
+        else:
+            import os
+            self._main_file = os.path.abspath(filename)
         self.global_env = Env()
         # v0.6.2: profundidad de llamadas actual
         self._ayce_depth = 0
@@ -350,9 +360,29 @@ class Interpreter:
         # Registrar Template Error nativo (si el usuario no lo definió)
         self._register_native_error()
 
+        # Arreglo de la 0.6.3 (diseño del cliente): el guard principal es un PUNTO DE
+        # ENTRADA, no un `if`. Si el archivo tiene <GUARD>-<MAIN> y este
+        # archivo es el programa que se ejecutó, el nivel superior queda
+        # CALLADO: ni say, ni llamadas, ni State, ni asignaciones sueltas.
+        # "Si el print imprime, no es guard." Sólo escapan de la regla:
+        #   - los cuerpos de los guards (son el programa), y
+        #   - las DECLARACIONES de datos var/const del nivel superior, que
+        #     sí se inicializan (como los globals de C) para que el cuerpo
+        #     del guard pueda usarlas.
+        # Las tasks/templates/shapes/variants ya se declararon en la primera
+        # pasada y los `require` también se procesan ahí: son importaciones,
+        # no acciones. Sin guard, o bajo require (hijo: _is_main_file() es
+        # False), el nivel superior corre completo como siempre.
+        guard_entrada = self._is_main_file() and any(
+            isinstance(s, GuardMainStmt) for s in program.stmts
+        )
+
         # Segunda pasada: ejecutar sentencias sueltas (no declaraciones de tipos ni tasks)
         for stmt in program.stmts:
             if isinstance(stmt, (TaskDecl, TemplateDecl, ShapeDecl, VariantDecl, RequireStmt)):
+                continue
+            if guard_entrada and not isinstance(
+                    stmt, (GuardMainStmt, VarDecl, ConstDecl, DeclGroup)):
                 continue
             try:
                 self.exec_stmt(stmt, self.global_env)
@@ -441,6 +471,11 @@ class Interpreter:
             self._exec_var_decl(stmt, env)
         elif isinstance(stmt, ConstDecl):
             self._exec_const_decl(stmt, env)
+        elif isinstance(stmt, DeclGroup):
+            # v0.6.3: var/const múltiple — cada declaración pasa por la
+            # maquinaria común (verificación de tipos, coerción, const).
+            for d in stmt.decls:
+                self.exec_stmt(d, env)
         elif isinstance(stmt, AssignStmt):
             self._exec_assign(stmt, env)
         elif isinstance(stmt, CompoundAssignStmt):
@@ -453,6 +488,10 @@ class Interpreter:
             self._exec_while(stmt, env)
         elif isinstance(stmt, ForStmt):
             self._exec_for(stmt, env)
+        elif isinstance(stmt, StateStmt):
+            self._exec_state(stmt, env)
+        elif isinstance(stmt, GuardMainStmt):
+            self._exec_guard_main(stmt, env)
         elif isinstance(stmt, TryStmt):
             self._exec_try(stmt, env)
         elif isinstance(stmt, RaiseStmt):
@@ -688,6 +727,322 @@ class Interpreter:
                 return
             except ContinueSignal:
                 continue
+
+    # ──────────────────────────────────────────────────────────────────
+    #  State/box y guard principal (v0.6.3 — diseño del cliente)
+    # ──────────────────────────────────────────────────────────────────
+    def _exec_state(self, stmt: StateStmt, env: Env):
+        """State <expr> - < ... > — evalúa el sujeto UNA vez y prueba los
+        brazos en orden. El primero cuyo patrón coincide ejecuta su cuerpo con
+        `box` vinculado al sujeto. `box is null` es el brazo de reserva: sólo
+        corre si ningún otro brazo coincidió. Sin reserva y sin coincidencia:
+        no hace nada.
+
+        Coherencia (v0.6.3): los brazos de TIPO sólo aportan información
+        cuando el tipo del sujeto es desconocido (variables none, entradas de
+        inlet/json::parse). Si el sujeto es una variable con tipo concreto
+        declarado, el intérprete ya conoce el tipo y avisa una sola vez qué
+        brazos son estáticos (nunca/siempre coinciden). Los brazos de valor y
+        de variante no se analizan: hablan del valor o del caso, no del tipo."""
+        self._state_warn_coherence(stmt, env)
+        subject = self.eval(stmt.subject, env)
+        for patterns, body in stmt.arms:
+            if patterns is None or self._pattern_matches_any(patterns, subject, env):
+                arm_env = Env(parent=env)
+                arm_env.declare("box", subject, None, is_const=False)
+                for s in body:
+                    self.exec_stmt(s, arm_env)
+                return
+
+    def _pattern_matches_any(self, alts, value, env) -> bool:
+        return any(self._pattern_matches(a, value, env) for a in alts)
+
+    def _pattern_matches(self, alt: PatternAlt, value, env) -> bool:
+        if alt.kind == "type":
+            return self._pattern_type_matches(value, alt.type_node)
+        if alt.kind == "value":
+            expected = self.eval(alt.value_expr, env)
+            try:
+                return self._values_equal(value, expected, alt.line, alt.col)
+            except AyceTypeError:
+                # Un patrón de valor no comparable con el sujeto simplemente
+                # no coincide (ej: box is 1 cuando box es una lista).
+                return False
+        if alt.kind == "ident":
+            existing = env.lookup(alt.name)
+            if existing is None:
+                raise AyceRuntimeError(self.filename, alt.line, alt.col,
+                    f"Variable '{alt.name}' no declarada")
+            val, _, _, initialized = existing
+            if not initialized:
+                raise AyceRuntimeError(self.filename, alt.line, alt.col,
+                    f"Variable '{alt.name}' usada antes de ser inicializada")
+            # Si el identificador nombra un tipo de usuario, es un patrón de tipo
+            if isinstance(val, (AyceTemplate, AyceShape, AyceVariant)):
+                return self._pattern_type_matches(value, UserTypeName(name=alt.name))
+            try:
+                return self._values_equal(value, val, alt.line, alt.col)
+            except AyceTypeError:
+                return False
+        if alt.kind == "variant":
+            if not isinstance(value, AyceVariantValue):
+                return False
+            return (value.variant.name == alt.type_name
+                    and value.case_name == alt.case_name)
+        return False
+
+    def _values_equal(self, a, b, line, col) -> bool:
+        """Igualdad == de ayce, con la MISMA semántica que BinaryExpr '==':
+        comparar con none siempre es válido, y tipos incompatibles son error
+        (salvo int/float que se permiten entre sí)."""
+        if a is None or b is None:
+            return a == b
+        if type(a) != type(b):
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                pass
+            else:
+                raise AyceTypeError(self.filename, line, col,
+                    f"No se puede comparar {self._type_name(a)} con {self._type_name(b)}")
+        return a == b
+
+    def _pattern_type_matches(self, value, type_node) -> bool:
+        """Versión silenciosa y PROFUNDA de _value_matches_type para patrones:
+        en colecciones verifica también el tipo de elemento, así que
+        `box is int[]` distingue una lista de ints de una lista de strings."""
+        if isinstance(type_node, ListType):
+            if not isinstance(value, AyceList):
+                return False
+            if not type_node.flexible and type_node.elem is not None:
+                return all(self._pattern_type_matches(e, type_node.elem)
+                           for e in value.elements)
+            return True
+        if isinstance(type_node, SetType):
+            if not isinstance(value, AyceSet):
+                return False
+            if not type_node.flexible and type_node.elem is not None:
+                return all(self._pattern_type_matches(e, type_node.elem)
+                           for e in value.elements)
+            return True
+        if isinstance(type_node, TupleType):
+            if not isinstance(value, AyceTuple):
+                return False
+            if type_node.flexible:
+                return True
+            if type_node.elem_types:
+                if len(value.elements) != len(type_node.elem_types):
+                    return False
+                return all(self._pattern_type_matches(e, et)
+                           for e, et in zip(value.elements, type_node.elem_types))
+            return True
+        if isinstance(type_node, DictType):
+            if not isinstance(value, AyceDict):
+                return False
+            if type_node.flexible:
+                return True
+            if type_node.key_type is not None:
+                for k in value.pairs:
+                    if not self._pattern_type_matches(k, type_node.key_type):
+                        return False
+                if type_node.value_types:
+                    for v in value.pairs.values():
+                        if not any(self._pattern_type_matches(v, vt)
+                                   for vt in type_node.value_types):
+                            return False
+            return True
+        # Primitivos, task y tipos de usuario: igual que la verificación común
+        return self._value_matches_type(value, type_node)
+
+    # ── Coherencia de los brazos de tipo en State (v0.6.3) ────────────────
+    # `none` es el tipo del valor desconocido: sobre una variable none (o sin
+    # anotar) los brazos de tipo están vivos y State resuelve en runtime —
+    # el caso canónico de inlet y json::parse. Sobre una variable con tipo
+    # concreto declarado el intérprete ya sabe el tipo, así que esos brazos
+    # son estáticos: o nunca coinciden (código muerto) o siempre coinciden
+    # (un if disfrazado que deja muertos los brazos siguientes). Se avisa UNA
+    # vez por State, a stderr, sin alterar la ejecución ni la salida. Los
+    # brazos de valor y de variante no se analizan: hablan del valor o del
+    # caso, no del tipo.
+    def _type_cat(self, tn) -> str:
+        if isinstance(tn, PrimitiveType):
+            return "prim"
+        if isinstance(tn, ListType):
+            return "list"
+        if isinstance(tn, DictType):
+            return "dict"
+        if isinstance(tn, SetType):
+            return "set"
+        if isinstance(tn, TupleType):
+            return "tuple"
+        if isinstance(tn, UserTypeName):
+            return "user"
+        if isinstance(tn, TaskType):
+            return "task"
+        return "?"
+
+    def _state_declared_overlap(self, pat, dec):
+        """'always' / 'never' / None — ¿puede un patrón de tipo `pat` coincidir
+        con algún valor que quepa en el tipo declarado `dec`? None significa
+        que no se puede saber de forma estática (p. ej. colecciones flexibles):
+        en ese caso el brazo se considera vivo y no se avisa."""
+        pc, dc = self._type_cat(pat), self._type_cat(dec)
+        if pc == "?" or dc == "?":
+            return None
+        if pc != dc:
+            return "never"
+        if pc == "prim":
+            if pat.name == "none":
+                return "always"  # el patrón none coincide con cualquier valor
+            return "always" if pat.name == dec.name else "never"
+        if pc in ("list", "set"):
+            if pat.flexible:
+                return "always"
+            if dec.flexible or pat.elem is None or dec.elem is None:
+                return None
+            return self._state_declared_overlap(pat.elem, dec.elem)
+        if pc == "dict":
+            if pat.flexible:
+                return "always"
+            if dec.flexible or pat.key_type is None or dec.key_type is None:
+                return None
+            k = self._state_declared_overlap(pat.key_type, dec.key_type)
+            if pat.value_types and dec.value_types:
+                vs = [self._state_declared_overlap(pv, dv)
+                      for pv in pat.value_types for dv in dec.value_types]
+                v = ("always" if "always" in vs
+                     else "never" if all(s == "never" for s in vs)
+                     else None)
+            else:
+                v = None
+            if k == "never" or v == "never":
+                return "never"
+            if k == "always" and v == "always":
+                return "always"
+            return None
+        if pc == "tuple":
+            if pat.flexible:
+                return "always"
+            if dec.flexible or not pat.elem_types or not dec.elem_types:
+                return None
+            if len(pat.elem_types) != len(dec.elem_types):
+                return "never"
+            sts = [self._state_declared_overlap(p, d)
+                   for p, d in zip(pat.elem_types, dec.elem_types)]
+            if "never" in sts:
+                return "never"
+            if all(s == "always" for s in sts):
+                return "always"
+            return None
+        if pc == "user":
+            return "always" if pat.name == dec.name else "never"
+        return "always"  # task == task
+
+    def _type_to_text(self, tn) -> str:
+        """Texto corto de un nodo de tipo para los avisos de State."""
+        if tn is None:
+            return "?"
+        if isinstance(tn, PrimitiveType):
+            return tn.name
+        if isinstance(tn, ListType):
+            return ("list" if tn.flexible or tn.elem is None
+                    else self._type_to_text(tn.elem) + "[]")
+        if isinstance(tn, SetType):
+            return ("set" if tn.flexible or tn.elem is None
+                    else self._type_to_text(tn.elem) + "{}")
+        if isinstance(tn, DictType):
+            if tn.flexible or tn.key_type is None:
+                return "dict"
+            vals = (" || ".join(self._type_to_text(v) for v in tn.value_types)
+                    or "?")
+            return f"<{self._type_to_text(tn.key_type)}, {vals}>"
+        if isinstance(tn, TupleType):
+            if tn.flexible or not tn.elem_types:
+                return "tuple"
+            return "(" + ", ".join(self._type_to_text(t)
+                                   for t in tn.elem_types) + ")"
+        if isinstance(tn, UserTypeName):
+            return tn.name
+        if isinstance(tn, TaskType):
+            return "task"
+        return "?"
+
+    def _state_warn_coherence(self, stmt: StateStmt, env: Env):
+        """Aviso de coherencia: una sola vez por nodo State, sólo cuando el
+        sujeto es una variable con tipo concreto declarado y hay brazos de
+        tipo. Escribe a stderr; no altera la ejecución ni la salida."""
+        if getattr(stmt, "_coherence_checked", False):
+            return
+        stmt._coherence_checked = True
+        if not isinstance(stmt.subject, IdentExpr):
+            return
+        existing = env.lookup(stmt.subject.name)
+        if existing is None:
+            return
+        declared = existing[1]
+        if declared is None or (isinstance(declared, PrimitiveType)
+                                and declared.name == "none"):
+            return  # caso canónico: tipo desconocido → todos los brazos vivos
+        decl_txt = self._type_to_text(declared)
+        findings = []
+        for i, (patterns, _body) in enumerate(stmt.arms, 1):
+            if patterns is None:
+                continue  # brazo de reserva (box is null)
+            type_alts = [a for a in patterns if a.kind == "type"]
+            if not type_alts:
+                continue
+            txt = " || ".join(self._type_to_text(a.type_node)
+                              for a in type_alts)
+            pat_txt = f"box is type ({txt})"
+            sts = [self._state_declared_overlap(a.type_node, declared)
+                   for a in type_alts]
+            if "always" in sts:
+                findings.append(
+                    f"brazo {i} `{pat_txt}` SIEMPRE coincide con "
+                    f"'{stmt.subject.name}' ({decl_txt}) → los brazos que "
+                    f"siguen nunca corren")
+            elif sts and all(s == "never" for s in sts):
+                findings.append(
+                    f"brazo {i} `{pat_txt}` NUNCA coincide con "
+                    f"'{stmt.subject.name}' ({decl_txt}) → código muerto")
+        if not findings:
+            return
+        lines = [
+            f"aviso[State] línea {stmt.line}: '{stmt.subject.name}' está "
+            f"declarada como {decl_txt}: sus brazos de tipo son estáticos "
+            f"(el intérprete ya conoce el tipo)."
+        ]
+        lines.extend("  · " + f for f in findings)
+        lines.append(
+            "  → si el tipo se decide en runtime (inlet, json::parse...), "
+            f"declara la variable none: var {stmt.subject.name}: none = ..."
+        )
+        print("\n".join(lines), file=sys.stderr, flush=True)
+
+    def _exec_guard_main(self, stmt: GuardMainStmt, env: Env):
+        """<GUARD>-<MAIN> { cuerpo } — el guard principal del cliente: el
+        PUNTO DE ENTRADA del programa (arreglo de la 0.6.3, decisión del cliente). Cuando
+        el archivo se ejecuta como programa principal, SÓLO corren los cuerpos
+        de los guards: el resto del nivel superior queda callado. Si el archivo
+        se cargó con `require` (batch/módulo), el guard se omite por completo
+        y el nivel superior corre (inicialización del módulo).
+        Es más estricto que `if __name__ == "__main__":` de Python: en Python
+        el nivel superior corre siempre; acá no — "si imprime el print, no es
+        guard"."""
+        if not self._is_main_file():
+            return
+        block_env = Env(parent=env)
+        for s in stmt.body:
+            self.exec_stmt(s, block_env)
+
+    def _is_main_file(self) -> bool:
+        """¿El archivo que se está ejecutando ahora es el programa principal?
+        v0.6.3: el Interpreter raíz guarda la ruta del archivo de entrada
+        (_main_file) y cada `require` se la propaga a sus hijos; el archivo
+        cargado como batch tiene su propio filename, así que no es main."""
+        import os
+        if self.filename.startswith("<"):
+            # REPL / stdin: la sesión interactiva es el programa principal
+            return self.filename == self._main_file
+        return os.path.abspath(self.filename) == self._main_file
 
     def _exec_global(self, stmt: GlobalStmt, env: Env):
         # Verificar que las variables existan en el entorno global
@@ -991,6 +1346,9 @@ class Interpreter:
         # y los import_paths, pero tiene su propio global_env
         child = Interpreter(filename=abs_path, import_paths=self.import_paths)
         child._batch_cache = self._batch_cache  # compartir caché
+        # v0.6.3: el hijo hereda la ruta del programa principal; como su
+        # filename es el del batch, sus bloques <GUARD>-<MAIN> no corren.
+        child._main_file = self._main_file
         child._loading_stack = self._loading_stack + [abs_path]
         child.run(program)
 
@@ -1294,6 +1652,26 @@ class Interpreter:
                 if not isinstance(prompt, str):
                     raise AyceTypeError(self.filename, expr.line, expr.col,
                         f"El prompt de inlet debe ser string, se recibió {self._type_name(prompt)}")
+            if expr.target_type == "none":
+                try:
+                    raw = input(prompt)
+                except EOFError:
+                    raise AyceRuntimeError(self.filename, expr.line, expr.col,
+                        "Entrada cerrada (EOF) en inlet")
+                stripped = raw.strip()
+                lower = stripped.lower()
+                if lower in ("true", "yes", "y", "sí", "si", "verdadero"):
+                    return True
+                if lower in ("false", "no", "n", "falso"):
+                    return False
+                try:
+                    return int(stripped)
+                except ValueError:
+                    pass
+                try:
+                    return float(stripped)
+                except ValueError:
+                    return raw
             # Si no hay tipo, devolver string
             if not expr.target_type or expr.target_type == "string":
                 try:
@@ -2170,17 +2548,28 @@ class Interpreter:
         """Devuelve la lista de argumentos finales (con defaults aplicados) si la firma
         coincide, o None si no coincide."""
         params = sig.params
-        # Caso varargs
+        # Caso varargs (v0.6.3 coherente): los parámetros fijos aceptan
+        # defaults y CADA argumento extra debe cumplir el tipo del '...'.
+        # Un extra que no cumple hace que la firma no coincida (misma regla
+        # silenciosa que los parámetros fijos), así que las sobrecargas
+        # siguen decidiendo bien.
         if params and params[-1].varargs:
             fixed = len(params) - 1
-            if len(args) < fixed:
+            obligatorios = sum(1 for p in params[:fixed] if p.default is None)
+            if len(args) < obligatorios:
                 return None
-            # Verificar tipos de los parámetros fijos (considerando defaults)
-            filled = list(args[:fixed])
+            filled = []
             for i in range(fixed):
-                if not self._value_matches_type(args[i], params[i].type_node):
+                if i < len(args):
+                    if not self._value_matches_type(args[i], params[i].type_node):
+                        return None
+                    filled.append(args[i])
+                else:
+                    filled.append(self.eval(params[i].default, self.global_env))
+            # Verificar y empaquetar el resto como varargs
+            for extra in args[fixed:]:
+                if not self._value_matches_type(extra, params[-1].type_node):
                     return None
-            # Empaquetar el resto como varargs
             varargs_list = AyceList(args[fixed:],
                                     ListType(elem=params[-1].type_node, line=0, col=0))
             filled.append(varargs_list)
@@ -2393,7 +2782,12 @@ class Interpreter:
             if t == "string": return isinstance(value, str)
             if t == "bool":  return isinstance(value, bool)
             if t == "bytes": return isinstance(value, bytes)
-            if t == "none":  return value is None
+            if t == "none":
+                # v0.6.3: 'none' como tipo de parámetro coincide con CUALQUIER
+                # valor, igual que en las declaraciones (_check_value_matches_type
+                # ya lo trataba como flexible). Así funcionan tasks que reciben
+                # datos de inlet sin tipo y los filtran con guard/match.
+                return True
             return False
         if isinstance(type_node, ListType):
             return isinstance(value, AyceList)

@@ -1,8 +1,8 @@
 {
   "name": "ayce",
   "displayName": "ayce",
-  "description": "Soporte del lenguaje ayce para VS Code: resaltado de sintaxis con paleta propia (claro/oscuro), snippets, ejecución de archivos .ayce e integración con Code Runner. v0.5: módulos (require), acceso con ::, constructor build.",
-  "version": "0.5.2",
+  "description": "Soporte del lenguaje ayce para VS Code: resaltado de sintaxis con paleta propia (claro/oscuro), snippets, ejecución de archivos .ayce e integración con Code Runner. v0.6.3: resalta State/box, el guard principal <GUARD>-<MAIN> y los prefijos 0x/0o/0b cada uno con su color.",
+  "version": "0.6.3",
   "publisher": "ayce-project",
   "license": "MIT",
   "icon": "icons/icon.png",
@@ -192,7 +192,7 @@
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
           },
-          "markdownDescription": "Cambia colores puntuales de la paleta sin tocar el código. Ejemplo: `{ \"variable\": \"#8FD68A\", \"operator\": \"#D9A0C8\" }`. Nombres: `variable`, `operator`, `none`, `string`, `int`, `float`, `bool`, `bytes`, `comment`, `control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`."
+          "markdownDescription": "Cambia colores puntuales de la paleta sin tocar el código. Ejemplo: `{ \"variable\": \"#8FD68A\", \"operator\": \"#D9A0C8\" }`. Nombres: `variable`, `operator`, `none`, `string`, `int`, `float`, `bool`, `bytes`, `comment`, `control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`, `radix`, `collection`, `state`, `box`, `armtype`, `fallback`, `guard`, `main`, `gdelim`, `sdash`, `sangle`, `hexpre`, `octpre`, `binpre`, `module`."
         }
       }
     },

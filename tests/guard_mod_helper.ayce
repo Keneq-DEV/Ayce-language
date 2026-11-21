@@ -1,0 +1,24 @@
+## guard_mod_helper.ayce — módulo de apoyo para t_guard_principal.ayce
+## No se ejecuta directo en la suite: se carga con `require`. Bajo require el
+## nivel superior SÍ corre (inicialización del módulo) y el guard NO corre.
+
+say("helper: nivel superior corrió bajo require")
+
+var helper_guard_corrio: bool = False
+
+task triplo(int n) = int ;
+{
+    return n * 3
+}
+
+task verificar_guard() = bool ;
+{
+    return helper_guard_corrio
+}
+
+<GUARD>-<MAIN> {
+    ## Sólo llega acá si ALGUIEN ejecuta este archivo como programa directo;
+    ## bajo require este bloque se omite por completo.
+    helper_guard_corrio = True
+    say("helper: guard corrió (ejecución directa del módulo)")
+}

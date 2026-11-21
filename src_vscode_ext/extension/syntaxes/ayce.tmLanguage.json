@@ -19,6 +19,18 @@
       "include": "#strings"
     },
     {
+      "include": "#guard-main"
+    },
+    {
+      "include": "#state-construct"
+    },
+    {
+      "include": "#state-arms"
+    },
+    {
+      "include": "#radix-literals"
+    },
+    {
       "include": "#floats"
     },
     {
@@ -94,6 +106,9 @@
               "end": "\\}",
               "patterns": [
                 {
+                  "include": "#radix-literals"
+                },
+                {
                   "include": "#floats"
                 },
                 {
@@ -163,6 +178,98 @@
         }
       ]
     },
+    "guard-main": {
+      "patterns": [
+        {
+          "match": "(<)\\s*(GUARD)\\s*(>)\\s*(-)\\s*(<)\\s*(MAIN)\\s*(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.guard.ayce"
+            },
+            "2": {
+              "name": "keyword.control.guard.ayce"
+            },
+            "3": {
+              "name": "punctuation.definition.guard.ayce"
+            },
+            "4": {
+              "name": "punctuation.definition.guard.ayce"
+            },
+            "5": {
+              "name": "punctuation.definition.guard.ayce"
+            },
+            "6": {
+              "name": "keyword.control.main.ayce"
+            },
+            "7": {
+              "name": "punctuation.definition.guard.ayce"
+            }
+          }
+        }
+      ]
+    },
+    "state-construct": {
+      "patterns": [
+        {
+          "name": "keyword.control.state.ayce",
+          "match": "(?<![A-Za-z0-9_])State\\b"
+        },
+        {
+          "name": "keyword.operator.state-connect.ayce",
+          "match": "\\bthen\\b(?=\\s*<)"
+        },
+        {
+          "name": "punctuation.definition.state-angle.ayce",
+          "match": "(?<=then)\\s*<"
+        },
+        {
+          "name": "punctuation.definition.state-angle.ayce",
+          "match": "^\\s*>"
+        }
+      ]
+    },
+    "state-arms": {
+      "patterns": [
+        {
+          "match": "\\b(is)\\s+(type)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "keyword.control.flow.ayce"
+            },
+            "2": {
+              "name": "keyword.control.type.ayce"
+            }
+          }
+        },
+        {
+          "match": "\\b(is)\\s+(null)\\b(?=\\s*\\[)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.flow.ayce"
+            },
+            "2": {
+              "name": "keyword.control.fallback.ayce"
+            }
+          }
+        }
+      ]
+    },
+    "radix-literals": {
+      "patterns": [
+        {
+          "name": "constant.numeric.radix.hex.ayce",
+          "match": "\\b0[xX][0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.radix.oct.ayce",
+          "match": "\\b0[oO][0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.radix.bin.ayce",
+          "match": "\\b0[bB][01_]+\\b"
+        }
+      ]
+    },
     "ints": {
       "name": "constant.numeric.integer.ayce",
       "match": "\\b[0-9]+\\b"
@@ -208,11 +315,31 @@
         {
           "name": "storage.type.bytes.ayce",
           "match": "\\bbytes\\b"
+        },
+        {
+          "name": "storage.type.list.ayce",
+          "match": "\\blist\\b"
+        },
+        {
+          "name": "storage.type.dict.ayce",
+          "match": "\\bdict\\b"
+        },
+        {
+          "name": "storage.type.tuple.ayce",
+          "match": "\\btuple\\b"
+        },
+        {
+          "name": "storage.type.set.ayce",
+          "match": "\\bset\\b"
         }
       ]
     },
     "keywords": {
       "patterns": [
+        {
+          "name": "variable.language.box.ayce",
+          "match": "\\bbox\\b"
+        },
         {
           "name": "keyword.control.conditional.ayce",
           "match": "\\b(if|then|else|end)\\b"
@@ -282,16 +409,24 @@
           "match": "=>"
         },
         {
+          "name": "keyword.operator.assignment.ayce",
+          "match": "(<<=|>>=|\\*\\*=|//=|&=|\\|=|\\^=|\\+=|-=|\\*=|/=|%=|=)"
+        },
+        {
+          "name": "keyword.operator.bitwise.ayce",
+          "match": "(<<|>>)"
+        },
+        {
           "name": "keyword.operator.comparison.ayce",
           "match": "(==|!=|<=|>=|<|>)"
         },
         {
-          "name": "keyword.operator.assignment.ayce",
-          "match": "(\\*\\*=|//=|\\+=|-=|\\*=|/=|%=|=)"
+          "name": "keyword.operator.logical.ayce",
+          "match": "(&&|\\|\\||\\bnot\\b|!)"
         },
         {
-          "name": "keyword.operator.logical.ayce",
-          "match": "(&&|\\|\\||!)"
+          "name": "keyword.operator.bitwise.ayce",
+          "match": "(\\^|~|&)"
         },
         {
           "name": "keyword.operator.arithmetic.ayce",

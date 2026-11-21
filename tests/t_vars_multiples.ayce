@@ -1,0 +1,33 @@
+## t_vars_multiples.ayce — v0.6.3: declaración múltiple (diseño del cliente)
+## var n1-n2-n3: t1, t2 = v1, v2, v3
+## Reglas: nombres separados por '-', tipos y valores por ','; los tipos
+## que falten son none (tipo desconocido); valores uno a uno con los nombres.
+
+## 1) el boceto del cliente VERBATIM: 5 nombres, 4 tipos, 5 valores
+var nombre1-nombre2-nombre3-nombre4-nombre5: int, float, string, bool = 10, 0.5, "hola", True, none
+say("1: " + string(nombre1) + " / " + string(nombre2) + " / " + nombre3 + " / " + string(nombre4) + " / " + string(nombre5))
+
+## 2) un tipo menos → el último nombre es none (tipo desconocido)
+var a-b: int, none = 7, [1, 2, 3]
+say("2: a=" + string(a) + " / b tiene " + string(b::len()) + " elementos")
+
+## 3) el nombre none se resuelve con State (regla v0.6.3, sin aviso)
+State b then <
+    box is type (int[])[ say("3: b es int[] con " + string(box::len()) + " elementos") ]
+    box is type (string || int || float || bool)[ say("3: primitivo inesperado") ]
+    box is null[ say("3: reserva") ]
+>
+
+## 4) const múltiple ('=' obligatorio igual que siempre)
+const PI-E: float, float = 3.1416, 2.7183
+say("4: " + string(PI) + " / " + string(E))
+
+## 5) reasignación con verificación de tipos intacta
+a = 5
+say("5: a=" + string(a))
+
+## 6) var múltiple sin valores, asignación después
+var x-y: int, string
+x = 42
+y = "texto libre"
+say("6: " + string(x) + " / " + y)

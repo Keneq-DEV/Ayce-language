@@ -115,4 +115,18 @@ En `settings.json`:
 ```
 
 Nombres válidos: `variable`, `operator`, `none`, `string`, `int`, `float`, `bool`, `bytes`, `comment`,
-`control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`.
+`control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`,
+`radix`, `collection`.
+
+### Categorías con color propio (v0.6.3)
+
+Todo token nuevo del lenguaje lleva un color que no comparte con ninguna otra categoría,
+para que no se confundan entre sí:
+
+- `radix` — literales con base `0x` (hexadecimal), `0o` (octal) y `0b` (binario).
+  Coral: `#FF6B47` en oscuro, `#C13E1C` en claro.
+- `collection` — tipos colección `list`, `dict`, `tuple`, `set`.
+  Esmeralda: `#2ED573` en oscuro, `#11804C` en claro.
+
+Los colores se eligieron por distancia perceptual (ΔE ≥ 13 contra cualquier otro
+color de la misma variante) y con contraste ≥ 4.5:1 sobre el fondo.

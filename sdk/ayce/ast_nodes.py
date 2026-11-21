@@ -144,7 +144,7 @@ class RangeExpr(Expr):
 @dataclass
 class InletExpr(Expr):
     """inlet(prompt, tipo) — lee entrada del teclado.
-    tipo puede ser None (string), 'int', 'float', 'bool'."""
+    tipo puede ser "", 'int', 'float', 'bool', 'bytes', 'string' o 'none'."""
     prompt: Optional[Expr] = None
     target_type: str = ""   # "", "int", "float", "bool"
 
@@ -168,6 +168,16 @@ class ConstDecl(Stmt):
     name: str = ""
     type_node: Optional[TypeNode] = None
     init: Optional[Expr] = None
+
+@dataclass
+class DeclGroup(Stmt):
+    """v0.6.3 — declaración múltiple del cliente:
+        var n1-n2-n3: t1, t2, t3 = v1, v2, v3
+        const k1-k2:  t1, t2     = v1, v2
+    Los nombres van separados por '-', los tipos y valores por ','. El parser
+    desglosa en VarDecl/ConstDecl (los tipos que falten son none, el tipo
+    desconocido) y el intérprete ejecuta cada una con la maquinaria común."""
+    decls: list = field(default_factory=list)   # [VarDecl | ConstDecl, ...]
 
 @dataclass
 class AssignStmt(Stmt):
@@ -424,6 +434,57 @@ class ModuleAccessExpr(Expr):
     name: str = ""
     line: int = 0
     col: int = 0
+
+# ──────────────────────────────────────────────────────────────────────
+#  v0.6.3 — State/box (diseño del cliente) y guard principal <GUARD>-<MAIN>
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class PatternAlt:
+    """Una alternativa de patrón dentro de `box is type ( ... )`.
+
+    kind:
+      - "type":    coincide por TIPO (type_node se verifica; para colecciones
+                   verifica también el tipo de elemento: int[] vs list)
+      - "value":   coincide por VALOR literal ("a", 1, 3.14, True, b"..", -2)
+      - "ident":   coincide con el valor de una variable; si el identificador
+                   nombra un Template/Shape/Variant, es un patrón de tipo
+      - "variant": coincide con un caso de Variant (Tipo::Caso, sin mirar payload)
+    Varias alternativas se unen con || y la primera que coincida gana."""
+    kind: str = "type"
+    type_node: Optional[TypeNode] = None    # kind="type"
+    value_expr: Optional[Expr] = None       # kind="value"
+    name: str = ""                          # kind="ident"
+    type_name: str = ""                     # kind="variant"
+    case_name: str = ""                     # kind="variant"
+    line: int = 0
+    col: int = 0
+
+
+@dataclass
+class StateStmt(Stmt):
+    """State <expr> - <
+           box is type ( <patrón>[ || <patrón>...] ) [ cuerpo ]
+           ...
+           box is null [ cuerpo ]   (opcional, siempre el último)
+       >
+    Diseño del cliente (su 'STATE' y su 'box'). El sujeto se evalúa UNA vez;
+    en cada brazo `box` es la variable mágica con ese valor. `box is null`
+    es el brazo de reserva: sólo corre si ningún otro brazo coincidió."""
+    subject: Optional[Expr] = None
+    arms: list = field(default_factory=list)
+    # [(patrones | None si es el brazo 'box is null', [stmts]), ...]
+
+
+@dataclass
+class GuardMainStmt(Stmt):
+    """<GUARD>-<MAIN> { cuerpo }
+    El guard del cliente: el PUNTO DE ENTRADA del programa, más
+    estricto que `if __name__ == "__main__":` de Python. Cuando el archivo
+    se ejecuta como programa principal, SÓLO corren los cuerpos de los
+    guards — el resto del nivel superior no se ejecuta. Si el archivo se
+    carga con `require` (batch/módulo), el bloque se omite y el nivel
+    superior corre (inicialización del módulo)."""
+    body: list = field(default_factory=list)
 
 # ──────────────────────────────────────────────────────────────────────
 #  Programa

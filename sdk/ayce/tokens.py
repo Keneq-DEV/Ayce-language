@@ -57,6 +57,10 @@ class TokenType(Enum):
     FROM       = auto()      # from
     AS         = auto()      # as
 
+    # State y guard principal (v0.6.3 — diseño del cliente)
+    STATE      = auto()      # State <expr> - < box is type(...) [ ... ] ... >  (el 'STATE' del cliente)
+    BOX        = auto()      # box: variable mágica con el valor evaluado en cada brazo de State
+
     # Tipos primitivos (palabras reservadas)
     INT_T      = auto()
     FLOAT_T    = auto()
@@ -165,6 +169,8 @@ KEYWORDS = {
     "require":  TokenType.REQUIRE,
     "from":     TokenType.FROM,
     "as":       TokenType.AS,
+    "State":    TokenType.STATE,    # v0.6.3: State/box (el 'STATE' del cliente; exacto con S mayúscula)
+    "box":      TokenType.BOX,      # v0.6.3: variable mágica de los brazos de State
     "not":      TokenType.NOT,    # v0.6.2: alias de '!'
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,

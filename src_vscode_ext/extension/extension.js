@@ -1,5 +1,5 @@
 /**
- * ayce — extensión para VS Code (v0.5.2)
+ * ayce — extensión para VS Code (v0.6.3)
  *
  * Comandos:
  *   ayce.runFile             — ejecuta el .ayce en el panel de salida
@@ -7,6 +7,17 @@
  *   ayce.setupCodeRunner     — configura Code Runner
  *   ayce.applyColors         — aplica la paleta "Ayce Dusk" (se adapta al tema claro/oscuro)
  *   ayce.removeColors        — quita TODOS los colores de ayce de tus settings
+ *
+ * v0.6.3 (diseño del cliente): State/box y el guard principal <GUARD>-<MAIN>.
+ * Criterio del cliente: cada token nuevo lleva COLOR PROPIO (no reutilizado).
+ * La paleta suma 12 categorías, elegidas por ΔE (Lab) contra todos los colores
+ * existentes y contraste WCAG >= 4.5:1:
+ *   state (State), box (deja de compartir el color de self), armtype (el
+ *   'type' de los brazos), fallback (el 'null' de reserva), guard (GUARD),
+ *   main (MAIN), gdelim (la puntuación de <GUARD>-<MAIN>), sdash (el '-' que
+ *   conecta el sujeto), sangle (los < > del bloque), y hexpre/octpre/binpre —
+ *   los prefijos 0x, 0o y 0b ahora CADA UNO con su color, separados de los
+ *   dígitos (que conservan radix).
  */
 
 const vscode = require('vscode');
@@ -27,6 +38,11 @@ const PALETTES = {
     modifier: '#D9A85F', control: '#8EA6F2', decl: '#C29DEC', error: '#EE7F8E',
     io: '#D58BE0', builtin: '#6FD0B0', fn: '#D2DA8E', operator: '#D9A0C8',
     bracket: '#C4B48A', punct: '#8C98AD', constant: '#E6B665', variable: '#8FD68A',
+    radix: '#FF6B47', collection: '#2ED573',
+    state: '#DF49DF', box: '#B7DF49', armtype: '#8774E7', fallback: '#DF49AD',
+    guard: '#6CDF49', main: '#DFCB49', gdelim: '#D46D54', sdash: '#49DFA3',
+    sangle: '#CE8F8D', hexpre: '#E35F98', octpre: '#97E774', binpre: '#9FD6D6',
+    module: '#49A3DF',
   },
   light: {
     comment: '#5E6F85', string: '#A8531F', escape: '#8A4318', int: '#8F5E00',
@@ -34,6 +50,11 @@ const PALETTES = {
     modifier: '#85600E', control: '#4357C9', decl: '#7F45BD', error: '#BE3550',
     io: '#9A3DB0', builtin: '#0B7D5F', fn: '#66730C', operator: '#9A3F85',
     bracket: '#7D683A', punct: '#5F6B80', constant: '#8F5E00', variable: '#2F7D32',
+    radix: '#C13E1C', collection: '#11804C',
+    state: '#2525D0', box: '#3A4A88', armtype: '#D025A2', fallback: '#883A4C',
+    guard: '#A933DB', main: '#2575D0', gdelim: '#1D26A5', sdash: '#663A88',
+    sangle: '#AB5349', hexpre: '#DB333E', octpre: '#6921BA', binpre: '#2C72AF',
+    module: '#C431C4',
   },
 };
 
@@ -59,6 +80,7 @@ function buildRules(p) {
       'keyword.control.conditional.ayce',
       'keyword.control.loop.ayce',
       'keyword.control.flow.ayce',
+      'keyword.control.match.ayce',
     ], p.control),
     r('decl', [
       'keyword.other.declaration.ayce',
@@ -68,8 +90,32 @@ function buildRules(p) {
     ], p.decl),
     r('error', ['keyword.control.error.ayce'], p.error),
     r('self', ['variable.language.self.ayce'], p.error, 'italic'),
+    // v0.6.3: box deja de compartir el color de self — cada cosa su color.
+    r('box', ['variable.language.box.ayce'], p.box, 'italic'),
+    // v0.6.3: State y guard principal del cliente, cada token con el suyo.
+    r('state', ['keyword.control.state.ayce'], p.state, 'bold'),
+    r('armtype', ['keyword.control.type.ayce'], p.armtype),
+    r('fallback', ['keyword.control.fallback.ayce'], p.fallback),
+    r('guard', ['keyword.control.guard.ayce'], p.guard, 'bold'),
+    r('main', ['keyword.control.main.ayce'], p.main),
+    r('gdelim', ['punctuation.definition.guard.ayce'], p.gdelim, 'bold'),
+    r('sdash', ['keyword.operator.state-connect.ayce'], p.sdash, 'bold'),
+    r('sangle', ['punctuation.definition.state-angle.ayce'], p.sangle, 'bold'),
+    // v0.6.3: prefijos 0x/0o/0b — cada uno con su color, separados de los dígitos.
+    r('hexpre', ['constant.numeric.radix.hex.ayce'], p.hexpre, 'bold'),
+    r('octpre', ['constant.numeric.radix.oct.ayce'], p.octpre, 'bold'),
+    r('binpre', ['constant.numeric.radix.bin.ayce'], p.binpre, 'bold'),
     r('io', ['keyword.other.io.ayce'], p.io),
+    // v0.6.3: require/from/as dejan de quedar sin color — cada cosa la suya.
+    r('module', ['keyword.control.module.ayce'], p.module),
     r('builtin', ['support.function.builtin.ayce'], p.builtin),
+    r('collection', [
+      'storage.type.list.ayce',
+      'storage.type.dict.ayce',
+      'storage.type.tuple.ayce',
+      'storage.type.set.ayce',
+    ], p.collection),
+    r('radix', ['constant.numeric.radix.ayce'], p.radix),
     r('function', ['entity.name.function.ayce'], p.fn),
     r('operator', [
       'keyword.operator.arithmetic.ayce',
@@ -80,6 +126,7 @@ function buildRules(p) {
       'keyword.operator.arrow.ayce',
       'keyword.operator.pipe.ayce',
       'keyword.operator.varargs.ayce',
+      'keyword.operator.bitwise.ayce',
     ], p.operator),
     r('bracket', [
       'punctuation.definition.brackets.ayce',

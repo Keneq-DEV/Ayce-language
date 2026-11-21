@@ -22,19 +22,19 @@ while True do
         say("producto añadido correctamente")
     else if opciones == 2 then
         var producto: string = inlet("ingresa el nombre del producto a eliminar: ", string)
-        if almacen.has(producto) then
-            almacen.remove(producto)
+        if almacen::has(producto) then
+            almacen::remove(producto)
             say("producto eliminado correctamente")
         else
             say("el producto no existe en el almacen")
         end
     else if opciones == 3 then
         say("productos en el almacen:")
-        for par in almacen.items() do
+        for par in almacen::items() do
             say(f"{par[0]}: cantidad {par[1][0]} | precio ${par[1][1]}")
         end
     else if opciones == 4 then
-        say("saliendo del programa...")
+        say("saliendo del programa::::::")
         break
     else
         say("opcion invalida, por favor selecciona una opcion valida")

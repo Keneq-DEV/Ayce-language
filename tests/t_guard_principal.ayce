@@ -1,0 +1,56 @@
+## t_guard_principal.ayce — el guard principal es PUNTO DE ENTRADA (arreglo de la 0.6.3)
+## (queja del cliente: "si imprime el print, entonces no es guardia").
+##
+## Reglas que este test verifica:
+##   1. Con <GUARD>-<MAIN> en el archivo y ejecución directa, las ACCIONES del
+##      nivel superior no corren (ni say, ni llamadas, ni asignaciones sueltas).
+##   2. Las DECLARACIONES var/const del nivel superior SÍ se inicializan.
+##   3. Bajo require el nivel superior del módulo SÍ corre y su guard NO corre.
+##   4. Se aceptan las dos grafías: <GUARD>-<MAIN> y <GUARD>-><MAIN>.
+##   5. Varios guards corren todos, en orden de aparición.
+##
+## Esperado en stdout, exactamente y en este orden:
+##   helper: nivel superior corrió bajo require
+##   OK nivel superior callado
+##   OK declaraciones inicializadas: 7
+##   OK guard del helper callado bajo require
+##   OK helper expone tarea: 21
+##   OK segundo guard (flecha ->) corre en orden
+## (el require se procesa en la primera pasada, por eso la línea del helper
+## sale primero). Si el guard no funcionara, entre la línea del helper y los
+## OK saldría además "ACCION TOP: no debe salir".
+
+require "guard_mod_helper.ayce" as helper
+
+var accion_top: bool = False
+var base: int = 7
+
+task marcar() ;
+{
+    accion_top = True
+}
+
+## Acciones del nivel superior: con guard activo NO corren. Si corrieran,
+## 'accion_top' quedaría en True y este say saldría antes que todo lo demás.
+marcar()
+say("ACCION TOP: no debe salir")
+
+<GUARD>-<MAIN> {
+    if accion_top then
+        say("FALLA: el nivel superior corrió con guard activo")
+    else
+        say("OK nivel superior callado")
+    end
+    say(f"OK declaraciones inicializadas: {base}")
+    if helper::verificar_guard() then
+        say("FALLA: el guard del helper corrió bajo require")
+    else
+        say("OK guard del helper callado bajo require")
+    end
+    say(f"OK helper expone tarea: {helper::triplo(base)}")
+}
+
+## Misma semántica con la grafía de flecha, y los guards corren todos en orden.
+<GUARD>-><MAIN> {
+    say("OK segundo guard (flecha ->) corre en orden")
+}

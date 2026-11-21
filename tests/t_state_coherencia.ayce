@@ -1,0 +1,54 @@
+## t_state_coherencia.ayce — v0.6.3: coherencia de los brazos de tipo en State
+## Regla: none = tipo desconocido → brazos de tipo vivos (sin aviso);
+##        tipo concreto → brazos de tipo estáticos → aviso UNA vez por State.
+## Esperado en stderr: exactamente 2 avisos (bloques 2 y 3). Nada en los demás.
+
+say("── bloque 1: var none (canónico, sin aviso) ──")
+var dato: none = "hola"
+State dato then <
+    box is type ("a")[ say("1 literal: " + box) ]
+    box is type (string)[ say("1 texto: " + box) ]
+    box is type (int || float || bool)[ say("1 primitivo: " + string(box)) ]
+    box is null[ say("1 reserva") ]
+>
+var num: none = 3.5
+State num then <
+    box is type (int || float || bool)[ say("1 primitivo: " + string(box)) ]
+    box is null[ say("1 reserva") ]
+>
+
+say("── bloque 2: var string → aviso una sola vez ──")
+task revisar(string s) ;
+{
+    State s then <
+        box is type (string)[ say("2 cuerpo: " + box) ]
+        box is type (int)[ say("2 muerto") ]
+        box is null[ say("2 reserva") ]
+    >
+}
+revisar("hola")
+revisar("otra vez")
+
+say("── bloque 3: var int con brazos imposibles → aviso ──")
+var n: int = 5
+State n then <
+    box is type (int[])[ say("3 muerto") ]
+    box is type (string || bool)[ say("3 muerto") ]
+    box is null[ say("3 reserva corre") ]
+>
+
+say("── bloque 4: literales sobre var tipada → sin aviso ──")
+var r: string = "a"
+State r then <
+    box is type ("a")[ say("4 literal a") ]
+    box is type ("b")[ say("4 literal b") ]
+    box is null[ say("4 reserva") ]
+>
+
+say("── bloque 5: sujeto json::parse → sin aviso ──")
+require json
+State json::parse("[1,2]") then <
+    box is type (int[])[ say("5 lista de ints: " + string(box::len()) + " elementos") ]
+    box is null[ say("5 reserva") ]
+>
+say("fin")

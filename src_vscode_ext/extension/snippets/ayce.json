@@ -416,5 +416,43 @@
       "require \"${1:ruta/al/archivo}.ayce\" as ${2:alias}"
     ],
     "description": "Importar módulo desde ruta literal con alias — v0.5"
+  },
+  "State (match del cliente)": {
+    "prefix": "state",
+    "body": [
+      "State ${1:valor} then <",
+      "    box is type (${2:int || string})[",
+      "        ${3:## coincide por tipo}",
+      "    ]",
+      "    box is null[",
+      "        ${4:## reserva: si nada coincidió}",
+      "    ]",
+      ">"
+    ],
+    "description": "State con brazos box is type( ... ) [ ... ] y reserva box is null — v0.6.3"
+  },
+  "State por literal": {
+    "prefix": "statelit",
+    "body": [
+      "State ${1:respuesta} then <",
+      "    box is type (\"${2:a}\" || \"${3:A}\")[",
+      "        ${4:## coincide por valor literal}",
+      "    ]",
+      "    box is null[",
+      "        say(f\"'{box}' no es una opción válida\")",
+      "    ]",
+      ">"
+    ],
+    "description": "State con patrones de literal (box trae el valor) — v0.6.3"
+  },
+  "Guard principal": {
+    "prefix": "guardmain",
+    "body": [
+      "<GUARD>-<MAIN> {",
+      "    ${1:## sólo corre si este archivo es el programa,",
+      "    ## no si otro archivo lo carga con require}",
+      "}"
+    ],
+    "description": "Guard principal <GUARD>-<MAIN> (el if __name__ == \"__main__\" de ayce) — v0.6.3"
   }
 }

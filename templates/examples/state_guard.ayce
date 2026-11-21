@@ -1,0 +1,170 @@
+## state_guard.ayce — State/box y guard principal (diseño del cliente)
+## El match es 'State', el case es 'box', y el guard principal es <GUARD>-<MAIN>:
+## el PUNTO DE ENTRADA del programa. Al ejecutar este archivo directamente,
+## SÓLO corre el cuerpo del guard: las acciones del nivel superior quedan
+## calladas ("si imprime el print, no es guard"). Las declaraciones var/const
+## sí se inicializan y las tasks/templates/shapes/variants se declaran siempre.
+## Si otro archivo hace `require` de este, el guard se omite por completo y el
+## nivel superior corre (inicialización del módulo).
+
+<GUARD>-<MAIN> {
+    say("guard: este archivo es el programa principal — arranca la demo")
+    demo()
+}
+
+## La demo vive en una tarea y el guard la manda llamar. Los bloques de abajo
+## eran sentencias de nivel superior en v0.6.3; con el guard como punto de
+## entrada, el cuerpo del programa va adentro del guard (directo o vía tasks).
+task demo() ;
+{
+    ## ── State por tipos: la unión con || agarra varias a la vez ──
+    ## En un programa interactivo el valor viene de inlet:
+    ##   var opciones: none = inlet("opciones: ", none)
+    ## Acá, sin teclado, con un valor fijo:
+    var opciones: none = "hola"
+
+    State opciones then <
+        box is type (string || int || float || bool)[
+            say("esto agarra string, int, float, o bool")
+        ]
+        box is type (string)[
+            say("agarra solo cadena")
+        ]
+        box is null[
+            say("error desconocido")
+        ]
+    >
+
+    ## ── State por literal: el primer brazo que coincide gana ──
+    var respuesta: string = "a"
+
+    State respuesta then <
+        box is type ("a" || "A")[
+            say("elegiste la opción A")
+        ]
+        box is type ("b" || "B")[
+            say("elegiste la opción B")
+        ]
+        box is null[
+            say(f"'{box}' no es una opción válida")
+        ]
+    >
+
+    ## ── State con colecciones profundas (int[] verifica el elemento) ──
+    var datos: none = [1, 2, 3]
+
+    State datos then <
+        box is type (int[])[
+            say(f"lista de ints con {box::len()} elementos")
+        ]
+        box is type (string[])[
+            say("lista de strings")
+        ]
+        box is type (<string, int>)[
+            say("diccionario de string a int")
+        ]
+        box is null[
+            say("otra cosa")
+        ]
+    >
+
+    ## ── State con Variant: los tipos unión de ayce ──
+    var c: Color = Color::Verde
+
+    State c then <
+        box is type (Color::Rojo)[
+            say("el color es rojo")
+        ]
+        box is type (Color::Verde)[
+            say("el color es verde")
+        ]
+        box is null[
+            say("otro color")
+        ]
+    >
+
+    ## ── Sujeto con postfix y literales negativos ──
+    var lista: int[] = [7, 0, -3]
+
+    State lista[0] then <
+        box is type (7)[
+            say("el primero es 7")
+        ]
+        box is null[
+            say(f"el primero es {box}")
+        ]
+    >
+
+    State lista[2] then <
+        box is type (-3)[
+            say("el último es -3")
+        ]
+        box is null[
+            say(f"el último es {box}")
+        ]
+    >
+
+    ## ── Sin coincidencia y sin 'box is null': no pasa nada ──
+    var n: int = 5
+    State n then <
+        box is type ("texto")[
+            say("esto NO debe salir")
+        ]
+    >
+    say("después del State sin coincidencia")
+
+    ## ── El brazo de reserva recibe el valor en box ──
+    var raro: none = [1, "x"]
+
+    State raro then <
+        box is type (int[])[
+            say("esto NO debe salir")
+        ]
+        box is null[
+            say(f"la reserva agarró: {box}")
+        ]
+    >
+
+    ## ── La tarea del bloque de menús se prueba acá ──
+    say(f"menu(1) = {menu(1)}")
+    say(f"menu(9) = {menu(9)}")
+
+    ## ── Uso real: clasificar lo que devuelve inlet ──
+    ## (mismo patrón del ejemplo de inlet, pero con State)
+    var edad: none = 20
+
+    State edad then <
+        box is type (int)[
+            say(f"edad recibida como int: {box}")
+        ]
+        box is type (float)[
+            say(f"edad recibida como float: {box}")
+        ]
+        box is null[
+            say("no escribiste una edad")
+        ]
+    >
+}
+
+## ── State dentro de una tarea: menús y validaciones ──
+task menu(int eleccion) ;
+{
+    State eleccion then <
+        box is type (1)[
+            return "abrir archivo"
+        ]
+        box is type (2)[
+            return "guardar archivo"
+        ]
+        box is null[
+            return f"opción desconocida: {box}"
+        ]
+    >
+}
+
+## ── El Variant que usa la demo ──
+Variant Color {
+    Rojo
+    Verde
+    Azul
+}

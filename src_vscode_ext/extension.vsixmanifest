@@ -7,7 +7,7 @@
         <Identity
             Language="es-MX"
             Id="ayce"
-            Version="0.5.2"
+            Version="0.6.4"
             Publisher="ayce-project" />
         <DisplayName>ayce</DisplayName>
         <Description xml:space="preserve">Soporte del lenguaje de programación ayce para VS Code.</Description>

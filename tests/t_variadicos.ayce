@@ -1,0 +1,47 @@
+## t_variadicos.ayce — v0.6.3: variádicos coherentes (tipo... nombre)
+## El '...' existe desde v0.5; en v0.6.3 quedó coherente: cada argumento
+## extra debe cumplir el tipo declarado, convive con defaults en los fijos
+## y el parser exige que sea el último de la firma.
+
+## 1) tipado: los extras llegan como int[]
+task suma(int fijo, int... resto) ;
+{
+    var total: int = fijo
+    for n in resto do
+        total = total + n
+    end
+    say("1: total=" + string(total) + " con " + string(resto::len()) + " extras")
+}
+suma(1, 2, 3, 4)
+suma(5)
+
+## 2) flexible: none... acepta cualquier mezcla y el contenido se resuelve con State
+task mezcla(none... datos) ;
+{
+    say("2: recibidos=" + string(datos::len()))
+    State datos[0] then <
+        box is type (int)[ say("2: el primero es int") ]
+        box is type (string)[ say("2: el primero es string") ]
+        box is null[ say("2: reserva") ]
+    >
+}
+mezcla(1, "a", [2], True)
+
+## 3) defaults en los fijos junto a variádicos
+task con_def(int a, int b = 10, int... resto) ;
+{
+    say("3: a=" + string(a) + " b=" + string(b) + " extras=" + string(resto::len()))
+}
+con_def(1)
+con_def(1, 2)
+con_def(1, 2, 3, 4)
+
+## 4) sobrecarga: la firma exacta gana sobre la variádica (cuerpos separados por |)
+task par_o_var(int a) | (int a, int... resto) ;
+{
+    say("4: firma exacta con " + string(a))
+|
+    say("4: variádica con " + string(resto::len()) + " extras")
+}
+par_o_var(5)
+par_o_var(5, 6, 7)

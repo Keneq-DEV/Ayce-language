@@ -13,6 +13,9 @@ class Parser:
         self.tokens = tokens
         self.filename = filename
         self.pos = 0
+        # v0.6.3: mientras se parsea el sujeto de `State <expr> - <`, el '-'
+        # NO se consume como resta binaria: es el conector del bloque.
+        self._stop_state_subject = False
 
     # ──────────────────────────────────────────────────────────────────
     #  Helpers
@@ -100,6 +103,8 @@ class Parser:
             return self._parse_while()
         if t.type == TokenType.FOR:
             return self._parse_for()
+        if t.type == TokenType.STATE:
+            return self._parse_state()
         if t.type == TokenType.TRY:
             return self._parse_try()
         if t.type == TokenType.RAISE:
@@ -118,31 +123,90 @@ class Parser:
             return self._parse_say()
         if t.type == TokenType.GLOBAL:
             return self._parse_global()
+        # v0.6.3: <GUARD>-<MAIN> { ... } — el guard principal del cliente.
+        # Se reconoce por contexto (GUARD y MAIN no son keywords: son
+        # identificadores en una secuencia fija).
+        if t.type == TokenType.LT and self._peek(1).type == TokenType.IDENT \
+                and self._peek(1).value == "GUARD":
+            return self._parse_guard_main()
         # Si no es keyword, es una asignación o llamada (ExprStmt)
         return self._parse_expr_or_assign()
 
-    def _parse_var_decl(self) -> VarDecl:
-        t = self._expect(TokenType.VAR, "'var'")
-        name = self._expect(TokenType.IDENT, "nombre de variable").value
-        self._expect(TokenType.COLON, "':'")
-        type_node = self._parse_type()
-        init = None
-        if self._match(TokenType.ASSIGN):
-            init = self._parse_expr()
-        return VarDecl(name=name, type_node=type_node, init=init, line=t.line, col=t.col)
+    def _parse_var_decl(self) -> Stmt:
+        """Declaración de variables (v0.6.3, diseño del cliente):
 
-    def _parse_const_decl(self) -> ConstDecl:
+            var nombre: tipo = valor                 (una, como siempre)
+            var n1-n2-n3: t1, t2, t3 = v1, v2, v3    (múltiple, separada por '-')
+
+        Los tipos que falten son none (tipo desconocido) y los valores van
+        uno a uno con los nombres. El '=' sigue siendo opcional en var."""
+        t = self._expect(TokenType.VAR, "'var'")
+        decls = self._parse_decl_comun(VarDecl, t, con_valor=False)
+        return decls[0] if len(decls) == 1 else DeclGroup(decls=decls, line=t.line, col=t.col)
+
+    def _parse_const_decl(self) -> Stmt:
+        """Declaración de constantes; misma cola múltiple que var, con '='
+        obligatorio (v0.6.3)."""
         t = self._expect(TokenType.CONST, "'const'")
-        name = self._expect(TokenType.IDENT, "nombre de constante").value
+        decls = self._parse_decl_comun(ConstDecl, t, con_valor=True)
+        return decls[0] if len(decls) == 1 else DeclGroup(decls=decls, line=t.line, col=t.col)
+
+    def _parse_decl_comun(self, ctor, kw, con_valor: bool) -> list:
+        """Cola común de var/const: nombres separados por '-', tipos por ',',
+        valores por ','. Reglas coherentes: los tipos que falten son none;
+        no puede haber más tipos que nombres; con valores, exactamente uno
+        por nombre."""
+        names = [self._expect(TokenType.IDENT, "nombre de variable")]
+        # '-' como separador de nombres: sólo si sigue otro identificador
+        while self._check(TokenType.MINUS) and self._peek(1).type == TokenType.IDENT:
+            self._advance()
+            names.append(self._expect(TokenType.IDENT, "nombre de variable"))
         self._expect(TokenType.COLON, "':'")
-        type_node = self._parse_type()
-        self._expect(TokenType.ASSIGN, "'=' (const requiere valor inicial)")
-        init = self._parse_expr()
-        return ConstDecl(name=name, type_node=type_node, init=init, line=t.line, col=t.col)
+        types = [self._parse_type()]
+        while self._match(TokenType.COMMA):
+            types.append(self._parse_type())
+        n = len(names)
+        if len(types) > n:
+            raise AyceSyntaxError(self.filename, kw.line, kw.col,
+                f"más tipos ({len(types)}) que nombres ({n}): cada nombre "
+                f"lleva a lo sumo un tipo; los que falten son none")
+        if con_valor:
+            self._expect(TokenType.ASSIGN, "'=' (const requiere valor inicial)")
+            hay_init = True
+        else:
+            hay_init = self._match(TokenType.ASSIGN)
+        exprs = None
+        if hay_init:
+            exprs = [self._parse_expr()]
+            while self._match(TokenType.COMMA):
+                exprs.append(self._parse_expr())
+            if len(exprs) > n:
+                raise AyceSyntaxError(self.filename, kw.line, kw.col,
+                    f"más valores ({len(exprs)}) que nombres ({n}): "
+                    f"cada nombre toma exactamente un valor")
+            if len(exprs) < n:
+                raise AyceSyntaxError(self.filename, kw.line, kw.col,
+                    f"faltan valores: hay {len(exprs)} para {n} nombres "
+                    f"(los valores van uno a uno)")
+        decls = []
+        for i, tok in enumerate(names):
+            tipo = (types[i] if i < len(types)
+                    else PrimitiveType(name="none", line=tok.line, col=tok.col))
+            init = exprs[i] if exprs is not None else None
+            decls.append(ctor(name=tok.value, type_node=tipo, init=init,
+                              line=tok.line, col=tok.col))
+        return decls
 
     def _parse_task_decl(self) -> TaskDecl:
         t = self._expect(TokenType.TASK, "'task'")
-        name = self._expect(TokenType.IDENT, "nombre de tarea").value
+        # v0.6.3: el nombre puede ser box — es keyword, pero puede haber APIs
+        # públicas con ese nombre. Como llamadas sueltas sigue siendo keyword;
+        # sólo el acceso por módulo (::nombre) lo alcanza. ('match' y 'guard'
+        # volvieron a ser identificadores normales en v0.6.3.)
+        if self._peek().type == TokenType.BOX:
+            name = self._advance().value
+        else:
+            name = self._expect(TokenType.IDENT, "nombre de tarea").value
 
         # Sobrecarga: una o más firmas separadas por |
         # Sintaxis:  task nombre(firma1) | (firma2) | ...  [= tipo] ;
@@ -293,6 +357,12 @@ class Parser:
             while self._match(TokenType.COMMA):
                 params.append(self._parse_param())
         self._expect(TokenType.RPAREN, "')'")
+        # Varargs coherente (v0.6.3): a lo sumo un '...' y sólo al final de
+        # la firma; en otra posición el empaquetado sería ambiguo.
+        for i, p in enumerate(params):
+            if p.varargs and i != len(params) - 1:
+                raise AyceSyntaxError(self.filename, p.line, p.col,
+                    "el parámetro '...' debe ser el último de la firma")
         return TaskSignature(params=params, line=t.line, col=t.col)
 
     def _parse_param(self) -> Param:
@@ -390,6 +460,276 @@ class Parser:
         body = self._parse_block_body()
         self._expect(TokenType.END, "'end'")
         return ForStmt(var_name=var_name, iterable=iterable, body=body, line=t.line, col=t.col)
+
+    # ──────────────────────────────────────────────────────────────────
+    #  State/box y guard principal (v0.6.3 — diseño del cliente)
+    # ──────────────────────────────────────────────────────────────────
+    def _parse_brace_body(self) -> list:
+        """Lee sentencias entre llaves { ... } (cuerpo de <GUARD>-<MAIN>).
+        A diferencia de los cuerpos de task, no reconoce '|' como separador
+        de sobrecargas: dentro del guard '|' es el operador pipe/or-bit."""
+        self._skip_newlines()
+        self._expect(TokenType.LBRACE, "'{'")
+        self._skip_separators()
+        stmts = []
+        while not self._check(TokenType.RBRACE, TokenType.EOF):
+            stmts.append(self._parse_stmt())
+            self._skip_separators()
+        self._expect(TokenType.RBRACE, "'}'")
+        return stmts
+
+    def _parse_bracket_body(self) -> list:
+        """Lee sentencias entre corchetes [ ... ] (cuerpo de un brazo de State).
+        Es la forma del cliente: cada brazo abre con `[` y cierra con `]`."""
+        self._skip_newlines()
+        self._expect(TokenType.LBRACKET, "'[' (el cuerpo del brazo abre con [ )")
+        self._skip_separators()
+        stmts = []
+        while not self._check(TokenType.RBRACKET, TokenType.EOF):
+            stmts.append(self._parse_stmt())
+            self._skip_separators()
+        self._expect(TokenType.RBRACKET, "']' (el cuerpo del brazo cierra con ] )")
+        return stmts
+
+    # Tokens que pueden iniciar un patrón de TIPO (v0.6.3). El resto de la
+    # gramática del tipo la resuelve _parse_type (sufijos [], <K, V>, (T1, T2)).
+    _PATTERN_TYPE_TOKENS = frozenset((
+        TokenType.INT_T, TokenType.FLOAT_T, TokenType.STRING_T,
+        TokenType.BOOL_T, TokenType.BYTES_T, TokenType.NONE,
+        TokenType.LIST_T, TokenType.DICT_T, TokenType.TUPLE_T, TokenType.SET_T,
+        TokenType.LT, TokenType.LPAREN,
+    ))
+
+    def _parse_pattern_alt(self) -> PatternAlt:
+        """Una alternativa de patrón: tipo, literal, Tipo::Caso o identificador."""
+        t = self._peek()
+        # Patrón de tipo: int, string, int[], <string, int>, none, list, ...
+        if t.type in self._PATTERN_TYPE_TOKENS:
+            tn = self._parse_type_pattern()
+            return PatternAlt(kind="type", type_node=tn, line=t.line, col=t.col)
+        # Literales negativos: -1, -2.5
+        if t.type == TokenType.MINUS and self._peek(1).type in (TokenType.INT, TokenType.FLOAT):
+            self._advance()
+            nt = self._advance()
+            lit = (IntLit(value=nt.value, line=nt.line, col=nt.col)
+                   if nt.type == TokenType.INT
+                   else FloatLit(value=nt.value, line=nt.line, col=nt.col))
+            return PatternAlt(kind="value",
+                              value_expr=UnaryExpr(op="-", operand=lit, line=t.line, col=t.col),
+                              line=t.line, col=t.col)
+        # Literales: "a", 1, 3.14, True, False, b"..."
+        if t.type in (TokenType.STRING, TokenType.INT, TokenType.FLOAT,
+                      TokenType.TRUE, TokenType.FALSE, TokenType.BYTES):
+            self._advance()
+            cls = {TokenType.STRING: StringLit, TokenType.INT: IntLit,
+                   TokenType.FLOAT: FloatLit, TokenType.BYTES: BytesLit,
+                   TokenType.TRUE: BoolLit, TokenType.FALSE: BoolLit}[t.type]
+            value = t.value
+            if t.type == TokenType.TRUE:
+                value = True
+            elif t.type == TokenType.FALSE:
+                value = False
+            return PatternAlt(kind="value", value_expr=cls(value=value, line=t.line, col=t.col),
+                              line=t.line, col=t.col)
+        # Caso de Variant: Tipo::Caso
+        if t.type == TokenType.IDENT and self._peek(1).type == TokenType.DOUBLE_COLON:
+            self._advance()
+            self._expect(TokenType.DOUBLE_COLON, "'::'")
+            case_name = self._expect(TokenType.IDENT, "nombre de caso").value
+            return PatternAlt(kind="variant", type_name=t.value, case_name=case_name,
+                              line=t.line, col=t.col)
+        # Identificador: coincide por valor; si nombra un tipo de usuario,
+        # coincide por tipo (lo resuelve el intérprete en runtime).
+        if t.type == TokenType.IDENT:
+            self._advance()
+            return PatternAlt(kind="ident", name=t.value, line=t.line, col=t.col)
+        raise AyceSyntaxError(
+            self.filename, t.line, t.col,
+            "Se esperaba un patrón (tipo, literal, Tipo::Caso o identificador) "
+            f"pero se encontró {t.value!r}"
+        )
+
+    def _parse_type_pattern(self) -> TypeNode:
+        """Como _parse_type pero SIN el sufijo de set { }: en un patrón, la '{'
+        que sigue es el cuerpo del brazo, no un tipo set. Los sufijos [] (listas)
+        y las formas <K, V> y (T1, T2) siguen soportados."""
+        t = self._peek()
+
+        # none como marcador de modo flexible: none[], none<>, none()
+        if t.type == TokenType.NONE:
+            self._advance()
+            if self._check(TokenType.LBRACKET):
+                self._advance(); self._expect(TokenType.RBRACKET, "']'")
+                return ListType(flexible=True, line=t.line, col=t.col)
+            if self._check(TokenType.LT):
+                self._advance(); self._expect(TokenType.GT, "'>'")
+                return DictType(flexible=True, line=t.line, col=t.col)
+            if self._check(TokenType.LPAREN):
+                self._advance(); self._expect(TokenType.RPAREN, "')'")
+                return TupleType(flexible=True, line=t.line, col=t.col)
+            return PrimitiveType(name="none", line=t.line, col=t.col)
+
+        prim_map = {
+            TokenType.INT_T:    "int",
+            TokenType.FLOAT_T:  "float",
+            TokenType.STRING_T: "string",
+            TokenType.BOOL_T:   "bool",
+            TokenType.BYTES_T:  "bytes",
+        }
+        if t.type in prim_map:
+            self._advance()
+            base = PrimitiveType(name=prim_map[t.type], line=t.line, col=t.col)
+            # int[][], int[][][], ... — sin el sufijo { } de set
+            return self._parse_type_suffix(base, t)
+
+        if t.type == TokenType.LIST_T:
+            self._advance()
+            return ListType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.DICT_T:
+            self._advance()
+            return DictType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.TUPLE_T:
+            self._advance()
+            return TupleType(flexible=True, line=t.line, col=t.col)
+        if t.type == TokenType.SET_T:
+            self._advance()
+            return SetType(flexible=True, line=t.line, col=t.col)
+
+        # Diccionario: <K, V> o <K, V1, V2>
+        if t.type == TokenType.LT:
+            self._advance()
+            self._skip_newlines()
+            key_type = self._parse_type()
+            self._skip_newlines()
+            value_types = []
+            while self._match(TokenType.COMMA):
+                self._skip_newlines()
+                value_types.append(self._parse_type())
+                self._skip_newlines()
+            self._expect(TokenType.GT, "'>'")
+            d = DictType(key_type=key_type, value_types=value_types, line=t.line, col=t.col)
+            return self._parse_type_suffix(d, t)
+
+        # Tupla heterogénea: (T1, T2, ...)
+        if t.type == TokenType.LPAREN:
+            self._advance()
+            elem_types = [self._parse_type()]
+            while self._match(TokenType.COMMA):
+                elem_types.append(self._parse_type())
+            self._expect(TokenType.RPAREN, "')'")
+            tt = TupleType(elem_types=elem_types, line=t.line, col=t.col)
+            return self._parse_type_suffix(tt, t)
+
+        raise AyceSyntaxError(
+            self.filename, t.line, t.col,
+            f"Se esperaba un tipo pero se encontró {t.value!r}"
+        )
+
+    def _parse_patterns(self) -> list:
+        """Patrones separados por ||:  string || int || float"""
+        alts = [self._parse_pattern_alt()]
+        while self._match(TokenType.OR):
+            alts.append(self._parse_pattern_alt())
+        return alts
+
+    def _parse_state(self) -> StateStmt:
+        """Diseño del cliente (arreglo de la 0.6.3):
+
+            State <expr> then <
+                box is type ( <patrón>[ || <patrón>...] ) [ cuerpo ]
+                ...
+                box is null [ cuerpo ]   (opcional, siempre el último)
+            >
+
+        El conector entre el sujeto y los brazos es 'then' (igual que el if).
+        En la v0.6.3 era '-': nunca fue diseño del cliente y quedó fuera —
+        si alguien escribe 'State x - <', el error de sintaxis lo dice y
+        señala la forma correcta. Las comas entre brazos son opcionales."""
+        t = self._expect(TokenType.STATE, "'State'")
+        self._stop_state_subject = True
+        try:
+            subject = self._parse_expr()
+        finally:
+            self._stop_state_subject = False
+        self._expect(TokenType.THEN, "'then' (State lleva 'State x then < ... >')")
+        self._expect(TokenType.LT, "'<' para abrir los brazos del State")
+        arms = []
+        saw_null = False
+        while True:
+            self._skip_separators()
+            if self._check(TokenType.GT):
+                break
+            if self._check(TokenType.EOF):
+                nt = self._peek()
+                raise AyceSyntaxError(self.filename, nt.line, nt.col,
+                    "State sin '>' de cierre")
+            at = self._peek()
+            if at.type != TokenType.BOX:
+                raise AyceSyntaxError(self.filename, at.line, at.col,
+                    "Los brazos de State son 'box is type ( <patrón> ) [ ... ]' "
+                    "o 'box is null [ ... ]'")
+            self._advance()
+            self._expect(TokenType.IS,
+                "'is' (los brazos de State son 'box is type ( ... ) [ ... ]')")
+            # 'type' y 'null' se reconocen por contexto: son IDENT en posición
+            # de brazo, no keywords globales.
+            if self._check(TokenType.IDENT) and self._peek().value == "type":
+                self._advance()
+                self._expect(TokenType.LPAREN, "'(' después de type")
+                pats = self._parse_patterns()
+                self._expect(TokenType.RPAREN, "')' para cerrar el patrón")
+                if saw_null:
+                    raise AyceSyntaxError(self.filename, at.line, at.col,
+                        "El brazo 'box is null' debe ser el último del State")
+                body = self._parse_bracket_body()
+                arms.append((pats, body))
+            elif self._check(TokenType.IDENT) and self._peek().value == "null":
+                if saw_null:
+                    raise AyceSyntaxError(self.filename, at.line, at.col,
+                        "Sólo puede haber un brazo 'box is null' en un State")
+                self._advance()
+                body = self._parse_bracket_body()
+                arms.append((None, body))
+                saw_null = True
+            else:
+                nt = self._peek()
+                raise AyceSyntaxError(self.filename, nt.line, nt.col,
+                    "Después de 'box is' viene 'type ( <patrón> )' o 'null' "
+                    f"(brazo de reserva), no {nt.value!r}")
+            self._match(TokenType.COMMA)  # coma entre brazos: opcional
+        self._expect(TokenType.GT, "'>' para cerrar el State")
+        return StateStmt(subject=subject, arms=arms, line=t.line, col=t.col)
+
+    def _parse_guard_main(self) -> GuardMainStmt:
+        """Diseño del cliente (v0.6.3): el guard principal.
+
+            <GUARD>-<MAIN> { cuerpo }
+
+        Punto de entrada del programa (arreglo de la 0.6.3, decisión del cliente): cuando
+        el archivo se ejecuta directamente, SÓLO corren los cuerpos de los
+        guards; si el archivo se carga con `require`, el bloque se omite y el
+        nivel superior corre. GUARD y MAIN van cada uno entre sus propios
+        < >: < GUARD > - < MAIN >, y se acepta también la flecha
+        <GUARD>-><MAIN> (misma grafía con la que el cliente lo escribe)."""
+        t = self._expect(TokenType.LT, "'<'")
+        gt = self._expect(TokenType.IDENT, "'GUARD'")
+        if gt.value != "GUARD":
+            raise AyceSyntaxError(self.filename, gt.line, gt.col,
+                f"El guard se escribe <GUARD>-<MAIN>, no <{gt.value}>")
+        self._expect(TokenType.GT, "'>' que cierra <GUARD>")
+        self._expect(TokenType.MINUS, "'-' entre <GUARD> y <MAIN>")
+        # <GUARD>-><MAIN> (flecha) es equivalente a <GUARD>-<MAIN>;
+        # el '>' suelto de la flecha se come aquí sin reclamar.
+        if self._check(TokenType.GT):
+            self._advance()
+        self._expect(TokenType.LT, "'<' que abre <MAIN>")
+        mn = self._expect(TokenType.IDENT, "'MAIN'")
+        if mn.value != "MAIN":
+            raise AyceSyntaxError(self.filename, mn.line, mn.col,
+                f"El guard sólo admite <MAIN>, no <{mn.value}>")
+        self._expect(TokenType.GT, "'>' que cierra <MAIN>")
+        body = self._parse_brace_body()
+        return GuardMainStmt(body=body, line=t.line, col=t.col)
 
     def _parse_try(self) -> TryStmt:
         """try ... rescue(nombre: Tipo) ... end
@@ -728,9 +1068,12 @@ class Parser:
     # ──────────────────────────────────────────────────────────────────
     #  Expresiones (con precedencia)
     # ──────────────────────────────────────────────────────────────────
-    def _parse_expr(self) -> Expr:
+    def _parse_expr(self, allow_is_expr=True) -> Expr:
         # Ternario v0.4: cond ? a : b  (al nivel más bajo, después de ||)
-        left = self._parse_or()
+        # allow_is_expr=False lo usa guard para que `expr is <patrón>` llegue
+        # vivo hasta _parse_guard (v0.6.3); en el resto del lenguaje 'is' es
+        # el chequeo de variantes y se consume aquí.
+        left = self._parse_or(allow_is_expr)
         if self._check(TokenType.QUESTION):
             t = self._advance()
             if_true = self._parse_expr()
@@ -740,26 +1083,28 @@ class Parser:
                                line=t.line, col=t.col)
         return left
 
-    def _parse_or(self) -> Expr:
-        left = self._parse_and()
+    def _parse_or(self, allow_is_expr=True) -> Expr:
+        left = self._parse_and(allow_is_expr)
         while self._check(TokenType.OR):
             t = self._advance()
-            right = self._parse_and()
+            right = self._parse_and(allow_is_expr)
             left = BinaryExpr(op="||", left=left, right=right, line=t.line, col=t.col)
         return left
 
-    def _parse_and(self) -> Expr:
-        left = self._parse_comparison()
+    def _parse_and(self, allow_is_expr=True) -> Expr:
+        left = self._parse_comparison(allow_is_expr)
         while self._check(TokenType.AND):
             t = self._advance()
-            right = self._parse_comparison()
+            right = self._parse_comparison(allow_is_expr)
             left = BinaryExpr(op="&&", left=left, right=right, line=t.line, col=t.col)
         return left
 
-    def _parse_comparison(self) -> Expr:
+    def _parse_comparison(self, allow_is_expr=True) -> Expr:
         left = self._parse_bit_or()
         # Operador `is` para variantes: expr is Tipo::Caso (v0.5: usa ::)
-        if self._check(TokenType.IS):
+        # (allow_is_expr=False se conservó de la forma patrón del guard de
+        # v0.6.3; hoy ningún constructor lo desactiva.)
+        if self._check(TokenType.IS) and allow_is_expr:
             t = self._advance()
             type_name = self._expect(TokenType.IDENT, "nombre de tipo Variant").value
             self._expect(TokenType.DOUBLE_COLON, "'::'")
@@ -797,6 +1142,7 @@ class Parser:
         TokenType.BOOL_T, TokenType.BYTES_T,
         TokenType.LIST_T, TokenType.DICT_T, TokenType.TUPLE_T,
         TokenType.SET_T, TokenType.RANGE, TokenType.NEW, TokenType.SELF,
+        TokenType.BOX,   # v0.6.3: box es una expresión (variable mágica del match)
     ))
 
     def _operand_starts_here(self, tt) -> bool:
@@ -838,6 +1184,17 @@ class Parser:
     def _parse_additive(self) -> Expr:
         left = self._parse_multiplicative()
         while self._check(TokenType.PLUS, TokenType.MINUS):
+            # El conector de State es 'then', así que '-' vuelve a ser
+            # resta normal dentro del sujeto (State (a - b) sin paréntesis ya
+            # no se come el conector). Si viene '-' seguido de '<' es la
+            # sintaxis vieja 'State x - <' de la entrega original de la 0.6.3:
+            # error con migración, sin citar números de versión confusos.
+            if self._stop_state_subject and self._peek().type == TokenType.MINUS \
+                    and self._peek(1).type == TokenType.LT:
+                nt = self._peek()
+                raise AyceSyntaxError(self.filename, nt.line, nt.col,
+                    "El '-' antes de los brazos de State ya no se usa: "
+                    "escribe 'State x then < ... >'")
             t = self._advance()
             op = "+" if t.type == TokenType.PLUS else "-"
             right = self._parse_multiplicative()
@@ -928,6 +1285,8 @@ class Parser:
                     TokenType.DICT_T:   "dict",
                     TokenType.TUPLE_T:  "tuple",
                     TokenType.SET_T:    "set",
+                    # v0.6.3: match/guard volvieron a ser identificadores
+                    # normales, así que re::match(...) se parsea solo.
                 }
                 if self._peek().type in member_type_tokens:
                     name_tok = member_type_tokens[self._peek().type]
@@ -1107,6 +1466,13 @@ class Parser:
             self._advance()
             return SelfExpr(line=t.line, col=t.col)
 
+        # box — variable mágica con el valor evaluado en cada brazo de match
+        # (v0.6.3). Fuera de un brazo match, el intérprete la reporta como
+        # variable no declarada, igual que self fuera de un método.
+        if t.type == TokenType.BOX:
+            self._advance()
+            return IdentExpr(name="box", line=t.line, col=t.col)
+
         # new Tipo { campo: valor, ... } — construcción de Shape
         if t.type == TokenType.NEW:
             self._advance()
@@ -1143,17 +1509,18 @@ class Parser:
             if not self._check(TokenType.RPAREN):
                 prompt = self._parse_expr()
                 if self._match(TokenType.COMMA):
-                    # El segundo argumento es el tipo: int, float, bool, string
+                    # El segundo argumento es el tipo: int, float, bool, string,
+                    # bytes o none para detección dinámica.
                     type_tok = self._peek()
                     type_map = {TokenType.INT_T: "int", TokenType.FLOAT_T: "float",
                                 TokenType.BOOL_T: "bool", TokenType.STRING_T: "string",
-                                TokenType.BYTES_T: "bytes"}
+                                TokenType.BYTES_T: "bytes", TokenType.NONE: "none"}
                     if type_tok.type in type_map:
                         self._advance()
                         target_type = type_map[type_tok.type]
                     else:
                         raise AyceSyntaxError(self.filename, type_tok.line, type_tok.col,
-                            "Se esperaba un tipo (int, float, bool, string) como segundo argumento de inlet")
+                            "Se esperaba un tipo (int, float, bool, string, bytes o none) como segundo argumento de inlet")
             self._expect(TokenType.RPAREN, "')'")
             return InletExpr(prompt=prompt, target_type=target_type, line=t.line, col=t.col)
 
