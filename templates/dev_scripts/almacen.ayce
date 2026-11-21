@@ -1,42 +1,95 @@
-var almacen: <string, (int, float)> = <
-    "coca": (10, 1.6),
-    "papas": (16, 2.5),
-    "mazapan": (5, 0.8)
->
+Template Almacen {
+    productos: <string, (int, float)>
+
+    task build() ;
+    {
+        self::productos = <
+            "coca": (10, 1.6),
+            "papas": (16, 2.5),
+            "mazapan": (5, 0.8)
+        >
+    }
+
+    task anadir() ;
+    {
+        var nombre: none = inlet("Ingresa el nombre del producto: ", none)
+
+        State nombre then <
+            box is type (string)[
+                try
+                    var cantidad: int = inlet("Ingresa la cantidad: ", int)
+                    var precio: float = inlet("Ingresa el precio: ", float)
+
+                    if box::len() == 0 then
+                        say("El nombre no puede estar vacio")
+                    else if cantidad < 0 then
+                        say("La cantidad no puede ser negativa")
+                    else if precio < 0.0 then
+                        say("El precio no puede ser negativo")
+                    else
+                        var nombre_producto: string = box
+                        self::productos<nombre_producto> = (cantidad, precio)
+                        say("Producto añadido correctamente")
+                    end
+                rescue(err: Error)
+                    say("Error al añadir producto:", err::mensaje)
+                end
+            ]
+            box is type (int || float || bool)[
+                say("El nombre del producto debe ser texto")
+            ]
+        >
+    }
+
+    task eliminar() ;
+    {
+        var nombre: string = inlet("Ingresa el nombre del producto a eliminar: ", string)
+
+        if self::productos::has(nombre) then
+            self::productos::remove(nombre)
+            say("Producto eliminado correctamente")
+        else
+            say("El producto no existe en el almacen")
+        end
+    }
+
+    task mostrar() ;
+    {
+        say("Productos en el almacen:")
+        for par in self::productos::items() do
+            say(f"{par[0]}: cantidad {par[1][0]} | precio ${par[1][1]}")
+        end
+    }
+}
+
+var almacen: Almacen = Almacen()
 
 while True do
     say("")
-    say("menu del almacen")
-    say("1. añadir producto")
-    say("2. eliminar producto")
-    say("3. mostrar productos")
-    say("4. salir")
+    say("Menu del almacen")
+    say("1. Anadir producto")
+    say("2. Eliminar producto")
+    say("3. Mostrar productos")
+    say("4. Salir")
 
-    var opciones: int = inlet("selecciona una opcion: ", int)
+    var opcion: none = inlet("Selecciona una opcion: ", none)
 
-    if opciones == 1 then
-        var producto: string = inlet("ingresa el nombre del producto: ", string)
-        var cantidad: int = inlet("ingresa la cantidad del producto: ", int)
-        var precio: float = inlet("ingresa el precio del producto: ", float)
-        almacen<producto> = (cantidad, precio)
-        say("producto añadido correctamente")
-    else if opciones == 2 then
-        var producto: string = inlet("ingresa el nombre del producto a eliminar: ", string)
-        if almacen::has(producto) then
-            almacen::remove(producto)
-            say("producto eliminado correctamente")
-        else
-            say("el producto no existe en el almacen")
-        end
-    else if opciones == 3 then
-        say("productos en el almacen:")
-        for par in almacen::items() do
-            say(f"{par[0]}: cantidad {par[1][0]} | precio ${par[1][1]}")
-        end
-    else if opciones == 4 then
-        say("saliendo del programa::::::")
-        break
-    else
-        say("opcion invalida, por favor selecciona una opcion valida")
-    end
+    State opcion then <
+        box is type (1)[
+            almacen::anadir()
+        ]
+        box is type (2)[
+            almacen::eliminar()
+        ]
+        box is type (3)[
+            almacen::mostrar()
+        ]
+        box is type (4)[
+            say("Saliendo del programa")
+            break
+        ]
+        box is null[
+            say("Opcion invalida")
+        ]
+    >
 end

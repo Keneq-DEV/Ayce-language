@@ -1255,7 +1255,7 @@ class Parser:
                 # comparación. La comparación encadenada a < b > c ya está
                 # prohibida desde v0.2, así que reconocer <clave> no es ambiguo:
                 # evita el falso "comparaciones encadenadas" para x<v::cliente>.
-                if isinstance(expr, (IdentExpr, DictAccessExpr, IndexExpr, MethodCallExpr, CallExpr)):
+                if isinstance(expr, (IdentExpr, DictAccessExpr, IndexExpr, MethodCallExpr, CallExpr, ModuleAccessExpr)):
                     save = self.pos
                     self._advance()  # '<'
                     key = self._try_parse_dict_key()
