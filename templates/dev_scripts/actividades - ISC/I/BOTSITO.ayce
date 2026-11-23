@@ -1,12 +1,12 @@
 require random
 
-## todavia no existe asinacion multiple de variables
+var winsplayer-winsbot-empate-rondas-historial: int, int, int, int, none[] = 0, 0, 0, 0, []
 
-var winsplayer: int = 0
-var winsbot: int = 0
-var empate: int = 0
-var rondas: int = 0
-var historial: none[] = []
+## var winsplayer: int = 0
+## var winsbot: int = 0
+## var empate: int = 0
+## var rondas: int = 0
+## var historial: none[] = []
 
 task botsito() = string ;
 {

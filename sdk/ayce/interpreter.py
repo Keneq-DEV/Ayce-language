@@ -478,6 +478,20 @@ class Interpreter:
                 self.exec_stmt(d, env)
         elif isinstance(stmt, AssignStmt):
             self._exec_assign(stmt, env)
+        elif isinstance(stmt, MultiAssignStmt):
+            values = [self.eval(value, env) for value in stmt.values]
+            for target, value in zip(stmt.targets, values):
+                existing = env.lookup(target.name)
+                if existing is None:
+                    raise AyceRuntimeError(self.filename, target.line, target.col,
+                        f"Variable '{target.name}' no declarada")
+                _, type_node, _, _ = existing
+                value = self._check_value_matches_type(
+                    value, type_node, target.line, target.col, env
+                )
+                value = self._coerce_value(value, type_node)
+                self._attach_declared_type(value, type_node)
+                env.assign(target.name, value, self.filename, target.line, target.col)
         elif isinstance(stmt, CompoundAssignStmt):
             self._exec_compound_assign(stmt, env)
         elif isinstance(stmt, SayStmt):

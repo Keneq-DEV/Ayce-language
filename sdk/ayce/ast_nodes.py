@@ -185,6 +185,11 @@ class AssignStmt(Stmt):
     value: Optional[Expr] = None
 
 @dataclass
+class MultiAssignStmt(Stmt):
+    targets: list = field(default_factory=list)
+    values: list = field(default_factory=list)
+
+@dataclass
 class SayStmt(Stmt):
     args: list = field(default_factory=list)
 

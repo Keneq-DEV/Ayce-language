@@ -902,6 +902,29 @@ class Parser:
     def _parse_expr_or_assign(self) -> Stmt:
         """Sentencia que empieza con expresión: asignación o llamada."""
         t = self._peek()
+
+        # Asignación múltiple: a-b-c = 1,2,3
+        save = self.pos
+        if t.type == TokenType.IDENT:
+            names = [self._advance().value]
+            while self._check(TokenType.MINUS) and self._peek(1).type == TokenType.IDENT:
+                self._advance()
+                names.append(self._advance().value)
+            if len(names) > 1 and self._check(TokenType.ASSIGN):
+                self._advance()
+                values = [self._parse_expr()]
+                while self._match(TokenType.COMMA):
+                    values.append(self._parse_expr())
+                if len(values) != len(names):
+                    raise AyceSyntaxError(
+                        self.filename, t.line, t.col,
+                        f"Asignación múltiple requiere {len(names)} valores, se encontraron {len(values)}"
+                    )
+                targets = [IdentExpr(name=name, line=t.line, col=t.col) for name in names]
+                return MultiAssignStmt(targets=targets, values=values,
+                                      line=t.line, col=t.col)
+            self.pos = save
+
         expr = self._parse_expr()
         if self._check(TokenType.ASSIGN):
             self._advance()
