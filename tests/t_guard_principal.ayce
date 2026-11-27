@@ -1,4 +1,4 @@
-## t_guard_principal.ayce — el guard principal es PUNTO DE ENTRADA (arreglo de la 0.6.3)
+## t_guard_principal.ayce — el guard principal es PUNTO DE ENTRADA (arreglo de la 0.6.4)
 ## (queja del cliente: "si imprime el print, entonces no es guardia").
 ##
 ## Reglas que este test verifica:

@@ -13,7 +13,7 @@
 }
 
 ## La demo vive en una tarea y el guard la manda llamar. Los bloques de abajo
-## eran sentencias de nivel superior en v0.6.3; con el guard como punto de
+## eran sentencias de nivel superior en v0.6.4; con el guard como punto de
 ## entrada, el cuerpo del programa va adentro del guard (directo o vía tasks).
 task demo() ;
 {

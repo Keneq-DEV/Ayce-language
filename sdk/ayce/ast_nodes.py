@@ -110,6 +110,23 @@ class IndexExpr(Expr):
     index: Optional[Expr] = None      # para listas/tuplas
 
 @dataclass
+class SliceExpr(Expr):
+    """v0.6.4: corte lista[ini:fin] / string[ini:fin] — mitad-abierta
+    [ini, fin); ambos extremos opcionales; negativos cuentan desde atrás."""
+    target: Optional[Expr] = None
+    start: Optional[Expr] = None      # None = desde el principio
+    end: Optional[Expr] = None        # None = hasta el final
+
+@dataclass
+class MembershipExpr(Expr):
+    """v0.6.4: pertenencia — valor in contenedor / valor not in contenedor.
+    El contenedor puede ser lista, tupla, set, string (subcadena) o dict
+    (pregunta por CLAVES). Devuelve bool."""
+    value: Optional[Expr] = None
+    container: Optional[Expr] = None
+    negated: bool = False
+
+@dataclass
 class DictAccessExpr(Expr):
     target: Optional[Expr] = None
     key: Optional[Expr] = None        # para diccionarios, x<clave>
@@ -124,6 +141,8 @@ class MethodCallExpr(Expr):
 class CallExpr(Expr):
     target: Optional[Expr] = None     # normalmente IdentExpr
     args: list = field(default_factory=list)
+    # v0.6.4: argumentos nombrados f(x = 5) — [(nombre, expr), ...]
+    kwargs: list = field(default_factory=list)
 
 @dataclass
 class UnaryExpr(Expr):
@@ -137,9 +156,19 @@ class BinaryExpr(Expr):
     right: Optional[Expr] = None
 
 @dataclass
+class ChainCompare(Expr):
+    """v0.6.4: comparación encadenada — 0 <= x < 10 es
+    (0 <= x) && (x < 10); cada operando intermedio se evalúa UNA sola vez."""
+    first: Optional[Expr] = None
+    ops: list = field(default_factory=list)    # ["<=", "<"]
+    rights: list = field(default_factory=list)  # [x, 10]
+
+@dataclass
 class RangeExpr(Expr):
     start: Optional[Expr] = None
     end: Optional[Expr] = None
+    # v0.6.4: range(n) → start None, end n; range(a, b, paso) → step
+    step: Optional[Expr] = None
 
 @dataclass
 class InletExpr(Expr):
@@ -171,7 +200,7 @@ class ConstDecl(Stmt):
 
 @dataclass
 class DeclGroup(Stmt):
-    """v0.6.3 — declaración múltiple del cliente:
+    """v0.6.4 — declaración múltiple del cliente:
         var n1-n2-n3: t1, t2, t3 = v1, v2, v3
         const k1-k2:  t1, t2     = v1, v2
     Los nombres van separados por '-', los tipos y valores por ','. El parser
@@ -208,6 +237,9 @@ class ForStmt(Stmt):
     var_name: str = ""
     iterable: Optional[Expr] = None
     body: list = field(default_factory=list)
+    # v0.6.4: for a-b-c in filas do — nombres extra a desempaquetar
+    # de cada elemento (los elementos son tuplas o listas de esa longitud).
+    unpack_names: list = field(default_factory=list)
 
 @dataclass
 class BreakStmt(Stmt):
@@ -367,15 +399,25 @@ class QualifiedTypeName(TypeNode):
 # ──────────────────────────────────────────────────────────────────────
 @dataclass
 class TryStmt(Stmt):
-    """try ... rescue(nombre: Tipo) ... end
-    v0.6.2: admite VARIOS rescue en orden (spec 12.1)."""
+    """try ... rescue(nombre: Tipo) ... [finally ...] end
+    v0.6.2: admite VARIOS rescue en orden (spec 12.1).
+    v0.6.4: finally — su cuerpo corre SIEMPRE: sin error, tras el rescue que
+    manejó el error, y antes de relanzar un error que nadie manejó."""
     body: list = field(default_factory=list)
     rescues: list = field(default_factory=list)  # [(nombre, tipo, cuerpo), ...]
     rescue_name: str = ""    # compat v0.6.2 (un solo rescue)
     rescue_type: str = ""
     rescue_body: list = field(default_factory=list)
+    finally_body: Optional[list] = None
     line: int = 0
     col: int = 0
+
+@dataclass
+class AffirmStmt(Stmt):
+    """v0.6.4: Affirm <expr> [, "mensaje"] — la keyword de aserción del
+    cliente. La condición debe ser bool; si es False, error en runtime."""
+    condition: Optional[Expr] = None
+    message: Optional[Expr] = None   # opcional: Affirm x > 0, "x debe ser positivo"
 
 @dataclass
 class RaiseStmt(Stmt):
@@ -441,7 +483,7 @@ class ModuleAccessExpr(Expr):
     col: int = 0
 
 # ──────────────────────────────────────────────────────────────────────
-#  v0.6.3 — State/box (diseño del cliente) y guard principal <GUARD>-<MAIN>
+#  v0.6.4 — State/box (diseño del cliente) y guard principal <GUARD>-<MAIN>
 # ──────────────────────────────────────────────────────────────────────
 @dataclass
 class PatternAlt:

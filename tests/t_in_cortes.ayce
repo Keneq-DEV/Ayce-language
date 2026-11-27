@@ -1,0 +1,42 @@
+## t_in_cortes.ayce — v0.6.4: pertenencia in / not in, cortes [ini:fin]
+## e índices negativos
+
+<GUARD>-<MAIN> {
+    ## 1) pertenencia en lista / tupla / string / dict (por claves) / range
+    var frutas: string[] = ["pera", "kiwi", "uva"]
+    say("1: kiwi en frutas → " + string("kiwi" in frutas))
+    say("1: mango not in frutas → " + string("mango" not in frutas))
+    say("1: 'an' in 'banana' → " + string("an" in "banana"))
+    say("1: 'x' not in 'banana' → " + string("x" not in "banana"))
+    var stock: <string, int> = <"tornillos": 40, "clavos": 15>
+    say("1: 'clavos' in stock → " + string("clavos" in stock))
+    say("1: 'arandelas' not in stock → " + string("arandelas" not in stock))
+    say("1: 3 in (1, 2, 3) → " + string(3 in (1, 2, 3)))
+    ## los incomparables no coinciden (no explotan)
+    say("1: 'a' in [1, 2] → " + string("a" in [1, 2]))
+    say("1: 4 in range(0, 10) → " + string(4 in range(0, 10)))
+
+    ## 2) cortes de listas: mitad-abierta [ini, fin), extremos omitibles
+    var nums: int[] = [10, 20, 30, 40, 50, 60]
+    say("2: nums[1:4]  → " + string(nums[1:4]))
+    say("2: nums[:3]   → " + string(nums[:3]))
+    say("2: nums[3:]   → " + string(nums[3:]))
+    say("2: nums[:]    → " + string(nums[:]))
+    ## fuera de rango recorta sin error
+    say("2: nums[4:99] → " + string(nums[4:99]))
+
+    ## 3) cortes de strings y negativos
+    var s: string = 'hola mundo'
+    say("3: s[0:4]    → " + s[0:4])
+    say("3: s[-5:]    → " + s[-5:])
+    say("3: nums[-2:] → " + string(nums[-2:]))
+    say("3: nums[:-1] → " + string(nums[:-1]))
+
+    ## 4) índices negativos sueltos
+    say("4: nums[-1] → " + string(nums[-1]) + " / s[-1] → " + s[-1])
+
+    ## 5) el corte es copia: tocar la copia no toca la original
+    var copia: int[] = nums[:]
+    copia[0] = 999
+    say("5: original nums[0] sigue → " + string(nums[0]))
+}

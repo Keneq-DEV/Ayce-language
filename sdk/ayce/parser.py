@@ -13,7 +13,7 @@ class Parser:
         self.tokens = tokens
         self.filename = filename
         self.pos = 0
-        # v0.6.3: mientras se parsea el sujeto de `State <expr> - <`, el '-'
+        # v0.6.4: mientras se parsea el sujeto de `State <expr> - <`, el '-'
         # NO se consume como resta binaria: es el conector del bloque.
         self._stop_state_subject = False
 
@@ -109,6 +109,8 @@ class Parser:
             return self._parse_try()
         if t.type == TokenType.RAISE:
             return self._parse_raise()
+        if t.type == TokenType.AFFIRM:
+            return self._parse_affirm()
         if t.type == TokenType.REQUIRE:
             return self._parse_require()
         if t.type == TokenType.BREAK:
@@ -123,7 +125,7 @@ class Parser:
             return self._parse_say()
         if t.type == TokenType.GLOBAL:
             return self._parse_global()
-        # v0.6.3: <GUARD>-<MAIN> { ... } — el guard principal del cliente.
+        # v0.6.4: <GUARD>-<MAIN> { ... } — el guard principal del cliente.
         # Se reconoce por contexto (GUARD y MAIN no son keywords: son
         # identificadores en una secuencia fija).
         if t.type == TokenType.LT and self._peek(1).type == TokenType.IDENT \
@@ -133,7 +135,7 @@ class Parser:
         return self._parse_expr_or_assign()
 
     def _parse_var_decl(self) -> Stmt:
-        """Declaración de variables (v0.6.3, diseño del cliente):
+        """Declaración de variables (v0.6.4, diseño del cliente):
 
             var nombre: tipo = valor                 (una, como siempre)
             var n1-n2-n3: t1, t2, t3 = v1, v2, v3    (múltiple, separada por '-')
@@ -146,7 +148,7 @@ class Parser:
 
     def _parse_const_decl(self) -> Stmt:
         """Declaración de constantes; misma cola múltiple que var, con '='
-        obligatorio (v0.6.3)."""
+        obligatorio (v0.6.4)."""
         t = self._expect(TokenType.CONST, "'const'")
         decls = self._parse_decl_comun(ConstDecl, t, con_valor=True)
         return decls[0] if len(decls) == 1 else DeclGroup(decls=decls, line=t.line, col=t.col)
@@ -199,10 +201,10 @@ class Parser:
 
     def _parse_task_decl(self) -> TaskDecl:
         t = self._expect(TokenType.TASK, "'task'")
-        # v0.6.3: el nombre puede ser box — es keyword, pero puede haber APIs
+        # v0.6.4: el nombre puede ser box — es keyword, pero puede haber APIs
         # públicas con ese nombre. Como llamadas sueltas sigue siendo keyword;
         # sólo el acceso por módulo (::nombre) lo alcanza. ('match' y 'guard'
-        # volvieron a ser identificadores normales en v0.6.3.)
+        # volvieron a ser identificadores normales en v0.6.4.)
         if self._peek().type == TokenType.BOX:
             name = self._advance().value
         else:
@@ -357,7 +359,7 @@ class Parser:
             while self._match(TokenType.COMMA):
                 params.append(self._parse_param())
         self._expect(TokenType.RPAREN, "')'")
-        # Varargs coherente (v0.6.3): a lo sumo un '...' y sólo al final de
+        # Varargs coherente (v0.6.4): a lo sumo un '...' y sólo al final de
         # la firma; en otra posición el empaquetado sería ambiguo.
         for i, p in enumerate(params):
             if p.varargs and i != len(params) - 1:
@@ -391,10 +393,13 @@ class Parser:
         )
 
     def _parse_block_body(self) -> list:
-        """Lee sentencias hasta encontrar '}', 'end', 'else', 'rescue' o EOF."""
+        """Lee sentencias hasta encontrar '}', 'end', 'else', 'rescue',
+        'finally' o EOF. (v0.6.4: 'finally' también corta un cuerpo de try
+        o de rescue, igual que 'rescue'.)"""
         self._skip_separators()
         stmts = []
-        while not self._check(TokenType.RBRACE, TokenType.END, TokenType.ELSE, TokenType.RESCUE, TokenType.EOF):
+        while not self._check(TokenType.RBRACE, TokenType.END, TokenType.ELSE,
+                              TokenType.RESCUE, TokenType.FINALLY, TokenType.EOF):
             stmts.append(self._parse_stmt())
             self._skip_separators()
         return stmts
@@ -453,16 +458,23 @@ class Parser:
 
     def _parse_for(self) -> ForStmt:
         t = self._expect(TokenType.FOR, "'for'")
-        var_name = self._expect(TokenType.IDENT, "nombre de variable de iteración").value
+        # v0.6.4: el objetivo puede desempaquetar cada elemento:
+        #   for mes-monto in ventas do   /   for k-v in dict do
+        # Un solo nombre itera los valores; varios nombres exigen que cada
+        # elemento sea una tupla o lista de esa longitud.
+        names = [self._expect(TokenType.IDENT, "nombre de variable de iteración").value]
+        while self._match(TokenType.MINUS):
+            names.append(self._expect(TokenType.IDENT, "nombre tras '-'").value)
         self._expect(TokenType.IN, "'in'")
         iterable = self._parse_expr()
         self._expect(TokenType.DO, "'do'")
         body = self._parse_block_body()
         self._expect(TokenType.END, "'end'")
-        return ForStmt(var_name=var_name, iterable=iterable, body=body, line=t.line, col=t.col)
+        return ForStmt(var_name=names[0], iterable=iterable, body=body,
+                       unpack_names=names[1:], line=t.line, col=t.col)
 
     # ──────────────────────────────────────────────────────────────────
-    #  State/box y guard principal (v0.6.3 — diseño del cliente)
+    #  State/box y guard principal (v0.6.4 — diseño del cliente)
     # ──────────────────────────────────────────────────────────────────
     def _parse_brace_body(self) -> list:
         """Lee sentencias entre llaves { ... } (cuerpo de <GUARD>-<MAIN>).
@@ -491,7 +503,7 @@ class Parser:
         self._expect(TokenType.RBRACKET, "']' (el cuerpo del brazo cierra con ] )")
         return stmts
 
-    # Tokens que pueden iniciar un patrón de TIPO (v0.6.3). El resto de la
+    # Tokens que pueden iniciar un patrón de TIPO (v0.6.4). El resto de la
     # gramática del tipo la resuelve _parse_type (sufijos [], <K, V>, (T1, T2)).
     _PATTERN_TYPE_TOKENS = frozenset((
         TokenType.INT_T, TokenType.FLOAT_T, TokenType.STRING_T,
@@ -633,7 +645,7 @@ class Parser:
         return alts
 
     def _parse_state(self) -> StateStmt:
-        """Diseño del cliente (arreglo de la 0.6.3):
+        """Diseño del cliente (arreglo de la 0.6.4):
 
             State <expr> then <
                 box is type ( <patrón>[ || <patrón>...] ) [ cuerpo ]
@@ -642,7 +654,7 @@ class Parser:
             >
 
         El conector entre el sujeto y los brazos es 'then' (igual que el if).
-        En la v0.6.3 era '-': nunca fue diseño del cliente y quedó fuera —
+        En la v0.6.4 era '-': nunca fue diseño del cliente y quedó fuera —
         si alguien escribe 'State x - <', el error de sintaxis lo dice y
         señala la forma correcta. Las comas entre brazos son opcionales."""
         t = self._expect(TokenType.STATE, "'State'")
@@ -701,11 +713,11 @@ class Parser:
         return StateStmt(subject=subject, arms=arms, line=t.line, col=t.col)
 
     def _parse_guard_main(self) -> GuardMainStmt:
-        """Diseño del cliente (v0.6.3): el guard principal.
+        """Diseño del cliente (v0.6.4): el guard principal.
 
             <GUARD>-<MAIN> { cuerpo }
 
-        Punto de entrada del programa (arreglo de la 0.6.3, decisión del cliente): cuando
+        Punto de entrada del programa (arreglo de la 0.6.4, decisión del cliente): cuando
         el archivo se ejecuta directamente, SÓLO corren los cuerpos de los
         guards; si el archivo se carga con `require`, el bloque se omite y el
         nivel superior corre. GUARD y MAIN van cada uno entre sus propios
@@ -732,8 +744,9 @@ class Parser:
         return GuardMainStmt(body=body, line=t.line, col=t.col)
 
     def _parse_try(self) -> TryStmt:
-        """try ... rescue(nombre: Tipo) ... end
-        v0.6.2: varios rescue en orden (spec 12.1), con o sin paréntesis."""
+        """try ... rescue(nombre: Tipo) ... [finally ...] end
+        v0.6.2: varios rescue en orden (spec 12.1), con o sin paréntesis.
+        v0.6.4: finally opcional al final — su cuerpo corre siempre."""
         t = self._expect(TokenType.TRY, "'try'")
         body = self._parse_block_body()
         rescues = []
@@ -765,8 +778,14 @@ class Parser:
                             "Se esperaba un nombre de tipo de error después de ':'")
             rescue_body = self._parse_block_body()
             rescues.append((rescue_name, rescue_type, rescue_body))
+        # finally (v0.6.4): opcional, después de todos los rescue
+        finally_body = None
+        if self._check(TokenType.FINALLY):
+            self._advance()
+            finally_body = self._parse_block_body()
         self._expect(TokenType.END, "'end'")
-        return TryStmt(body=body, rescues=rescues, line=t.line, col=t.col)
+        return TryStmt(body=body, rescues=rescues, finally_body=finally_body,
+                       line=t.line, col=t.col)
 
     def _parse_require(self) -> RequireStmt:
         """require M [as A]
@@ -1094,7 +1113,7 @@ class Parser:
     def _parse_expr(self, allow_is_expr=True) -> Expr:
         # Ternario v0.4: cond ? a : b  (al nivel más bajo, después de ||)
         # allow_is_expr=False lo usa guard para que `expr is <patrón>` llegue
-        # vivo hasta _parse_guard (v0.6.3); en el resto del lenguaje 'is' es
+        # vivo hasta _parse_guard (v0.6.4); en el resto del lenguaje 'is' es
         # el chequeo de variantes y se consume aquí.
         left = self._parse_or(allow_is_expr)
         if self._check(TokenType.QUESTION):
@@ -1126,7 +1145,7 @@ class Parser:
         left = self._parse_bit_or()
         # Operador `is` para variantes: expr is Tipo::Caso (v0.5: usa ::)
         # (allow_is_expr=False se conservó de la forma patrón del guard de
-        # v0.6.3; hoy ningún constructor lo desactiva.)
+        # v0.6.4; hoy ningún constructor lo desactiva.)
         if self._check(TokenType.IS) and allow_is_expr:
             t = self._advance()
             type_name = self._expect(TokenType.IDENT, "nombre de tipo Variant").value
@@ -1134,21 +1153,50 @@ class Parser:
             case_name = self._expect(TokenType.IDENT, "nombre de caso").value
             return IsExpr(left=left, type_name=type_name, case_name=case_name,
                           line=t.line, col=t.col)
-        # Una sola comparación (no encadenada: a < b < c es error en v0.2)
+        # Pertenencia (v0.6.4): x in coleccion / x not in coleccion — mismo
+        # nivel que las comparaciones. Sirve para lista, tupla, set, dict
+        # (pregunta por CLAVES) y string (subcadena). Es terminal en este
+        # nivel: `x in l && y` sigue por el &&, pero `x in l < 5` no existe.
+        if self._check(TokenType.IN) or (
+                self._check(TokenType.NOT) and self._peek(1).type == TokenType.IN):
+            t = self._advance()  # 'in' o 'not'
+            if t.type == TokenType.NOT:
+                self._advance()  # consume el 'in' de 'not in'
+            right = self._parse_bit_or()
+            return MembershipExpr(value=left, container=right,
+                                  negated=(t.type == TokenType.NOT),
+                                  line=t.line, col=t.col)
+        # Comparación simple o encadenada (v0.6.4): 0 <= x < 10 es
+        # (0 <= x) && (x < 10) y cada operando intermedio se evalúa UNA vez.
         if self._check(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE):
             t = self._advance()
             op = {TokenType.EQ:"==", TokenType.NEQ:"!=", TokenType.LT:"<",
                   TokenType.GT:">", TokenType.LTE:"<=", TokenType.GTE:">="}[t.type]
             right = self._parse_bit_or()
-            left = BinaryExpr(op=op, left=left, right=right, line=t.line, col=t.col)
-            # Prohibir comparación encadenada
-            if self._check(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE):
-                nt = self._peek()
-                raise AyceSyntaxError(
-                    self.filename, nt.line, nt.col,
-                    "Las comparaciones encadenadas (a < b < c) no están permitidas"
-                )
+            if not self._check(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE):
+                return BinaryExpr(op=op, left=left, right=right, line=t.line, col=t.col)
+            # Encadenada: recolectar los pares (op, operando) restantes
+            ops = [op]
+            rights = [right]
+            while self._check(TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE):
+                t2 = self._advance()
+                ops.append({TokenType.EQ:"==", TokenType.NEQ:"!=", TokenType.LT:"<",
+                            TokenType.GT:">", TokenType.LTE:"<=", TokenType.GTE:">="}[t2.type])
+                rights.append(self._parse_bit_or())
+            return ChainCompare(first=left, ops=ops, rights=rights,
+                                line=t.line, col=t.col)
         return left
+
+    def _parse_affirm(self) -> AffirmStmt:
+        """Affirm <expr> [, "mensaje"] (v0.6.4) — la aserción del cliente.
+        La condición debe ser bool; si da False, error en runtime con el
+        mensaje (o con la expresión fallida si no hay mensaje)."""
+        t = self._expect(TokenType.AFFIRM, "'Affirm'")
+        cond = self._parse_expr()
+        msg = None
+        if self._match(TokenType.COMMA):
+            msg = self._parse_expr()
+        return AffirmStmt(condition=cond, message=msg, line=t.line, col=t.col)
 
     # Operadores bit a bit (v0.6.1), con la precedencia de Python:
     # comparación es más floja que | ^ & << >>, y entre ellos:
@@ -1165,7 +1213,7 @@ class Parser:
         TokenType.BOOL_T, TokenType.BYTES_T,
         TokenType.LIST_T, TokenType.DICT_T, TokenType.TUPLE_T,
         TokenType.SET_T, TokenType.RANGE, TokenType.NEW, TokenType.SELF,
-        TokenType.BOX,   # v0.6.3: box es una expresión (variable mágica del match)
+        TokenType.BOX,   # v0.6.4: box es una expresión (variable mágica del match)
     ))
 
     def _operand_starts_here(self, tt) -> bool:
@@ -1210,7 +1258,7 @@ class Parser:
             # El conector de State es 'then', así que '-' vuelve a ser
             # resta normal dentro del sujeto (State (a - b) sin paréntesis ya
             # no se come el conector). Si viene '-' seguido de '<' es la
-            # sintaxis vieja 'State x - <' de la entrega original de la 0.6.3:
+            # sintaxis vieja 'State x - <' de la entrega original de la 0.6.4:
             # error con migración, sin citar números de versión confusos.
             if self._stop_state_subject and self._peek().type == TokenType.MINUS \
                     and self._peek(1).type == TokenType.LT:
@@ -1264,9 +1312,27 @@ class Parser:
             t = self._peek()
             if t.type == TokenType.LBRACKET:
                 self._advance()
-                idx = self._parse_expr()
-                self._expect(TokenType.RBRACKET, "']'")
-                expr = IndexExpr(target=expr, index=idx, line=t.line, col=t.col)
+                # Corte (v0.6.4): lista[ini:fin] — mitad-abierta [ini, fin),
+                # ambos extremos opcionales ([:3], [1:], [:]). Sin ':' sigue
+                # siendo el acceso por índice, que en v0.6.4 también acepta
+                # negativos (lista[-1] = último).
+                start = None
+                if not self._check(TokenType.COLON) and not self._check(TokenType.RBRACKET):
+                    start = self._parse_expr()
+                if self._match(TokenType.COLON):
+                    end = None
+                    if not self._check(TokenType.RBRACKET):
+                        end = self._parse_expr()
+                    self._expect(TokenType.RBRACKET, "']'")
+                    expr = SliceExpr(target=expr, start=start, end=end,
+                                     line=t.line, col=t.col)
+                else:
+                    if start is None:
+                        nt = self._peek()
+                        raise AyceSyntaxError(self.filename, nt.line, nt.col,
+                            "Se esperaba una expresión de índice dentro de [ ]")
+                    self._expect(TokenType.RBRACKET, "']'")
+                    expr = IndexExpr(target=expr, index=start, line=t.line, col=t.col)
             elif t.type == TokenType.LT:
                 # Acceso a diccionario x<clave>
                 # Heurística (extendida): tras '<' la clave puede ser
@@ -1308,7 +1374,7 @@ class Parser:
                     TokenType.DICT_T:   "dict",
                     TokenType.TUPLE_T:  "tuple",
                     TokenType.SET_T:    "set",
-                    # v0.6.3: match/guard volvieron a ser identificadores
+                    # v0.6.4: match/guard volvieron a ser identificadores
                     # normales, así que re::match(...) se parsea solo.
                 }
                 if self._peek().type in member_type_tokens:
@@ -1332,12 +1398,29 @@ class Parser:
                 # Llamada a tarea
                 self._advance()
                 args = []
+                kwargs = []          # v0.6.4: argumentos nombrados [(nombre, expr, línea, col)]
+                seen_named = False
                 if not self._check(TokenType.RPAREN):
-                    args.append(self._parse_expr())
-                    while self._match(TokenType.COMMA):
-                        args.append(self._parse_expr())
+                    while True:
+                        # Argumento nombrado (v0.6.4): f(nombre = valor)
+                        if (self._check(TokenType.IDENT)
+                                and self._peek(1).type == TokenType.ASSIGN):
+                            name_tok = self._advance()
+                            self._advance()  # '='
+                            kwargs.append((name_tok.value, self._parse_expr(),
+                                           name_tok.line, name_tok.col))
+                            seen_named = True
+                        else:
+                            if seen_named:
+                                nt = self._peek()
+                                raise AyceSyntaxError(self.filename, nt.line, nt.col,
+                                    "después de un argumento nombrado (nombre = valor) "
+                                    "todos los argumentos deben ser nombrados")
+                            args.append(self._parse_expr())
+                        if not self._match(TokenType.COMMA):
+                            break
                 self._expect(TokenType.RPAREN, "')'")
-                expr = CallExpr(target=expr, args=args, line=t.line, col=t.col)
+                expr = CallExpr(target=expr, args=args, kwargs=kwargs, line=t.line, col=t.col)
             else:
                 break
         return expr
@@ -1474,15 +1557,25 @@ class Parser:
                 return TypeConvertExpr(target_type=type_name, arg=arg,
                                         line=t.line, col=t.col)
 
-        # range(a, b)
+        # range([inicio,] fin [, paso]) — v0.6.4: 1, 2 o 3 argumentos
         if t.type == TokenType.RANGE:
             self._advance()
             self._expect(TokenType.LPAREN, "'('")
-            start = self._parse_expr()
-            self._expect(TokenType.COMMA, "','")
-            end = self._parse_expr()
+            first = self._parse_expr()
+            if self._match(TokenType.COMMA):
+                # range(a, b) o range(a, b, paso)
+                start = first
+                end = self._parse_expr()
+                step = None
+                if self._match(TokenType.COMMA):
+                    step = self._parse_expr()
+                self._expect(TokenType.RPAREN, "')'")
+                return RangeExpr(start=start, end=end, step=step,
+                                 line=t.line, col=t.col)
+            # range(n): 0..n-1 (paso 1)
             self._expect(TokenType.RPAREN, "')'")
-            return RangeExpr(start=start, end=end, line=t.line, col=t.col)
+            return RangeExpr(start=None, end=first, step=None,
+                             line=t.line, col=t.col)
 
         # self (dentro de métodos de Template)
         if t.type == TokenType.SELF:
@@ -1490,7 +1583,7 @@ class Parser:
             return SelfExpr(line=t.line, col=t.col)
 
         # box — variable mágica con el valor evaluado en cada brazo de match
-        # (v0.6.3). Fuera de un brazo match, el intérprete la reporta como
+        # (v0.6.4). Fuera de un brazo match, el intérprete la reporta como
         # variable no declarada, igual que self fuera de un método.
         if t.type == TokenType.BOX:
             self._advance()

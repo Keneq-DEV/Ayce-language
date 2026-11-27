@@ -1,8 +1,8 @@
 {
   "name": "ayce",
   "displayName": "ayce",
-  "description": "Soporte del lenguaje ayce para VS Code: resaltado de sintaxis con paleta propia (claro/oscuro), snippets, ejecución de archivos .ayce e integración con Code Runner. v0.6.3: resalta State/box, el guard principal <GUARD>-<MAIN> y los prefijos 0x/0o/0b cada uno con su color.",
-  "version": "0.6.3",
+  "description": "Soporte del lenguaje ayce para VS Code: resaltado de sintaxis con tema propio, snippets, ejecución de archivos .ayce e integración con Code Runner. v0.6.4: Affirm, in/not in, finally y las comillas simples '...' — cada característica nueva con su color propio en el tema ayce Dark.",
+  "version": "0.6.4",
   "publisher": "ayce-project",
   "license": "MIT",
   "icon": "icons/icon.png",
@@ -56,6 +56,13 @@
         "language": "ayce",
         "scopeName": "source.ayce",
         "path": "./syntaxes/ayce.tmLanguage.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "ayce Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/ayce-dark.json"
       }
     ],
     "snippets": [

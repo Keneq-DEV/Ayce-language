@@ -1,0 +1,37 @@
+## t_for_dicts.ayce — v0.6.4: for que desempaqueta (a-b) y dicts iterables
+## (claves con un nombre; clave-valor con k-v, la misma grafía del '-')
+
+<GUARD>-<MAIN> {
+    ## 1) desempaquetar tuplas en el for
+    for mes-monto in [("enero", 120), ("febrero", 90), ("marzo", 143)] do
+        say("1: " + mes + " → " + string(monto))
+    end
+
+    ## 2) desempaquetar listas y tres nombres
+    for a-b-c in [[1, "uno", True], [2, "dos", False]] do
+        say("2: " + string(a) + "/" + b + "/" + string(c))
+    end
+
+    ## 3) un nombre sobre un dict: las claves (en orden de inserción)
+    var stock: <string, int> = <"tornillos": 40, "clavos": 15, "arandelas": 300>
+    var total_claves: int = 0
+    for k in stock do
+        total_claves = total_claves + 1
+    end
+    say("3: claves → " + string(total_claves))
+
+    ## 4) k-v: clave y valor
+    var total: int = 0
+    for k-v in stock do
+        total = total + v
+        say("4: " + k + " = " + string(v))
+    end
+    say("4: total → " + string(total))
+
+    ## 5) el desempaquetado se combina con lo demás del lenguaje
+    for nombre-precio in [("tornillo", 15.0), ("clavo", 3.5)] do
+        if "o" in nombre then
+            say("5: " + nombre + " lleva 'o' y cuesta " + string(precio))
+        end
+    end
+}

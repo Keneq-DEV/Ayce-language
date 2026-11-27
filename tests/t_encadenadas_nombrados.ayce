@@ -1,0 +1,45 @@
+## t_encadenadas_nombrados.ayce — v0.6.4: comparaciones encadenadas
+## (cada operando intermedio se evalúa UNA vez) y argumentos nombrados
+
+var registro: int[] = []
+
+task siguiente() ; {
+    registro::append(1)
+    return registro::len()
+}
+
+task saludar(string nombre, string saludo = "Hola") ; {
+    say("2: " + saludo + ", " + nombre)
+}
+
+task resumen(string titulo, int... extras) ; {
+    say("3: " + titulo + " (" + string(extras::len()) + " extras)")
+}
+
+task area(int base, int altura, int escala = 1) ; {
+    return base * altura * escala
+}
+
+<GUARD>-<MAIN> {
+    ## 1) encadenadas: rango de negocio en una condición
+    var edad: int = 25
+    say("1: 18 <= edad < 65 → " + string(18 <= edad < 65))
+    say("1: 65 <= edad < 99 → " + string(65 <= edad < 99))
+    var x: int = 5
+    say("1: 0 < x == 5 → " + string(0 < x == 5))
+    ## cada operando intermedio se evalúa UNA vez: 3 llamadas, 3 registros
+    say("1: cadena → " + string(siguiente() < siguiente() < siguiente()))
+    say("1: operandos evaluados → " + string(registro::len()))
+
+    ## 2) nombrados: posicionales primero, los nombrados pueden saltar al default
+    saludar("Ana")
+    saludar("Beto", saludo = "Buenas")
+
+    ## 3) nombrados conviviendo con el variádico
+    resumen("ventas", 1, 2, 3)
+    resumen(5, 6, titulo = "gastos")
+
+    ## 4) nombrado de un parámetro intermedio (los defaults quedan atrás)
+    say("4: área → " + string(area(3, altura = 4)))
+    say("4: área escala 2 → " + string(area(3, altura = 4, escala = 2)))
+}

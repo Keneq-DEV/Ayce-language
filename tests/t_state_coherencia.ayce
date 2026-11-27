@@ -1,4 +1,4 @@
-## t_state_coherencia.ayce — v0.6.3: coherencia de los brazos de tipo en State
+## t_state_coherencia.ayce — v0.6.4: coherencia de los brazos de tipo en State
 ## Regla: none = tipo desconocido → brazos de tipo vivos (sin aviso);
 ##        tipo concreto → brazos de tipo estáticos → aviso UNA vez por State.
 ## Esperado en stderr: exactamente 2 avisos (bloques 2 y 3). Nada en los demás.

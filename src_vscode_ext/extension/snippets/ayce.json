@@ -429,7 +429,7 @@
       "    ]",
       ">"
     ],
-    "description": "State con brazos box is type( ... ) [ ... ] y reserva box is null — v0.6.3"
+    "description": "State con brazos box is type( ... ) [ ... ] y reserva box is null — v0.6.4"
   },
   "State por literal": {
     "prefix": "statelit",
@@ -443,7 +443,7 @@
       "    ]",
       ">"
     ],
-    "description": "State con patrones de literal (box trae el valor) — v0.6.3"
+    "description": "State con patrones de literal (box trae el valor) — v0.6.4"
   },
   "Guard principal": {
     "prefix": "guardmain",
@@ -453,6 +453,6 @@
       "    ## no si otro archivo lo carga con require}",
       "}"
     ],
-    "description": "Guard principal <GUARD>-<MAIN> (el if __name__ == \"__main__\" de ayce) — v0.6.3"
+    "description": "Guard principal <GUARD>-<MAIN> (el if __name__ == \"__main__\" de ayce) — v0.6.4"
   }
 }

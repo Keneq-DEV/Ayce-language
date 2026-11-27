@@ -114,17 +114,23 @@ class Lexer:
                         self._emit(TokenType.NEWLINE, "\\n")
                 continue
 
-            # Strings: "..." o f"..." o b"..."
+            # Strings: "..." o '...' — o f"..." / f'...' o b"..." / b'...' (v0.6.4:
+            # las comillas simples son equivalentes a las dobles en todos los casos)
             if c == '"':
                 self._lex_string(prefix="")
                 continue
-            if c == "f" and self._peek(1) == '"':
-                self._advance()  # consume 'f'
-                self._lex_string(prefix="f")
+            if c == "'":
+                self._lex_string(prefix="", quote="'")
                 continue
-            if c == "b" and self._peek(1) == '"':
+            if c == "f" and self._peek(1) in ('"', "'"):
+                q = self._peek(1)
+                self._advance()  # consume 'f'
+                self._lex_string(prefix="f", quote=q)
+                continue
+            if c == "b" and self._peek(1) in ('"', "'"):
+                q = self._peek(1)
                 self._advance()  # consume 'b'
-                self._lex_string(prefix="b")
+                self._lex_string(prefix="b", quote=q)
                 continue
 
             # Números: 0-9 o . seguido de dígito
@@ -160,22 +166,22 @@ class Lexer:
         Y que NO cierra un ternario `cond ? a : b` (v0.6.2, bug I4).
         """
         depth = 0
-        in_string = False
+        in_quote = ""  # v0.6.4: comilla del string anidado ('' = fuera)
         ternary_depth = 0
         i = 0
         while i < len(full):
             c = full[i]
-            if in_string:
+            if in_quote:
                 if c == "\\":
                     # Saltar el carácter escapado
                     i += 2
                     continue
-                if c == '"':
-                    in_string = False
+                if c == in_quote:
+                    in_quote = ""
                 i += 1
                 continue
-            if c == '"':
-                in_string = True
+            if c in ('"', "'"):
+                in_quote = c
             elif c in "([{<":
                 depth += 1
             elif c in ")]}>":
@@ -198,14 +204,14 @@ class Lexer:
             i += 1
         return full.strip(), ""
 
-    def _lex_string(self, prefix: str):
+    def _lex_string(self, prefix: str, quote: str = '"'):
         line, col = self.line, self.col
         # Consumir la comilla de apertura
-        self._advance()  # '"'
+        self._advance()  # ' o "
 
-        # Triple comilla (v0.6.2): """...""" admite saltos de línea reales
+        # Triple comilla (v0.6.2): """...""" y '''...''' admiten saltos de línea
         triple = False
-        if self._peek() == '"' and self._peek(1) == '"':
+        if self._peek() == quote and self._peek(1) == quote:
             triple = True
             self._advance()
             self._advance()
@@ -219,14 +225,14 @@ class Lexer:
 
             c = self._peek()
 
-            if c == '"':
+            if c == quote:
                 if triple:
-                    if self._peek(1) == '"' and self._peek(2) == '"':
+                    if self._peek(1) == quote and self._peek(2) == quote:
                         self._advance()
                         self._advance()
                         self._advance()
                         break
-                    # Una " suelta dentro de """...""" es contenido
+                    # Una comilla suelta dentro del triple es contenido
                     current.append(c)
                     self._advance()
                     continue
@@ -241,6 +247,7 @@ class Lexer:
                 elif esc == "t": current.append("\t")
                 elif esc == "r": current.append("\r")
                 elif esc == '"': current.append('"')
+                elif esc == "'": current.append("'")   # v0.6.4: \' en ambos modos
                 elif esc == "\\": current.append("\\")
                 elif esc == "x":
                     # \xHH
@@ -274,22 +281,22 @@ class Lexer:
                 self._advance()  # consume '{'
                 expr_chars = []
                 depth = 1
-                in_str = False  # trackear si estamos dentro de un string anidado
+                in_quote = ""  # v0.6.4: comilla del string anidado ('' = fuera)
                 while depth > 0:
                     if self.pos >= len(self.source):
                         self._error("Expresión en f-string sin cerrar (falta '}')")
                     ec = self._peek()
-                    if in_str:
-                        # Estamos dentro de un string anidado (entre comillas dobles)
+                    if in_quote:
+                        # Estamos dentro de un string anidado (entre ' o ")
                         if ec == "\\":
-                            # Posible escape del OUTER f-string (ej: \") o escape interno (\n)
+                            # Posible escape del OUTER f-string o escape interno
                             next_c = self._peek(1)
-                            if next_c == '"':
-                                # \" dentro de un string interno = cierre del string
-                                # (porque el \ es escape del OUTER f-string)
-                                in_str = False
-                                expr_chars.append('"')
+                            if next_c == in_quote:
+                                # \ comilla = cierre del string interno
+                                # (el \ es escape del OUTER f-string)
+                                expr_chars.append(in_quote)
                                 self._advance(); self._advance()
+                                in_quote = ""
                                 continue
                             # Otro escape (\\, \n, \t, etc.) — es escape del string interno
                             # Guardamos ambos caracteres tal cual
@@ -299,11 +306,11 @@ class Lexer:
                                 expr_chars.append(self._peek())
                                 self._advance()
                             continue
-                        if ec == '"':
-                            # " sin escape = cierre del string interno
-                            in_str = False
+                        if ec == in_quote:
+                            # comilla sin escape = cierre del string interno
                             expr_chars.append(ec)
                             self._advance()
+                            in_quote = ""
                             continue
                         expr_chars.append(ec)
                         self._advance()
@@ -311,12 +318,11 @@ class Lexer:
                     # No estamos dentro de un string
                     if ec == "\\":
                         # Fuera de string: \ siempre es escape del OUTER f-string
-                        # Solo \" nos interesa (es apertura/cierre de string)
                         next_c = self._peek(1)
-                        if next_c == '"':
-                            # \" = apertura de string interno
-                            in_str = True
-                            expr_chars.append('"')
+                        if next_c in ('"', "'"):
+                            # \ comilla = apertura de string interno
+                            in_quote = next_c
+                            expr_chars.append(next_c)
                             self._advance(); self._advance()
                             continue
                         # Otros escapes fuera de string: no deberían pasar
@@ -324,9 +330,9 @@ class Lexer:
                         expr_chars.append(ec)
                         self._advance()
                         continue
-                    if ec == '"':
-                        # " fuera de string = apertura de string interno
-                        in_str = True
+                    if ec in ('"', "'"):
+                        # comilla fuera de string = apertura de string interno
+                        in_quote = ec
                         expr_chars.append(ec)
                         self._advance()
                         continue

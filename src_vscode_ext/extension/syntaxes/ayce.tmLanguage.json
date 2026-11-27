@@ -75,13 +75,28 @@
       "end": "###"
     },
     "strings": {
-      "name": "string.quoted.double.ayce",
-      "begin": "\"",
-      "end": "\"",
       "patterns": [
         {
-          "name": "constant.character.escape.ayce",
-          "match": "\\\\(n|t|r|\"|\\\\|x[0-9A-Fa-f]{2})"
+          "name": "string.quoted.double.ayce",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\\\(n|t|r|\"|\\\\|x[0-9A-Fa-f]{2})"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.ayce",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\\\(n|t|r|'|\\\\|x[0-9A-Fa-f]{2})"
+            }
+          ]
         }
       ]
     },
@@ -144,17 +159,90 @@
               ]
             }
           ]
+        },
+        {
+          "name": "string.quoted.single.ayce",
+          "begin": "(?<![A-Za-z0-9_])f'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\\\(n|t|r|'|\\\\|x[0-9A-Fa-f]{2})"
+            },
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\{\\{|\\}\\}"
+            },
+            {
+              "name": "meta.interpolation.ayce",
+              "begin": "\\{",
+              "end": "\\}",
+              "patterns": [
+                {
+                  "include": "#radix-literals"
+                },
+                {
+                  "include": "#floats"
+                },
+                {
+                  "include": "#ints"
+                },
+                {
+                  "include": "#booleans"
+                },
+                {
+                  "include": "#none-literal"
+                },
+                {
+                  "include": "#strings"
+                },
+                {
+                  "include": "#modifiers"
+                },
+                {
+                  "include": "#storage-types"
+                },
+                {
+                  "include": "#keywords"
+                },
+                {
+                  "include": "#operators"
+                },
+                {
+                  "include": "#punctuation"
+                },
+                {
+                  "include": "#identifiers"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
     "bytes-literals": {
-      "name": "string.quoted.double.bytes.ayce",
-      "begin": "(?<![A-Za-z0-9_])b\"",
-      "end": "\"",
       "patterns": [
         {
-          "name": "constant.character.escape.ayce",
-          "match": "\\\\(n|t|r|\"|\\\\|x[0-9A-Fa-f]{2})"
+          "name": "string.quoted.double.bytes.ayce",
+          "begin": "(?<![A-Za-z0-9_])b\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\\\(n|t|r|\"|\\\\|x[0-9A-Fa-f]{2})"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.bytes.ayce",
+          "begin": "(?<![A-Za-z0-9_])b'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ayce",
+              "match": "\\\\(n|t|r|'|\\\\|x[0-9A-Fa-f]{2})"
+            }
+          ]
         }
       ]
     },
@@ -181,7 +269,7 @@
     "guard-main": {
       "patterns": [
         {
-          "match": "(<)\\s*(GUARD)\\s*(>)\\s*(-)\\s*(<)\\s*(MAIN)\\s*(>)",
+          "match": "(<)\\s*(GUARD)\\s*(>)\\s*(->|-)\\s*(<)\\s*(MAIN)\\s*(>)",
           "captures": {
             "1": {
               "name": "punctuation.definition.guard.ayce"
@@ -337,6 +425,18 @@
     "keywords": {
       "patterns": [
         {
+          "name": "keyword.control.affirm.ayce",
+          "match": "\\bAffirm\\b"
+        },
+        {
+          "name": "keyword.control.finally.ayce",
+          "match": "\\bfinally\\b"
+        },
+        {
+          "name": "keyword.operator.membership.ayce",
+          "match": "\\bnot\\s+in\\b|\\bin\\b"
+        },
+        {
           "name": "variable.language.box.ayce",
           "match": "\\bbox\\b"
         },
@@ -346,7 +446,7 @@
         },
         {
           "name": "keyword.control.loop.ayce",
-          "match": "\\b(while|for|do|in|break|continue)\\b"
+          "match": "\\b(while|for|do|break|continue)\\b"
         },
         {
           "name": "keyword.control.flow.ayce",

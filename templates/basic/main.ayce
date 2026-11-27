@@ -12,3 +12,5 @@ task saludar(string &in quien) ;
 }
 
 saludar("mundo")
+
+say(0x80)

@@ -1,0 +1,75 @@
+## t_azucar_064.ayce — v0.6.4: comillas simples, "ab" * n, range de 1 y 3
+## argumentos, Affirm (la aserción del cliente) y finally garantizado
+
+<GUARD>-<MAIN> {
+    ## 1) comillas simples: equivalentes a las dobles en TODO (say, f-strings,
+    ##    triples, bytes, escapes)
+    var a: string = 'hola con "dobles" adentro'
+    say("1: " + a)
+    say('1: también en say')
+    say(f'1: f-string simple {1 + 1}')
+    say("1: anidado simple → " + string(['x', 'y']::len()))
+    var t: string = '''triple
+simple'''
+    say("1: triple → " + string(t::len()))
+    say('1: escape \' y barra \\ → ok')
+    var b: bytes = b'AB'
+    say("1: bytes → " + string(b::len()))
+
+    ## 2) repetición de strings (equivalente a ::repeat, más legible)
+    say("2: " + "=-" * 6)
+    say("2: vacío → [" + "x" * 0 + "]")
+    say("2: invertido → " + string(3 * "ja"))
+
+    ## 3) range de 1 y 3 argumentos (con paso, incluso negativo)
+    var suma: int = 0
+    for i in range(4) do
+        suma = suma + i
+    end
+    say("3: range(4) suma → " + string(suma))
+    var pares: int[] = []
+    for i in range(0, 10, 2) do
+        pares::append(i)
+    end
+    say("3: range(0, 10, 2) → " + string(pares))
+    var bajando: int[] = []
+    for i in range(5, 0, -1) do
+        bajando::append(i)
+    end
+    say("3: bajando → " + string(bajando))
+
+    ## 4) Affirm: valida y sigue; el falso es error capturable
+    Affirm 1 + 1 == 2
+    Affirm 'hola'::len() > 0, "un string vacío no puede llegar acá"
+    say("4: Affirm ok")
+    try
+        Affirm 2 > 3, "2 no es mayor que 3"
+    rescue(e)
+        say("4: capturado → " + string(e))
+    end
+
+    ## 5) finally corre SIEMPRE: sin error, tras el rescue, y antes de relanzar
+    var pasadas: int = 0
+    try
+        pasadas = pasadas + 1
+    finally
+        say("5: finally sin error")
+    end
+    try
+        raise "algo"
+    rescue(e)
+        pasadas = pasadas + 1
+    finally
+        say("5: finally tras rescue")
+    end
+    try
+        try
+            raise "sin rescue"
+        finally
+            say("5: finally antes de relanzar")
+        end
+    rescue(e)
+        say("5: el error siguió vivo y lo agarré afuera")
+    end
+    say("5: pasadas → " + string(pasadas))
+}

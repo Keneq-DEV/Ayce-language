@@ -1,5 +1,5 @@
 /**
- * ayce — extensión para VS Code (v0.6.3)
+ * ayce — extensión para VS Code (v0.6.4)
  *
  * Comandos:
  *   ayce.runFile             — ejecuta el .ayce en el panel de salida
@@ -8,7 +8,7 @@
  *   ayce.applyColors         — aplica la paleta "Ayce Dusk" (se adapta al tema claro/oscuro)
  *   ayce.removeColors        — quita TODOS los colores de ayce de tus settings
  *
- * v0.6.3 (diseño del cliente): State/box y el guard principal <GUARD>-<MAIN>.
+ * v0.6.4 (diseño del cliente): State/box y el guard principal <GUARD>-<MAIN>.
  * Criterio del cliente: cada token nuevo lleva COLOR PROPIO (no reutilizado).
  * La paleta suma 12 categorías, elegidas por ΔE (Lab) contra todos los colores
  * existentes y contraste WCAG >= 4.5:1:
@@ -90,9 +90,9 @@ function buildRules(p) {
     ], p.decl),
     r('error', ['keyword.control.error.ayce'], p.error),
     r('self', ['variable.language.self.ayce'], p.error, 'italic'),
-    // v0.6.3: box deja de compartir el color de self — cada cosa su color.
+    // v0.6.4: box deja de compartir el color de self — cada cosa su color.
     r('box', ['variable.language.box.ayce'], p.box, 'italic'),
-    // v0.6.3: State y guard principal del cliente, cada token con el suyo.
+    // v0.6.4: State y guard principal del cliente, cada token con el suyo.
     r('state', ['keyword.control.state.ayce'], p.state, 'bold'),
     r('armtype', ['keyword.control.type.ayce'], p.armtype),
     r('fallback', ['keyword.control.fallback.ayce'], p.fallback),
@@ -101,12 +101,12 @@ function buildRules(p) {
     r('gdelim', ['punctuation.definition.guard.ayce'], p.gdelim, 'bold'),
     r('sdash', ['keyword.operator.state-connect.ayce'], p.sdash, 'bold'),
     r('sangle', ['punctuation.definition.state-angle.ayce'], p.sangle, 'bold'),
-    // v0.6.3: prefijos 0x/0o/0b — cada uno con su color, separados de los dígitos.
+    // v0.6.4: prefijos 0x/0o/0b — cada uno con su color, separados de los dígitos.
     r('hexpre', ['constant.numeric.radix.hex.ayce'], p.hexpre, 'bold'),
     r('octpre', ['constant.numeric.radix.oct.ayce'], p.octpre, 'bold'),
     r('binpre', ['constant.numeric.radix.bin.ayce'], p.binpre, 'bold'),
     r('io', ['keyword.other.io.ayce'], p.io),
-    // v0.6.3: require/from/as dejan de quedar sin color — cada cosa la suya.
+    // v0.6.4: require/from/as dejan de quedar sin color — cada cosa la suya.
     r('module', ['keyword.control.module.ayce'], p.module),
     r('builtin', ['support.function.builtin.ayce'], p.builtin),
     r('collection', [

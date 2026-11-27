@@ -1,5 +1,5 @@
-## t_variadicos.ayce — v0.6.3: variádicos coherentes (tipo... nombre)
-## El '...' existe desde v0.5; en v0.6.3 quedó coherente: cada argumento
+## t_variadicos.ayce — v0.6.4: variádicos coherentes (tipo... nombre)
+## El '...' existe desde v0.5; en v0.6.4 quedó coherente: cada argumento
 ## extra debe cumplir el tipo declarado, convive con defaults en los fijos
 ## y el parser exige que sea el último de la firma.
 

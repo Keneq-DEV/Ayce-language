@@ -118,7 +118,7 @@ Nombres válidos: `variable`, `operator`, `none`, `string`, `int`, `float`, `boo
 `control`, `decl`, `error`, `io`, `builtin`, `fn`, `bracket`, `punct`, `constant`, `modifier`, `escape`,
 `radix`, `collection`.
 
-### Categorías con color propio (v0.6.3)
+### Categorías con color propio (v0.6.4)
 
 Todo token nuevo del lenguaje lleva un color que no comparte con ninguna otra categoría,
 para que no se confundan entre sí:

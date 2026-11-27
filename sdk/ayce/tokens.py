@@ -57,7 +57,7 @@ class TokenType(Enum):
     FROM       = auto()      # from
     AS         = auto()      # as
 
-    # State y guard principal (v0.6.3 — diseño del cliente)
+    # State y guard principal (v0.6.4 — diseño del cliente)
     STATE      = auto()      # State <expr> - < box is type(...) [ ... ] ... >  (el 'STATE' del cliente)
     BOX        = auto()      # box: variable mágica con el valor evaluado en cada brazo de State
 
@@ -110,6 +110,10 @@ class TokenType(Enum):
     XOR_ASSIGN   = auto() # ^=
     LSHIFT_ASSIGN= auto() # <<=
     RSHIFT_ASSIGN= auto() # >>=
+
+    # Afirmación y finally (v0.6.4)
+    AFFIRM    = auto()   # Affirm — aserción (diseño del cliente: no es 'assert')
+    FINALLY   = auto()   # finally — cierre garantizado de try/rescue
 
     # Puntuación y delimitadores
     LPAREN     = auto()   # (
@@ -166,11 +170,13 @@ KEYWORDS = {
     "try":      TokenType.TRY,
     "rescue":   TokenType.RESCUE,
     "raise":    TokenType.RAISE,
+    "Affirm":   TokenType.AFFIRM,   # v0.6.4: la aserción del cliente (exacto con A mayúscula, como State)
+    "finally":  TokenType.FINALLY,  # v0.6.4: cierre garantizado de try/rescue
     "require":  TokenType.REQUIRE,
     "from":     TokenType.FROM,
     "as":       TokenType.AS,
-    "State":    TokenType.STATE,    # v0.6.3: State/box (el 'STATE' del cliente; exacto con S mayúscula)
-    "box":      TokenType.BOX,      # v0.6.3: variable mágica de los brazos de State
+    "State":    TokenType.STATE,    # v0.6.4: State/box (el 'STATE' del cliente; exacto con S mayúscula)
+    "box":      TokenType.BOX,      # v0.6.4: variable mágica de los brazos de State
     "not":      TokenType.NOT,    # v0.6.2: alias de '!'
     "True":     TokenType.TRUE,
     "False":    TokenType.FALSE,
